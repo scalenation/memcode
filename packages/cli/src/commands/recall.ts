@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { recall } from '@memcode/core';
+import { recall, recallSync } from '@memcode/core';
 import { resolveProject, fmtDate, truncate } from '../util';
 import pc from 'picocolors';
 
@@ -7,7 +7,7 @@ export const recallCommand = new Command('recall')
   .description('Recall ranked memory entries matching a query')
   .requiredOption('--query <text>', 'Search query')
   .option('--limit <n>', 'Maximum results to return', '10')
-  .action((options: { query: string; limit: string }) => {
+  .action(async (options: { query: string; limit: string }) => {
     let project;
     try {
       project = resolveProject();
@@ -20,7 +20,7 @@ export const recallCommand = new Command('recall')
     const limit = Math.max(1, Math.min(50, parseInt(options.limit, 10) || 10));
 
     try {
-      const results = recall(db, workspace.id, options.query, limit);
+      const results = await recall(db, workspace.id, options.query, limit);
 
       if (results.length === 0) {
         console.log(pc.yellow('No results found for:'), pc.bold(options.query));

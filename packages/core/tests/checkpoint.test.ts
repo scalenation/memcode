@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { mkdirSync, rmSync } from 'node:fs';
 import { openDb } from '../src/db';
 import { getOrCreateWorkspace } from '../src/workspace';
-import { createCheckpoint, listCheckpoints } from '../src/checkpoint';
+import { createCheckpointSync, listCheckpoints } from '../src/checkpoint';
 import type Database from 'better-sqlite3';
 
 let tmpDir: string;
@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe('createCheckpoint()', () => {
   it('persists a checkpoint and returns it', () => {
-    const cp = createCheckpoint(db, {
+    const cp = createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'manual',
@@ -42,7 +42,7 @@ describe('createCheckpoint()', () => {
   });
 
   it('redacts secrets in the note before persisting', () => {
-    const cp = createCheckpoint(db, {
+    const cp = createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'manual',
@@ -55,7 +55,7 @@ describe('createCheckpoint()', () => {
 
   it('creates checkpoint without git info when not in a git repo', () => {
     // tmpDir is not a git repo — getGitInfo returns empty object
-    const cp = createCheckpoint(db, {
+    const cp = createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'pre-commit',
@@ -65,7 +65,7 @@ describe('createCheckpoint()', () => {
   });
 
   it('appends a JSONL event file', () => {
-    createCheckpoint(db, {
+    createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'manual',
@@ -80,9 +80,9 @@ describe('createCheckpoint()', () => {
 
 describe('listCheckpoints()', () => {
   it('returns checkpoints newest first', () => {
-    createCheckpoint(db, { workspaceId, projectPath: tmpDir, trigger: 'manual', note: 'First' });
-    createCheckpoint(db, { workspaceId, projectPath: tmpDir, trigger: 'manual', note: 'Second' });
-    createCheckpoint(db, { workspaceId, projectPath: tmpDir, trigger: 'manual', note: 'Third' });
+    createCheckpointSync(db, { workspaceId, projectPath: tmpDir, trigger: 'manual', note: 'First' });
+    createCheckpointSync(db, { workspaceId, projectPath: tmpDir, trigger: 'manual', note: 'Second' });
+    createCheckpointSync(db, { workspaceId, projectPath: tmpDir, trigger: 'manual', note: 'Third' });
 
     const list = listCheckpoints(db, workspaceId, 10);
     expect(list.length).toBe(3);
@@ -92,7 +92,7 @@ describe('listCheckpoints()', () => {
 
   it('respects the limit parameter', () => {
     for (let i = 0; i < 5; i++) {
-      createCheckpoint(db, { workspaceId, projectPath: tmpDir, trigger: 'manual' });
+      createCheckpointSync(db, { workspaceId, projectPath: tmpDir, trigger: 'manual' });
     }
     expect(listCheckpoints(db, workspaceId, 3).length).toBe(3);
   });

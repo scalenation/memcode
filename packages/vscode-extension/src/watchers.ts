@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { openDb, getOrCreateWorkspace, createCheckpoint } from '@memcode/core';
+import { openDb, getOrCreateWorkspace, createCheckpointSync } from '@memcode/core';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import type { MemCodeStatusBar } from './statusBar';
@@ -94,7 +94,7 @@ function triggerCheckpoint(
     statusBar.update('syncing');
     const db = openDb(dbPath);
     const workspace = getOrCreateWorkspace(db, projectPath);
-    const cp = createCheckpoint(db, {
+    const cp = createCheckpointSync(db, {
       workspaceId: workspace.id,
       projectPath,
       trigger,

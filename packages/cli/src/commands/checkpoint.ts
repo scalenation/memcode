@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createCheckpoint } from '@memcode/core';
+import { createCheckpoint, createCheckpointSync } from '@memcode/core';
 import { resolveProject, fmtDate } from '../util';
 import pc from 'picocolors';
 
@@ -7,7 +7,7 @@ export const checkpointCommand = new Command('checkpoint')
   .description('Create a checkpoint of the current project state')
   .option('--note <text>', 'Short note describing this checkpoint')
   .option('--trigger <trigger>', 'Trigger label (manual|pre-commit|post-commit|branch-switch)', 'manual')
-  .action((options: { note?: string; trigger: string }) => {
+  .action(async (options: { note?: string; trigger: string }) => {
     let project;
     try {
       project = resolveProject();
@@ -19,7 +19,7 @@ export const checkpointCommand = new Command('checkpoint')
     const { db, workspace, projectPath } = project;
 
     try {
-      const cp = createCheckpoint(db, {
+      const cp = await createCheckpoint(db, {
         workspaceId: workspace.id,
         projectPath,
         trigger: options.trigger,

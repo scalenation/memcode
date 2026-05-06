@@ -6,10 +6,11 @@ export { generateShortSummary, generateLongSummary } from './summarizer';
 export {
   getGitInfo,
   createCheckpoint,
+  createCheckpointSync,
   listCheckpoints,
 } from './checkpoint';
 export type { GitInfo, CheckpointOptions } from './checkpoint';
-export { recall } from './retrieval';
+export { recall, recallSync } from './retrieval';
 export type { RecallResult } from './retrieval';
 export { generateContextPack } from './context-pack';
 export { getTimeline } from './timeline';
@@ -28,6 +29,15 @@ export type {
   CreateDecisionOptions,
   CreateTaskOptions,
 } from './items';
+export { registry } from './providers';
+export type {
+  SummarizerProvider,
+  EmbeddingProvider,
+  InsightProvider,
+  Insight,
+} from './providers';
+export { isEnabled, requireFeature, ProFeatureError } from './feature-gate';
+export type { FeatureFlag } from './feature-gate';
 export type {
   Workspace,
   Session,

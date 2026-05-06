@@ -9,6 +9,7 @@ import { decisionCommand } from './commands/decision';
 import { taskCommand } from './commands/task';
 import { syncCommand } from './commands/sync';
 import { doctorCommand } from './commands/doctor';
+import { loadProPlugin } from './pro-loader';
 
 const program = new Command();
 
@@ -16,6 +17,13 @@ program
   .name('memory')
   .description('MemCode — local-first project memory for coding assistants')
   .version('1.0.0', '-v, --version', 'Print version');
+
+// Load Pro providers before any command runs (no-op if @memcode/pro not installed)
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  // Resolve workspace ID from the command context if available
+  const workspaceId = (actionCommand as unknown as { _workspaceId?: string })._workspaceId ?? '';
+  loadProPlugin(workspaceId);
+});
 
 program.addCommand(initCommand);
 program.addCommand(checkpointCommand);

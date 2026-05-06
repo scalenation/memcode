@@ -5,7 +5,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { openDb } from '../src/db';
 import { getOrCreateWorkspace } from '../src/workspace';
 import { generateContextPack } from '../src/context-pack';
-import { createCheckpoint } from '../src/checkpoint';
+import { createCheckpointSync } from '../src/checkpoint';
 import { createDecision } from '../src/items';
 import { createTask } from '../src/items';
 import type Database from 'better-sqlite3';
@@ -33,7 +33,7 @@ describe('generateContextPack()', () => {
   });
 
   it('includes the latest checkpoint summary', () => {
-    createCheckpoint(db, {
+    createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'manual',

@@ -87,6 +87,31 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.39)
 
+  packages/pro:
+    dependencies:
+      '@memcode/cloud-client':
+        specifier: workspace:*
+        version: link:../cloud-client
+      '@memcode/core':
+        specifier: workspace:*
+        version: link:../core
+      better-sqlite3:
+        specifier: ^9.4.3
+        version: 9.6.0
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^7.6.10
+        version: 7.6.13
+      '@types/node':
+        specifier: ^20.14.0
+        version: 20.19.39
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.6.0
+        version: 1.6.1(@types/node@20.19.39)
+
   packages/vscode-extension:
     dependencies:
       '@memcode/core':

@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import { mkdirSync, rmSync } from 'node:fs';
 import { openDb } from '../src/db';
 import { getOrCreateWorkspace } from '../src/workspace';
-import { recall } from '../src/retrieval';
+import { recall, recallSync } from '../src/retrieval';
 import { createDecision } from '../src/items';
-import { createCheckpoint } from '../src/checkpoint';
+import { createCheckpointSync } from '../src/checkpoint';
 import type Database from 'better-sqlite3';
 
 let tmpDir: string;
@@ -27,7 +27,7 @@ afterEach(() => {
 
 describe('recall()', () => {
   it('returns empty array when there is no data', () => {
-    expect(recall(db, workspaceId, 'anything', 10)).toEqual([]);
+    expect(recallSync(db, workspaceId, 'anything', 10)).toEqual([]);
   });
 
   it('returns empty array for empty query', () => {
@@ -36,7 +36,7 @@ describe('recall()', () => {
       title: 'Use SQLite',
       rationale: 'Simpler than PostgreSQL for local-first apps',
     });
-    expect(recall(db, workspaceId, '', 10)).toEqual([]);
+    expect(recallSync(db, workspaceId, '', 10)).toEqual([]);
   });
 
   it('matches a decision by keyword in title', () => {
@@ -46,21 +46,21 @@ describe('recall()', () => {
       rationale: 'Keeps the footprint small',
     });
 
-    const results = recall(db, workspaceId, 'sqlite', 10);
+    const results = recallSync(db, workspaceId, 'sqlite', 10);
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].type).toBe('decision');
     expect(results[0].title.toLowerCase()).toContain('sqlite');
   });
 
   it('matches a checkpoint by keyword in summary', () => {
-    createCheckpoint(db, {
+    createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'manual',
       note: 'Migrated to TypeScript',
     });
 
-    const results = recall(db, workspaceId, 'typescript', 10);
+    const results = recallSync(db, workspaceId, 'typescript', 10);
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].type).toBe('checkpoint');
   });
@@ -72,14 +72,14 @@ describe('recall()', () => {
       title: 'database choice',
       rationale: 'chose SQLite over Postgres',
     });
-    createCheckpoint(db, {
+    createCheckpointSync(db, {
       workspaceId,
       projectPath: tmpDir,
       trigger: 'manual',
       note: 'database migration completed',
     });
 
-    const results = recall(db, workspaceId, 'database', 10);
+    const results = recallSync(db, workspaceId, 'database', 10);
     expect(results.length).toBeGreaterThanOrEqual(2);
     expect(results[0].type).toBe('decision');
   });
@@ -91,7 +91,7 @@ describe('recall()', () => {
       rationale: 'Speed up reads',
     });
 
-    const results = recall(db, workspaceId, 'unrelated obscure xyz', 10);
+    const results = recallSync(db, workspaceId, 'unrelated obscure xyz', 10);
     expect(results).toEqual([]);
   });
 
@@ -103,7 +103,7 @@ describe('recall()', () => {
         rationale: 'auth is important',
       });
     }
-    const results = recall(db, workspaceId, 'auth', 3);
+    const results = recallSync(db, workspaceId, 'auth', 3);
     expect(results.length).toBe(3);
   });
 });

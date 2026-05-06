@@ -75,7 +75,7 @@ export function registerCommands(
 
     try {
       const workspace = getOrCreateWorkspace(db, projectPath);
-      const cp = createCheckpoint(db, {
+      const cp = await createCheckpoint(db, {
         workspaceId: workspace.id,
         projectPath,
         trigger: 'manual',
@@ -143,7 +143,7 @@ export function registerCommands(
 
     try {
       const workspace = getOrCreateWorkspace(db, projectPath);
-      const results = recall(db, workspace.id, query, 10);
+      const results = await recall(db, workspace.id, query, 10);
 
       if (results.length === 0) {
         vscode.window.showInformationMessage(`MemCode: No results for "${query}"`);

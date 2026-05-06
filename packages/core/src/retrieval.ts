@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { registry } from './providers';
 
 export interface RecallResult {
   id: string;
@@ -29,20 +30,50 @@ const HALF_LIFE_DAYS = 30;
 const DAY_MS = 86_400_000;
 
 /**
- * Recall memory entries that match `query` using keyword scoring + recency
- * decay + type boost.
+ * Recall memory entries matching `query`.
+ *
+ * Free tier:  keyword scoring + recency decay + type boost (synchronous)
+ * Pro tier:   semantic embedding similarity replaces keyword scoring when an
+ *             EmbeddingProvider is registered. The caller must await the result.
  *
  * score = keyword_score + recency_weight × type_boost
- *
- * where:
  *   keyword_score  = matched_keywords / total_keywords
  *   recency_weight = exp(−age_days × ln2 / HALF_LIFE)
  */
-export function recall(
+export async function recall(
   db: Database.Database,
   workspaceId: string,
   query: string,
   limit = 10,
+): Promise<RecallResult[]> {
+  const embeddingProvider = registry.getEmbedding();
+  if (embeddingProvider) {
+    return semanticRecall(db, workspaceId, query, limit, embeddingProvider);
+  }
+  return keywordRecall(db, workspaceId, query, limit);
+}
+
+/**
+ * Synchronous keyword-only recall (free tier).
+ * Used directly in tests and anywhere async is inconvenient.
+ */
+export function recallSync(
+  db: Database.Database,
+  workspaceId: string,
+  query: string,
+  limit = 10,
+): RecallResult[] {
+  return keywordRecall(db, workspaceId, query, limit);
+}
+// ---------------------------------------------------------------------------
+// Free-tier: keyword recall
+// ---------------------------------------------------------------------------
+
+function keywordRecall(
+  db: Database.Database,
+  workspaceId: string,
+  query: string,
+  limit: number,
 ): RecallResult[] {
   const keywords = query
     .toLowerCase()
@@ -106,4 +137,53 @@ export function recall(
     .filter((x): x is RecallResult => x !== null);
 
   return scored.sort((a, b) => b.score - a.score).slice(0, limit);
+}
+
+// ---------------------------------------------------------------------------
+// Pro-tier: semantic (embedding) recall
+// ---------------------------------------------------------------------------
+
+/**
+ * Semantic recall using vector similarity from a registered EmbeddingProvider.
+ *
+ * This function is only reachable when @memcode/pro registers an embedding
+ * provider. The actual vector index and cosine similarity logic lives in the
+ * Pro package (private). Here we define the contract and the fallback path.
+ *
+ * The Pro implementation:
+ *   1. Embeds the query via the provider
+ *   2. Queries the hosted vector index (HNSW or similar) for top-K neighbours
+ *   3. Re-ranks by recency × type boost
+ *   4. Returns RecallResult[] with semantic similarity scores
+ */
+async function semanticRecall(
+  db: Database.Database,
+  workspaceId: string,
+  query: string,
+  limit: number,
+  provider: import('./providers').EmbeddingProvider,
+): Promise<RecallResult[]> {
+  // The embedding provider's `embed` call goes out to the Pro API.
+  // If it fails, fall back to keyword recall silently.
+  try {
+    const [[queryVector]] = await Promise.all([provider.embed([query])]);
+    // The Pro package attaches a `semanticSearch` method to the provider at
+    // runtime. If it's not there (e.g. a custom embedding provider without
+    // the Pro server), fall through to keyword.
+    const proSearch = (provider as unknown as {
+      semanticSearch?: (
+        db: Database.Database,
+        workspaceId: string,
+        vector: number[],
+        limit: number,
+      ) => Promise<RecallResult[]>;
+    }).semanticSearch;
+
+    if (proSearch) {
+      return proSearch(db, workspaceId, queryVector, limit);
+    }
+  } catch {
+    // Graceful degradation — Pro feature unavailable, use keyword
+  }
+  return keywordRecall(db, workspaceId, query, limit);
 }

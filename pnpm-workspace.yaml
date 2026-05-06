@@ -1,5 +1,7 @@
 packages:
   - 'packages/*'
+  # packages/pro is the proprietary package — lives in a private repo.
+  # Include here only when developing locally with the private source.
 allowBuilds:
   better-sqlite3: true
   esbuild: true

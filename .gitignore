@@ -1,3 +1,8 @@
+# packages/pro is proprietary — exclude its dist from the public repo
+packages/pro/dist/
+# Local auth config
+~/.memcode/auth.json
+
 node_modules/
 dist/
 *.tsbuildinfo
