@@ -1,5 +1,5 @@
-# packages/pro is proprietary — exclude its dist from the public repo
-packages/pro/dist/
+# packages/pro is proprietary — lives in a private repo, never committed here
+packages/pro/
 # Local auth config
 ~/.memcode/auth.json
 
