@@ -1,0 +1,94 @@
+{
+  "name": "memcode-vscode",
+  "displayName": "MemCode — Project Memory Assistant",
+  "description": "Local-first project memory for coding assistants. Checkpoints, recall, decisions, tasks.",
+  "version": "1.0.0",
+  "publisher": "memcode",
+  "license": "MIT",
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/memcode/memcode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "SCM Providers"],
+  "keywords": ["memory", "ai", "coding-assistant", "context", "project"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "memcode.refreshContext",
+        "title": "Memory: Refresh Context",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.createCheckpoint",
+        "title": "Memory: Create Checkpoint",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.showTimeline",
+        "title": "Memory: Show Timeline",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.recall",
+        "title": "Memory: Recall",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.addDecision",
+        "title": "Memory: Add Decision",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.addTask",
+        "title": "Memory: Add Task",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.injectContextIntoChat",
+        "title": "Memory: Inject Context Into Chat",
+        "category": "MemCode"
+      },
+      {
+        "command": "memcode.syncNow",
+        "title": "Memory: Sync Now",
+        "category": "MemCode"
+      }
+    ],
+    "configuration": {
+      "title": "MemCode",
+      "properties": {
+        "memcode.autoCheckpointOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Create a lightweight checkpoint on file save (debounced 30s)"
+        },
+        "memcode.showStatusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show MemCode status bar item"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "package": "vsce package",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@memcode/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.5.0",
+    "@vscode/test-electron": "^2.4.0"
+  }
+}

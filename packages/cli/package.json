@@ -1,0 +1,31 @@
+{
+  "name": "@memcode/cli",
+  "version": "1.0.0",
+  "description": "CLI for MemCode Project Memory Assistant",
+  "keywords": ["memory", "cli", "project-memory", "coding-assistant"],
+  "license": "MIT",
+  "bin": {
+    "memory": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src tests --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@memcode/core": "workspace:*",
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "vitest": "^1.6.0"
+  }
+}
