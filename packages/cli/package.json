@@ -11,11 +11,15 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js",
+    "prepublishOnly": "pnpm build && pnpm test",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests --ext .ts",
     "clean": "rm -rf dist"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@memcode/core": "workspace:*",
