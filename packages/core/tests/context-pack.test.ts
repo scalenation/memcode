@@ -8,10 +8,10 @@ import { generateContextPack } from '../src/context-pack';
 import { createCheckpointSync } from '../src/checkpoint';
 import { createDecision } from '../src/items';
 import { createTask } from '../src/items';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 
 let tmpDir: string;
-let db: Database.Database;
+let db: DatabaseSync;
 let workspaceId: string;
 
 beforeEach(() => {

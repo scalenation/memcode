@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { openDb, getOrCreateWorkspace } from '@memcode/core';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Workspace } from '@memcode/core';
 
 /**
@@ -36,7 +36,7 @@ export function getDbPath(projectPath: string): string {
  * Open the existing project database, throwing a user-friendly error if not
  * yet initialised.
  */
-export function openProjectDb(projectPath: string): Database.Database {
+export function openProjectDb(projectPath: string): DatabaseSync {
   const dbPath = getDbPath(projectPath);
   if (!existsSync(dbPath)) {
     throw new Error(
@@ -52,7 +52,7 @@ export function openProjectDb(projectPath: string): Database.Database {
  */
 export function resolveProject(cwd?: string): {
   projectPath: string;
-  db: Database.Database;
+  db: DatabaseSync;
   workspace: Workspace;
 } {
   const projectPath = findProjectRoot(cwd ?? process.cwd());

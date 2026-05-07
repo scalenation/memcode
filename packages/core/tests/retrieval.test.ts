@@ -7,10 +7,10 @@ import { getOrCreateWorkspace } from '../src/workspace';
 import { recall, recallSync } from '../src/retrieval';
 import { createDecision } from '../src/items';
 import { createCheckpointSync } from '../src/checkpoint';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 
 let tmpDir: string;
-let db: Database.Database;
+let db: DatabaseSync;
 let workspaceId: string;
 
 beforeEach(() => {

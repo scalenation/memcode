@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import { registry } from './providers';
 
 export interface RecallResult {
@@ -41,7 +41,7 @@ const DAY_MS = 86_400_000;
  *   recency_weight = exp(−age_days × ln2 / HALF_LIFE)
  */
 export async function recall(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   query: string,
   limit = 10,
@@ -58,7 +58,7 @@ export async function recall(
  * Used directly in tests and anywhere async is inconvenient.
  */
 export function recallSync(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   query: string,
   limit = 10,
@@ -70,7 +70,7 @@ export function recallSync(
 // ---------------------------------------------------------------------------
 
 function keywordRecall(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   query: string,
   limit: number,
@@ -83,7 +83,7 @@ function keywordRecall(
   if (keywords.length === 0) return [];
 
   const candidates = db
-    .prepare<[string, string, string], Candidate>(`
+    .prepare(`
       SELECT id, 'decision' AS type,
              title,
              (title || ' ' || rationale || ' ' || COALESCE(impact, '')) AS detail,
@@ -106,7 +106,7 @@ function keywordRecall(
              created_at
       FROM tasks WHERE workspace_id = ?
     `)
-    .all(workspaceId, workspaceId, workspaceId) as Candidate[];
+    .all(workspaceId, workspaceId, workspaceId) as unknown as Candidate[];
 
   const now = Date.now();
 
@@ -157,7 +157,7 @@ function keywordRecall(
  *   4. Returns RecallResult[] with semantic similarity scores
  */
 async function semanticRecall(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   query: string,
   limit: number,
@@ -172,7 +172,7 @@ async function semanticRecall(
     // the Pro server), fall through to keyword.
     const proSearch = (provider as unknown as {
       semanticSearch?: (
-        db: Database.Database,
+        db: DatabaseSync,
         workspaceId: string,
         vector: number[],
         limit: number,

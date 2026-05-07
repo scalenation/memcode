@@ -1,11 +1,12 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import { generateId } from './workspace';
 import { redact } from './redaction';
 import { generateShortSummary, generateLongSummary } from './summarizer';
 import { registry } from './providers';
+import { transaction } from './db';
 import type { Checkpoint } from './schema';
 
 // ---------------------------------------------------------------------------
@@ -84,7 +85,7 @@ export interface CheckpointOptions {
  * The raw event is also appended to `.memory/events.jsonl`.
  */
 export async function createCheckpoint(
-  db: Database.Database,
+  db: DatabaseSync,
   options: CheckpointOptions,
 ): Promise<Checkpoint> {
   const gitInfo = getGitInfo(options.projectPath);
@@ -105,7 +106,7 @@ export async function createCheckpoint(
   const id = generateId();
   const now = Date.now();
 
-  const checkpoint = db.transaction((): Checkpoint => {
+  const checkpoint = transaction(db, (): Checkpoint => {
     db.prepare(`
       INSERT INTO checkpoints
         (id, workspace_id, session_id, git_sha, branch, trigger, summary_short, summary_long, created_at)
@@ -133,7 +134,7 @@ export async function createCheckpoint(
       summary_long: summaryLong,
       created_at: now,
     };
-  })();
+  });
 
   // Append raw event to the JSONL archive (best-effort)
   try {
@@ -162,7 +163,7 @@ export async function createCheckpoint(
  * requires await and is not available in sync hooks).
  */
 export function createCheckpointSync(
-  db: Database.Database,
+  db: DatabaseSync,
   options: CheckpointOptions,
 ): Checkpoint {
   const gitInfo = getGitInfo(options.projectPath);
@@ -173,7 +174,7 @@ export function createCheckpointSync(
   const id = generateId();
   const now = Date.now();
 
-  const checkpoint = db.transaction((): Checkpoint => {
+  const checkpoint = transaction(db, (): Checkpoint => {
     db.prepare(`
       INSERT INTO checkpoints
         (id, workspace_id, session_id, git_sha, branch, trigger, summary_short, summary_long, created_at)
@@ -201,7 +202,7 @@ export function createCheckpointSync(
       summary_long: summaryLong,
       created_at: now,
     };
-  })();
+  });
 
   try {
     const memoryDir = join(options.projectPath, '.memory');
@@ -220,14 +221,14 @@ export function createCheckpointSync(
  * Return all checkpoints for a workspace, newest first.
  */
 export function listCheckpoints(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   limit = 20,
 ): Checkpoint[] {
   return db
-    .prepare<[string, number], Checkpoint>(
+    .prepare(
       `SELECT * FROM checkpoints WHERE workspace_id = ?
        ORDER BY created_at DESC LIMIT ?`,
     )
-    .all(workspaceId, limit) as Checkpoint[];
+    .all(workspaceId, limit) as unknown as Checkpoint[];
 }

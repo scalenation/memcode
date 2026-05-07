@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import { generateId } from './workspace';
 import type { Decision, Task, DecisionStatus, TaskStatus, TaskPriority } from './schema';
 
@@ -15,7 +15,7 @@ export interface CreateDecisionOptions {
 }
 
 export function createDecision(
-  db: Database.Database,
+  db: DatabaseSync,
   opts: CreateDecisionOptions,
 ): Decision {
   const id = generateId();
@@ -50,29 +50,29 @@ export function createDecision(
 }
 
 export function listDecisions(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   status?: DecisionStatus,
   limit = 20,
 ): Decision[] {
   if (status) {
     return db
-      .prepare<[string, string, number]>(
+      .prepare(
         `SELECT * FROM decisions WHERE workspace_id = ? AND status = ?
          ORDER BY created_at DESC LIMIT ?`,
       )
-      .all(workspaceId, status, limit) as Decision[];
+      .all(workspaceId, status, limit) as unknown as Decision[];
   }
   return db
-    .prepare<[string, number]>(
+    .prepare(
       `SELECT * FROM decisions WHERE workspace_id = ?
        ORDER BY created_at DESC LIMIT ?`,
     )
-    .all(workspaceId, limit) as Decision[];
+    .all(workspaceId, limit) as unknown as Decision[];
 }
 
 export function updateDecisionStatus(
-  db: Database.Database,
+  db: DatabaseSync,
   id: string,
   status: DecisionStatus,
 ): void {
@@ -95,7 +95,7 @@ export interface CreateTaskOptions {
 }
 
 export function createTask(
-  db: Database.Database,
+  db: DatabaseSync,
   opts: CreateTaskOptions,
 ): Task {
   const id = generateId();
@@ -132,31 +132,31 @@ export function createTask(
 }
 
 export function listTasks(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   status?: TaskStatus,
   limit = 20,
 ): Task[] {
   if (status) {
     return db
-      .prepare<[string, string, number]>(
+      .prepare(
         `SELECT * FROM tasks WHERE workspace_id = ? AND status = ?
          ORDER BY
            CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
            updated_at DESC LIMIT ?`,
       )
-      .all(workspaceId, status, limit) as Task[];
+      .all(workspaceId, status, limit) as unknown as Task[];
   }
   return db
-    .prepare<[string, number]>(
+    .prepare(
       `SELECT * FROM tasks WHERE workspace_id = ?
        ORDER BY created_at DESC LIMIT ?`,
     )
-    .all(workspaceId, limit) as Task[];
+    .all(workspaceId, limit) as unknown as Task[];
 }
 
 export function updateTaskStatus(
-  db: Database.Database,
+  db: DatabaseSync,
   id: string,
   status: TaskStatus,
 ): void {

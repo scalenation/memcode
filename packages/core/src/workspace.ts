@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { basename } from 'node:path';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Workspace } from './schema';
 
 /**
@@ -22,14 +22,14 @@ function hashPath(p: string): string {
  * one and return it. Safe to call multiple times — it is idempotent.
  */
 export function getOrCreateWorkspace(
-  db: Database.Database,
+  db: DatabaseSync,
   projectPath: string,
 ): Workspace {
   const pathHash = hashPath(projectPath);
 
   const existing = db
-    .prepare<[string], Workspace>('SELECT * FROM workspaces WHERE path_hash = ?')
-    .get(pathHash);
+    .prepare('SELECT * FROM workspaces WHERE path_hash = ?')
+    .get(pathHash) as unknown as Workspace | undefined;
 
   if (existing) return existing;
 
@@ -48,10 +48,10 @@ export function getOrCreateWorkspace(
  * Return a workspace by ID, or undefined.
  */
 export function getWorkspaceById(
-  db: Database.Database,
+  db: DatabaseSync,
   id: string,
 ): Workspace | undefined {
   return db
-    .prepare<[string], Workspace>('SELECT * FROM workspaces WHERE id = ?')
-    .get(id);
+    .prepare('SELECT * FROM workspaces WHERE id = ?')
+    .get(id) as unknown as Workspace | undefined;
 }

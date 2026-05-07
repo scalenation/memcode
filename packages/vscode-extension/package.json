@@ -1,6 +1,6 @@
 {
   "name": "memcode-vscode",
-  "displayName": "MemCode — Project Memory Assistant",
+  "displayName": "MemCode \u2014 Project Memory Assistant",
   "description": "Local-first project memory for coding assistants. Checkpoints, recall, decisions, tasks.",
   "version": "1.0.0",
   "publisher": "memcode",
@@ -13,9 +13,20 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other", "SCM Providers"],
-  "keywords": ["memory", "ai", "coding-assistant", "context", "project"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other",
+    "SCM Providers"
+  ],
+  "keywords": [
+    "memory",
+    "ai",
+    "coding-assistant",
+    "context",
+    "project"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -86,7 +97,7 @@
     "@memcode/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.15.0",
     "@types/vscode": "^1.85.0",
     "typescript": "^5.5.0",
     "@vscode/test-electron": "^2.4.0"

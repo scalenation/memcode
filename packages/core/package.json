@@ -1,12 +1,19 @@
 {
   "name": "@memcode/core",
-  "version": "1.0.0",
-  "description": "Core library for MemCode — schema, migrations, checkpoint engine, retrieval, redaction",
-  "keywords": ["memory", "project-memory", "coding-assistant", "sqlite"],
+  "version": "1.0.1",
+  "description": "Core library for MemCode \u2014 schema, migrations, checkpoint engine, retrieval, redaction",
+  "keywords": [
+    "memory",
+    "project-memory",
+    "coding-assistant",
+    "sqlite"
+  ],
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "pnpm build && pnpm test",
@@ -19,13 +26,13 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {
-    "better-sqlite3": "^9.4.3"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.10",
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.15.0",
     "typescript": "^5.5.0",
     "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=22.15.0"
   }
 }

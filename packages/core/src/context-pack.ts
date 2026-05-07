@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Workspace, Checkpoint, Task, Decision } from './schema';
 
 /**
@@ -8,26 +8,26 @@ import type { Workspace, Checkpoint, Task, Decision } from './schema';
  * Keeps output under ~2000 tokens by design.
  */
 export function generateContextPack(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
 ): string {
   const workspace = db
-    .prepare<[string], Workspace>('SELECT * FROM workspaces WHERE id = ?')
-    .get(workspaceId);
+    .prepare('SELECT * FROM workspaces WHERE id = ?')
+    .get(workspaceId) as unknown as Workspace | undefined;
 
   if (!workspace) {
     throw new Error(`Workspace '${workspaceId}' not found in database.`);
   }
 
   const latestCheckpoint = db
-    .prepare<[string], Checkpoint>(
+    .prepare(
       `SELECT * FROM checkpoints WHERE workspace_id = ?
        ORDER BY created_at DESC LIMIT 1`,
     )
-    .get(workspaceId);
+    .get(workspaceId) as unknown as Checkpoint | undefined;
 
   const activeTasks = db
-    .prepare<[string], Task>(`
+    .prepare(`
       SELECT * FROM tasks
       WHERE workspace_id = ? AND status IN ('open', 'in-progress')
       ORDER BY
@@ -35,22 +35,22 @@ export function generateContextPack(
         updated_at DESC
       LIMIT 7
     `)
-    .all(workspaceId) as Task[];
+    .all(workspaceId) as unknown as Task[];
 
   const recentDecisions = db
-    .prepare<[string], Decision>(`
+    .prepare(`
       SELECT * FROM decisions
       WHERE workspace_id = ? AND status = 'active'
       ORDER BY created_at DESC LIMIT 5
     `)
-    .all(workspaceId) as Decision[];
+    .all(workspaceId) as unknown as Decision[];
 
   const recentCheckpoints = db
-    .prepare<[string], Checkpoint>(`
+    .prepare(`
       SELECT * FROM checkpoints WHERE workspace_id = ?
       ORDER BY created_at DESC LIMIT 4
     `)
-    .all(workspaceId) as Checkpoint[];
+    .all(workspaceId) as unknown as Checkpoint[];
 
   const lines: string[] = [
     `# Project Memory Context — ${workspace.name}`,

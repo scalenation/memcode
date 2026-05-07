@@ -2,23 +2,31 @@
   "name": "@memcode/cloud-client",
   "version": "1.0.0",
   "description": "Optional encrypted cloud sync client for MemCode (Pro feature)",
-  "keywords": ["memory", "sync", "cloud", "pro"],
+  "keywords": [
+    "memory",
+    "sync",
+    "cloud",
+    "pro"
+  ],
   "license": "MIT",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@memcode/core": "workspace:*",
-    "better-sqlite3": "^9.4.3"
+    "@memcode/core": "workspace:*"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.10",
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.15.0",
     "typescript": "^5.5.0"
+  },
+  "engines": {
+    "node": ">=22.15.0"
   }
 }

@@ -1,5 +1,6 @@
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Checkpoint, Decision, Task, SyncState } from '@memcode/core';
+import { transaction } from '@memcode/core';
 import { encryptPayload, decryptPayload } from './client';
 import type { CloudConfig, SyncPayload } from './client';
 
@@ -30,7 +31,7 @@ export interface PullResult {
  * live API gateway when the cloud backend is available.
  */
 export async function pushSync(
-  db: Database.Database,
+  db: DatabaseSync,
   config: CloudConfig,
 ): Promise<PushResult> {
   assertEnabled(config);
@@ -40,22 +41,22 @@ export async function pushSync(
 
   // Collect items modified since last sync
   const checkpoints = db
-    .prepare<[string, number], Checkpoint>(
+    .prepare(
       'SELECT * FROM checkpoints WHERE workspace_id = ? AND created_at > ? ORDER BY created_at',
     )
-    .all(config.workspaceId, since) as Checkpoint[];
+    .all(config.workspaceId, since) as unknown as Checkpoint[];
 
   const decisions = db
-    .prepare<[string, number], Decision>(
+    .prepare(
       'SELECT * FROM decisions WHERE workspace_id = ? AND updated_at > ? ORDER BY created_at',
     )
-    .all(config.workspaceId, since) as Decision[];
+    .all(config.workspaceId, since) as unknown as Decision[];
 
   const tasks = db
-    .prepare<[string, number], Task>(
+    .prepare(
       'SELECT * FROM tasks WHERE workspace_id = ? AND updated_at > ? ORDER BY created_at',
     )
-    .all(config.workspaceId, since) as Task[];
+    .all(config.workspaceId, since) as unknown as Task[];
 
   const now = Date.now();
   const cursor = String(now);
@@ -112,7 +113,7 @@ export async function pushSync(
  * Checkpoints are append-only (never overwrite).
  */
 export async function pullSync(
-  db: Database.Database,
+  db: DatabaseSync,
   config: CloudConfig,
 ): Promise<PullResult> {
   assertEnabled(config);
@@ -143,10 +144,10 @@ export async function pullSync(
 
   const merged = { checkpoints: 0, decisions: 0, tasks: 0 };
 
-  db.transaction(() => {
+  transaction(db, () => {
     for (const cp of data.checkpoints) {
       const exists = db
-        .prepare<[string]>('SELECT id FROM checkpoints WHERE id = ?')
+        .prepare('SELECT id FROM checkpoints WHERE id = ?')
         .get(cp.id);
       if (!exists) {
         db.prepare(`
@@ -163,8 +164,8 @@ export async function pullSync(
 
     for (const d of data.decisions) {
       const existing = db
-        .prepare<[string], { updated_at: number }>('SELECT updated_at FROM decisions WHERE id = ?')
-        .get(d.id);
+        .prepare('SELECT updated_at FROM decisions WHERE id = ?')
+        .get(d.id) as unknown as { updated_at: number } | undefined;
       if (!existing) {
         db.prepare(`
           INSERT INTO decisions
@@ -183,8 +184,8 @@ export async function pullSync(
 
     for (const t of data.tasks) {
       const existing = db
-        .prepare<[string], { updated_at: number }>('SELECT updated_at FROM tasks WHERE id = ?')
-        .get(t.id);
+        .prepare('SELECT updated_at FROM tasks WHERE id = ?')
+        .get(t.id) as unknown as { updated_at: number } | undefined;
       if (!existing) {
         db.prepare(`
           INSERT INTO tasks
@@ -208,7 +209,7 @@ export async function pullSync(
       last_synced_at: Date.now(),
       provider: 'memcode',
     });
-  })();
+});
 
   return { cursor: newCursor, merged };
 }
@@ -225,14 +226,14 @@ function assertEnabled(config: CloudConfig): void {
   }
 }
 
-function getSyncState(db: Database.Database, workspaceId: string): SyncState | undefined {
+function getSyncState(db: DatabaseSync, workspaceId: string): SyncState | undefined {
   return db
-    .prepare<[string], SyncState>('SELECT * FROM sync_state WHERE workspace_id = ?')
-    .get(workspaceId);
+    .prepare('SELECT * FROM sync_state WHERE workspace_id = ?')
+    .get(workspaceId) as unknown as SyncState | undefined;
 }
 
 function upsertSyncState(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   state: Omit<SyncState, 'workspace_id'>,
 ): void {

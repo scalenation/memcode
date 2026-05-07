@@ -5,10 +5,10 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { openDb } from '../src/db';
 import { getOrCreateWorkspace } from '../src/workspace';
 import { createCheckpointSync, listCheckpoints } from '../src/checkpoint';
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 
 let tmpDir: string;
-let db: Database.Database;
+let db: DatabaseSync;
 let workspaceId: string;
 
 beforeEach(() => {

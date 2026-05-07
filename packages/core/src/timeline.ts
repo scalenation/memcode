@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import type { DatabaseSync } from 'node:sqlite';
 
 export interface TimelineEntry {
   id: string;
@@ -14,14 +14,14 @@ export interface TimelineEntry {
  * and tasks — the project timeline.
  */
 export function getTimeline(
-  db: Database.Database,
+  db: DatabaseSync,
   workspaceId: string,
   limit = 30,
 ): TimelineEntry[] {
   // Pull independently so each table can contribute up to `limit` rows,
   // then re-sort and slice the merged set.
   const checkpoints = db
-    .prepare<[string, number]>(`
+    .prepare(`
       SELECT id, 'checkpoint' AS type,
              summary_short AS title,
              summary_long  AS detail,
@@ -30,10 +30,10 @@ export function getTimeline(
       FROM checkpoints WHERE workspace_id = ?
       ORDER BY created_at DESC LIMIT ?
     `)
-    .all(workspaceId, limit) as TimelineEntry[];
+    .all(workspaceId, limit) as unknown as TimelineEntry[];
 
   const decisions = db
-    .prepare<[string, number]>(`
+    .prepare(`
       SELECT id, 'decision' AS type,
              title,
              rationale AS detail,
@@ -42,10 +42,10 @@ export function getTimeline(
       FROM decisions WHERE workspace_id = ?
       ORDER BY created_at DESC LIMIT ?
     `)
-    .all(workspaceId, limit) as TimelineEntry[];
+    .all(workspaceId, limit) as unknown as TimelineEntry[];
 
   const tasks = db
-    .prepare<[string, number]>(`
+    .prepare(`
       SELECT id, 'task' AS type,
              title,
              description AS detail,
@@ -54,7 +54,7 @@ export function getTimeline(
       FROM tasks WHERE workspace_id = ?
       ORDER BY created_at DESC LIMIT ?
     `)
-    .all(workspaceId, limit) as TimelineEntry[];
+    .all(workspaceId, limit) as unknown as TimelineEntry[];
 
   return [...checkpoints, ...decisions, ...tasks]
     .sort((a, b) => b.created_at - a.created_at)

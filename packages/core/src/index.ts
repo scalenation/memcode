@@ -1,4 +1,4 @@
-export { openDb, appliedMigrations } from './db';
+export { openDb, appliedMigrations, transaction } from './db';
 export { MIGRATIONS } from './migrations';
 export { getOrCreateWorkspace, getWorkspaceById, generateId } from './workspace';
 export { redact, containsSecret } from './redaction';

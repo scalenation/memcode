@@ -2,7 +2,7 @@
   "name": "memcode",
   "version": "0.1.0",
   "private": true,
-  "description": "Project Memory Assistant — local-first memory for coding assistants",
+  "description": "Project Memory Assistant \u2014 local-first memory for coding assistants",
   "scripts": {
     "build": "pnpm -r build",
     "test": "pnpm -r test",
@@ -13,8 +13,7 @@
     "release": "bash scripts/release.sh"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
+    "node": ">=22.15.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.18.0",
