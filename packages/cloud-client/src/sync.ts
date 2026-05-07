@@ -39,6 +39,16 @@ export async function pushSync(
   const syncState = getSyncState(db, config.workspaceId);
   const since = syncState?.last_synced_at ?? 0;
 
+  // Ensure the workspace is registered on the server before pushing
+  await fetch(`${config.endpoint}/v1/sync/workspace`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiToken}`,
+    },
+    body: JSON.stringify({ workspaceId: config.workspaceId }),
+  });
+
   // Collect items modified since last sync
   const checkpoints = db
     .prepare(
@@ -135,12 +145,17 @@ export async function pullSync(
     throw new Error(`Cloud sync pull failed: ${response.status} ${body}`);
   }
 
-  const { payload: encrypted, cursor: newCursor } = (await response.json()) as {
-    payload: string;
+  const { blob, cursor: newCursor } = (await response.json()) as {
+    blob: { cursor: string; payload: string } | null;
     cursor: string;
   };
 
-  const data = decryptPayload<SyncPayload>(encrypted, config.encryptionKey);
+  // Nothing new from server — still success, just nothing to merge
+  if (!blob) {
+    return { cursor: newCursor, merged: { checkpoints: 0, decisions: 0, tasks: 0 } };
+  }
+
+  const data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
 
   const merged = { checkpoints: 0, decisions: 0, tasks: 0 };
 

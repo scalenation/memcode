@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MemCode — Local-first project memory for coding assistants</title>
+  <meta name="description" content="Never lose context between sessions. MemCode gives your AI assistant persistent memory across every repo, every session, every machine." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="public/css/style.css" />
+</head>
+<body>
+
+<!-- ─── NAV ──────────────────────────────────────────────────────────────── -->
+<header class="nav-wrap">
+  <nav class="nav container">
+    <a href="/" class="nav-logo">
+      <span class="logo-icon">🧠</span>
+      <span class="logo-text">MemCode</span>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="https://github.com/scalenation/memcode" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+    <a href="#pricing" class="btn btn-primary btn-sm">Get Pro — $3.99/mo</a>
+  </nav>
+</header>
+
+<!-- ─── HERO ──────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="badge">Open-source CLI · Local-first · E2E encrypted</div>
+    <h1 class="hero-title">
+      Your AI assistant<br />
+      <span class="gradient-text">finally remembers</span>
+    </h1>
+    <p class="hero-sub">
+      MemCode gives every coding session persistent memory — decisions, context, tasks —
+      stored locally in SQLite, automatically checkpointed on every git commit.
+      <strong>No more re-explaining your stack.</strong>
+    </p>
+    <div class="hero-cta">
+      <a href="#pricing" class="btn btn-primary btn-lg">Start free trial</a>
+      <a href="https://github.com/scalenation/memcode" class="btn btn-ghost btn-lg" target="_blank" rel="noopener">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <div class="hero-terminal">
+      <div class="terminal-bar">
+        <span class="dot dot-red"></span>
+        <span class="dot dot-yellow"></span>
+        <span class="dot dot-green"></span>
+        <span class="terminal-title">bash</span>
+      </div>
+      <div class="terminal-body">
+        <div class="terminal-line"><span class="prompt">$</span> npm install -g @memcode/cli</div>
+        <div class="terminal-line dim">+ @memcode/cli@1.0.4  ✓  zero native deps</div>
+        <div class="terminal-line"><span class="prompt">$</span> memory init --hooks</div>
+        <div class="terminal-line success">✓  Initialized database — workspace id: a3f8b2c1…</div>
+        <div class="terminal-line success">✓  Installed git hooks (pre-commit, post-commit, branch-switch)</div>
+        <div class="terminal-line"><span class="prompt">$</span> git commit -m "feat: add auth module"</div>
+        <div class="terminal-line dim">[memcode] checkpoint saved → pre-commit</div>
+        <div class="terminal-line"><span class="prompt">$</span> memory recall --query "auth decisions"</div>
+        <div class="terminal-line success">→  Found 3 relevant items…</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── LOGOS / SOCIAL PROOF ─────────────────────────────────────────────── -->
+<section class="social-proof">
+  <div class="container">
+    <p class="social-proof-label">Works with your favourite editors &amp; assistants</p>
+    <div class="logos-row">
+      <span class="logo-pill">VS Code</span>
+      <span class="logo-pill">GitHub Copilot</span>
+      <span class="logo-pill">Cursor</span>
+      <span class="logo-pill">Claude</span>
+      <span class="logo-pill">ChatGPT</span>
+      <span class="logo-pill">Neovim</span>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ──────────────────────────────────────────────────────────── -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-label">Features</div>
+    <h2 class="section-title">Everything your AI needs<br />to work like a senior dev</h2>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Zero-dependency install</h3>
+        <p>Built on Node.js 22's built-in SQLite. No native bindings, no prebuild-install, no compiler required. Works everywhere Node runs.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔗</div>
+        <h3>Automatic git hooks</h3>
+        <p>Checkpoints are created silently on every <code>git commit</code> and branch switch. Memory grows passively — no manual effort.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>Semantic recall</h3>
+        <p>Ask <code>memory recall --query "why did we use Redis?"</code> and get the exact decision record with rationale, from weeks ago.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📦</div>
+        <h3>Context packs</h3>
+        <p>Generate a compact context bundle to paste at the start of any chat. Your AI picks up exactly where you left off, every time.</p>
+      </div>
+      <div class="feature-card feature-card-pro">
+        <div class="feature-badge">Pro</div>
+        <div class="feature-icon">☁️</div>
+        <h3>Cross-machine sync</h3>
+        <p>Push your workspace memory to the cloud, pull it on your laptop, desktop, or CI machine. End-to-end encrypted — the server never sees plaintext.</p>
+      </div>
+      <div class="feature-card feature-card-pro">
+        <div class="feature-badge">Pro</div>
+        <div class="feature-icon">🔒</div>
+        <h3>E2E encryption</h3>
+        <p>AES-256-GCM encryption, key derived client-side from your passphrase. Zero-knowledge architecture — we can't read your memory even if we wanted to.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── HOW IT WORKS ─────────────────────────────────────────────────────── -->
+<section class="how-it-works" id="how-it-works">
+  <div class="container">
+    <div class="section-label">How it works</div>
+    <h2 class="section-title">Up and running in 60 seconds</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>Install globally</h3>
+          <div class="code-block"><code>npm install -g @memcode/cli</code></div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>Initialize your repo</h3>
+          <div class="code-block"><code>cd my-project &amp;&amp; memory init --hooks</code></div>
+          <p class="step-note">Creates <code>.memory/memory.db</code> and installs git hooks automatically.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3>Work normally</h3>
+          <p>Commit code as usual. Every commit silently saves a checkpoint with branch, git SHA, and context summary.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <h3>Recall context any time</h3>
+          <div class="code-block"><code>memory context-pack --copy</code></div>
+          <p class="step-note">Paste at the top of a new chat. Your assistant is instantly up to speed.</p>
+        </div>
+      </div>
+      <div class="step step-pro">
+        <div class="step-num pro">5</div>
+        <div class="step-content">
+          <div class="feature-badge" style="display:inline-block;margin-bottom:8px">Pro</div>
+          <h3>Sync across machines</h3>
+          <div class="code-block"><code>memory sync auth &amp;&amp; memory sync push</code></div>
+          <p class="step-note">Pull on any other machine with <code>memory sync pull</code>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRICING ───────────────────────────────────────────────────────────── -->
+<section class="pricing" id="pricing">
+  <div class="container">
+    <div class="section-label">Pricing</div>
+    <h2 class="section-title">Simple, honest pricing</h2>
+    <p class="section-sub">The CLI is free and open-source, forever. Pro adds cloud sync.</p>
+
+    <div class="pricing-grid">
+      <!-- Free -->
+      <div class="pricing-card">
+        <div class="pricing-header">
+          <h3>Free</h3>
+          <div class="pricing-price">
+            <span class="price-amount">$0</span>
+            <span class="price-period">forever</span>
+          </div>
+        </div>
+        <ul class="pricing-features">
+          <li class="check">Local SQLite memory store</li>
+          <li class="check">Unlimited checkpoints &amp; decisions</li>
+          <li class="check">Automatic git hooks</li>
+          <li class="check">Semantic recall</li>
+          <li class="check">Context packs</li>
+          <li class="check">VS Code extension</li>
+          <li class="check">Open-source (MIT)</li>
+          <li class="cross">Cross-machine sync</li>
+          <li class="cross">E2E encrypted cloud backup</li>
+        </ul>
+        <a href="https://github.com/scalenation/memcode" class="btn btn-outline btn-full" target="_blank" rel="noopener">
+          View on GitHub →
+        </a>
+      </div>
+
+      <!-- Pro -->
+      <div class="pricing-card pricing-card-pro">
+        <div class="pricing-badge">Most Popular</div>
+        <div class="pricing-header">
+          <h3>Pro</h3>
+          <div class="pricing-price">
+            <span class="price-amount">$3.99</span>
+            <span class="price-period">/ month</span>
+          </div>
+          <p class="pricing-trial">7-day free trial · cancel any time</p>
+        </div>
+        <ul class="pricing-features">
+          <li class="check">Everything in Free</li>
+          <li class="check pro-check">Cross-machine cloud sync</li>
+          <li class="check pro-check">AES-256-GCM E2E encryption</li>
+          <li class="check pro-check">Zero-knowledge architecture</li>
+          <li class="check pro-check">Sync unlimited workspaces</li>
+          <li class="check">Priority support</li>
+        </ul>
+        <button id="checkout-btn" class="btn btn-primary btn-full btn-lg">
+          Start free trial →
+        </button>
+        <p class="pricing-card-note">Billed monthly. No contract. Cancel from your account portal.</p>
+      </div>
+    </div>
+
+    <!-- Checkout modal -->
+    <div id="checkout-modal" class="modal" hidden>
+      <div class="modal-backdrop"></div>
+      <div class="modal-box">
+        <button class="modal-close" id="modal-close-btn" aria-label="Close">✕</button>
+        <h3>Start your free trial</h3>
+        <p>Enter your email to continue to secure checkout.</p>
+        <form id="checkout-form">
+          <label for="checkout-email">Email address</label>
+          <input
+            type="email"
+            id="checkout-email"
+            name="email"
+            placeholder="you@example.com"
+            required
+            autocomplete="email"
+          />
+          <button type="submit" class="btn btn-primary btn-full" id="checkout-submit">
+            Continue to checkout →
+          </button>
+          <p id="checkout-error" class="form-error" hidden></p>
+        </form>
+        <p class="modal-note">
+          Powered by <strong>Stripe</strong>. We never store your card details.
+          7-day free trial, then $3.99/month.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FAQ ───────────────────────────────────────────────────────────────── -->
+<section class="faq">
+  <div class="container">
+    <div class="section-label">FAQ</div>
+    <h2 class="section-title">Common questions</h2>
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>Is my code or conversation content uploaded to the cloud?</summary>
+        <p>No. MemCode only stores <em>structured metadata</em>: checkpoint summaries, decision records, and task titles. No raw code, no conversation transcripts. And even that metadata is encrypted client-side before leaving your machine.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What Node.js version do I need?</summary>
+        <p>Node.js ≥ 22.15.0. MemCode uses Node's built-in SQLite module (<code>node:sqlite</code>), which was stabilised in 22.15. No native compilation required.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can I use MemCode without cloud sync?</summary>
+        <p>Absolutely. The free tier is fully featured — unlimited local memory, git hooks, recall, and context packs. Cloud sync is purely additive.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How does the encryption work?</summary>
+        <p>Your encryption key is derived from your passphrase + workspace ID using SHA-256, entirely on your machine. We store AES-256-GCM blobs and have no mathematical way to decrypt them without your passphrase.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Can I export my data?</summary>
+        <p>Yes. Your primary data lives in <code>.memory/memory.db</code> — a standard SQLite file you own completely. You can inspect, export, or migrate it any time.</p>
+      </details>
+      <details class="faq-item">
+        <summary>What happens if I cancel Pro?</summary>
+        <p>Your local memory is unaffected — it never depended on the cloud. Cloud blobs are retained for 30 days after cancellation so you can re-activate or export.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ─── CTA BANNER ─────────────────────────────────────────────────────────── -->
+<section class="cta-banner">
+  <div class="container">
+    <h2>Stop re-explaining your codebase.</h2>
+    <p>Install MemCode in 30 seconds and let your AI remember everything.</p>
+    <div class="cta-actions">
+      <div class="code-block cta-code"><code>npm install -g @memcode/cli</code></div>
+      <a href="#pricing" class="btn btn-primary btn-lg">Get Pro — $3.99/mo</a>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─────────────────────────────────────────────────────────────── -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <span class="logo-icon">🧠</span>
+        <span class="logo-text">MemCode</span>
+        <p>Local-first project memory for coding assistants.</p>
+      </div>
+      <div class="footer-links">
+        <div class="footer-col">
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#pricing">Pricing</a>
+          <a href="https://github.com/scalenation/memcode/blob/main/docs/getting-started.md">Docs</a>
+          <a href="https://github.com/scalenation/memcode/blob/main/CHANGELOG.md">Changelog</a>
+        </div>
+        <div class="footer-col">
+          <h4>Open Source</h4>
+          <a href="https://github.com/scalenation/memcode" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/scalenation/memcode/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+          <a href="https://github.com/scalenation/memcode/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">Contribute</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 Scalenation. MIT-licensed open-source software.</p>
+      <p>Payments processed securely by <a href="https://stripe.com" target="_blank" rel="noopener">Stripe</a>.</p>
+    </div>
+  </div>
+</footer>
+
+<!-- ─── SUCCESS PAGE (shown via URL param) ──────────────────────────────── -->
+<div id="success-overlay" class="success-overlay" hidden>
+  <div class="success-box">
+    <div class="success-icon">🎉</div>
+    <h2>You're on Pro!</h2>
+    <p>Your 7-day free trial has started. Now link the CLI to your account:</p>
+    <div class="code-block"><code>memory sync auth</code></div>
+    <p class="success-note">Enter your email and password when prompted. Then push your first workspace:</p>
+    <div class="code-block"><code>cd my-project &amp;&amp; memory sync push</code></div>
+    <a href="/" class="btn btn-primary">Back to home →</a>
+  </div>
+</div>
+
+<script src="public/js/app.js"></script>
+</body>
+</html>

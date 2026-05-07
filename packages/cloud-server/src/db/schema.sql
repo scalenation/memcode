@@ -1,0 +1,47 @@
+-- MemCode cloud database schema
+-- Run once via: pnpm migrate
+
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS users (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  email       TEXT        NOT NULL UNIQUE,
+  password_hash TEXT      NOT NULL,
+  stripe_customer_id TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+  id                     UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id                UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stripe_subscription_id TEXT        NOT NULL UNIQUE,
+  stripe_price_id        TEXT        NOT NULL,
+  status                 TEXT        NOT NULL, -- 'active' | 'trialing' | 'past_due' | 'canceled'
+  current_period_end     TIMESTAMPTZ NOT NULL,
+  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON subscriptions(user_id);
+
+-- A workspace is identified by the local UUID from memory.db
+-- One user can have many workspaces (one per repo)
+CREATE TABLE IF NOT EXISTS workspaces (
+  id         TEXT        PRIMARY KEY,           -- local workspace UUID
+  user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS workspaces_user_id_idx ON workspaces(user_id);
+
+-- Each push stores one encrypted blob. Server never decrypts these.
+-- cursor is a millisecond timestamp string used for ordering and delta pulls.
+CREATE TABLE IF NOT EXISTS sync_blobs (
+  id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id      TEXT        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  cursor            TEXT        NOT NULL,
+  payload_encrypted TEXT        NOT NULL,  -- base64 AES-256-GCM, client-side encrypted
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS sync_blobs_workspace_cursor_idx ON sync_blobs(workspace_id, cursor);
