@@ -1,6 +1,6 @@
 {
   "name": "@memcode/cli",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "CLI for MemCode Project Memory Assistant",
   "keywords": [
     "memory",
@@ -9,6 +9,15 @@
     "coding-assistant"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scalenation/memcode.git",
+    "directory": "packages/cli"
+  },
+  "homepage": "https://github.com/scalenation/memcode#readme",
+  "bugs": {
+    "url": "https://github.com/scalenation/memcode/issues"
+  },
   "bin": {
     "memory": "./dist/index.js"
   },

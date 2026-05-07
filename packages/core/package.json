@@ -1,6 +1,6 @@
 {
   "name": "@memcode/core",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Core library for MemCode — schema, migrations, checkpoint engine, retrieval, redaction",
   "keywords": [
     "memory",
@@ -9,6 +9,15 @@
     "sqlite"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/scalenation/memcode.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/scalenation/memcode#readme",
+  "bugs": {
+    "url": "https://github.com/scalenation/memcode/issues"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [

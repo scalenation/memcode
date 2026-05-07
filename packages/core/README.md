@@ -5,6 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/@memcode/core)](https://www.npmjs.com/package/@memcode/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/scalenation/memcode/blob/master/LICENSE)
 [![Node.js ≥ 22.15](https://img.shields.io/badge/node-%3E%3D22.15-brightgreen)](https://nodejs.org/)
+[![GitHub](https://img.shields.io/badge/GitHub-scalenation%2Fmemcode-blue?logo=github)](https://github.com/scalenation/memcode)
 
 ---
 
