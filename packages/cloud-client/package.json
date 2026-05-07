@@ -1,6 +1,6 @@
 {
   "name": "@memcode/cloud-client",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Optional encrypted cloud sync client for MemCode (Pro feature)",
   "keywords": [
     "memory",
