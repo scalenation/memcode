@@ -1,7 +1,7 @@
 {
   "name": "@memcode/core",
-  "version": "1.0.1",
-  "description": "Core library for MemCode \u2014 schema, migrations, checkpoint engine, retrieval, redaction",
+  "version": "1.0.2",
+  "description": "Core library for MemCode — schema, migrations, checkpoint engine, retrieval, redaction",
   "keywords": [
     "memory",
     "project-memory",
