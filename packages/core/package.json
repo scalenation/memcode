@@ -1,6 +1,6 @@
 {
   "name": "@memcode/core",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Core library for MemCode — schema, migrations, checkpoint engine, retrieval, redaction",
   "keywords": [
     "memory",
@@ -12,7 +12,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc",

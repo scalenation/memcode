@@ -1,6 +1,6 @@
 {
   "name": "@memcode/cli",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "CLI for MemCode Project Memory Assistant",
   "keywords": [
     "memory",
@@ -14,7 +14,8 @@
   },
   "main": "./dist/index.js",
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "scripts": {
     "build": "tsc && chmod +x dist/index.js && chmod +x dist/scripts/postinstall.js",
