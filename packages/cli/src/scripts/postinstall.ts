@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 import pc from 'picocolors';
 
-// Skip welcome message in CI environments or when npm is running internally
-if (process.env.CI || process.env.npm_config_yes === 'true') {
-  process.exit(0);
-}
-
 const lines = [
   '',
   pc.bold(pc.cyan('  ╔╦╗╔═╗╔╦╗╔═╗╔═╗╔╦╗╔═╗')),
@@ -38,4 +33,4 @@ const lines = [
   '',
 ];
 
-process.stdout.write(lines.join('\n') + '\n');
+process.stderr.write(lines.join('\n') + '\n');
