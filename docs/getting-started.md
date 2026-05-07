@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** ≥ 18
+- **Node.js** ≥ 22.15
 - **pnpm** ≥ 8 (`npm install -g pnpm`)
 - **Git** repository (optional but recommended for automatic hooks)
 
@@ -47,7 +47,7 @@ memory checkpoint --note "Initial setup complete"
 memory decision add \
   --title "Use SQLite for local storage" \
   --rationale "Keeps the tool footprint small, no server required" \
-  --impact "All memory operations use synchronous better-sqlite3"
+  --impact "All memory operations use Node.js built-in SQLite — zero native deps"
 ```
 
 ## 5. Add a task
