@@ -1,6 +1,7 @@
 import { Command } from 'commander';
-import { createCheckpoint, createCheckpointSync } from '@memcode/core';
+import { createCheckpoint, createCheckpointSync, generateContextPack } from '@memcode/core';
 import { resolveProject, fmtDate } from '../util';
+import { hasMemcodeSection, writeMemcodeSection, buildInstructionsHeader } from './copilot';
 import pc from 'picocolors';
 
 export const checkpointCommand = new Command('checkpoint')
@@ -34,6 +35,15 @@ export const checkpointCommand = new Command('checkpoint')
       if (cp.git_sha) console.log(`  Commit  : ${cp.git_sha.slice(0, 12)}`);
       console.log(`  Summary : ${cp.summary_short}`);
       console.log(`  At      : ${fmtDate(cp.created_at)}`);
+
+      // Auto-refresh Copilot context if already wired
+      if (hasMemcodeSection(projectPath)) {
+        try {
+          const pack = generateContextPack(db, workspace.id);
+          writeMemcodeSection(projectPath, buildInstructionsHeader(workspace.name) + pack);
+          console.log(pc.dim('  ↳ Refreshed VS Code Copilot context'));
+        } catch { /* non-fatal */ }
+      }
     } catch (err: unknown) {
       console.error(pc.red('Error creating checkpoint:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

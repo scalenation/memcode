@@ -103,4 +103,5 @@ export const initCommand = new Command('init')
       console.log(`  Tip: run ${pc.cyan('memory init --hooks')} to enable automatic checkpointing.`);
     }
     console.log(`  Next: ${pc.cyan('memory checkpoint --note "Initial setup"')}`);
+    console.log(`  Then: ${pc.cyan('memory copilot setup')} to inject context into every VS Code Copilot chat automatically.`);
   });

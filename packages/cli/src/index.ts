@@ -12,6 +12,7 @@ import { decisionCommand } from './commands/decision';
 import { taskCommand } from './commands/task';
 import { syncCommand } from './commands/sync';
 import { doctorCommand } from './commands/doctor';
+import { copilotCommand } from './commands/copilot';
 import { loadProPlugin } from './pro-loader';
 
 // Show welcome message on first ever run
@@ -25,12 +26,15 @@ if (!existsSync(welcomedFlag)) {
   } catch { /* non-fatal */ }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pkgVersion: string = (require('../package.json') as { version: string }).version;
+
 const program = new Command();
 
 program
   .name('memory')
   .description('MemCode — local-first project memory for coding assistants')
-  .version('1.0.0', '-v, --version', 'Print version');
+  .version(pkgVersion, '-v, --version', 'Print version');
 
 // Load Pro providers before any command runs (no-op if @memcode/pro not installed)
 program.hook('preAction', (_thisCommand, actionCommand) => {
@@ -48,6 +52,7 @@ program.addCommand(decisionCommand);
 program.addCommand(taskCommand);
 program.addCommand(syncCommand);
 program.addCommand(doctorCommand);
+program.addCommand(copilotCommand);
 
 // Friendly error on unknown command
 program.on('command:*', () => {
