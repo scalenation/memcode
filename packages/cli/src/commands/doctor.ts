@@ -30,8 +30,9 @@ function check(
 
 export const doctorCommand = new Command('doctor')
   .description('Validate schema, permissions, and hook wiring')
-  .action(() => {
-    const projectPath = findProjectRoot();
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { path?: string }) => {
+    const projectPath = findProjectRoot(options.path);
     const memoryDir = getMemoryDir(projectPath);
     const dbPath = getDbPath(projectPath);
 

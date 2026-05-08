@@ -52,10 +52,10 @@ export function createDecision(
 export function listDecisions(
   db: DatabaseSync,
   workspaceId: string,
-  status?: DecisionStatus,
+  status?: DecisionStatus | 'all',
   limit = 20,
 ): Decision[] {
-  if (status) {
+  if (status && status !== 'all') {
     return db
       .prepare(
         `SELECT * FROM decisions WHERE workspace_id = ? AND status = ?
@@ -77,7 +77,7 @@ export function updateDecisionStatus(
   status: DecisionStatus,
 ): void {
   db.prepare(
-    'UPDATE decisions SET status = ?, updated_at = ? WHERE id = ?',
+    "UPDATE decisions SET status = ?, updated_at = ? WHERE id LIKE ? || '%'",
   ).run(status, Date.now(), id);
 }
 
@@ -134,10 +134,10 @@ export function createTask(
 export function listTasks(
   db: DatabaseSync,
   workspaceId: string,
-  status?: TaskStatus,
+  status?: TaskStatus | 'all',
   limit = 20,
 ): Task[] {
-  if (status) {
+  if (status && status !== 'all') {
     return db
       .prepare(
         `SELECT * FROM tasks WHERE workspace_id = ? AND status = ?
@@ -150,7 +150,10 @@ export function listTasks(
   return db
     .prepare(
       `SELECT * FROM tasks WHERE workspace_id = ?
-       ORDER BY created_at DESC LIMIT ?`,
+       ORDER BY
+         CASE status WHEN 'open' THEN 1 WHEN 'in-progress' THEN 2 WHEN 'done' THEN 3 ELSE 4 END,
+         CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+         updated_at DESC LIMIT ?`,
     )
     .all(workspaceId, limit) as unknown as Task[];
 }
@@ -161,6 +164,6 @@ export function updateTaskStatus(
   status: TaskStatus,
 ): void {
   db.prepare(
-    'UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?',
+    "UPDATE tasks SET status = ?, updated_at = ? WHERE id LIKE ? || '%'",
   ).run(status, Date.now(), id);
 }

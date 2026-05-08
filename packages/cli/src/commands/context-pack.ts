@@ -7,10 +7,11 @@ export const contextPackCommand = new Command('context-pack')
   .description('Generate a compact context block for use in a new chat session')
   .option('--copy', 'Copy the output to the clipboard (requires xclip/pbcopy)')
   .option('--output <file>', 'Write to a file instead of stdout')
-  .action((options: { copy?: boolean; output?: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { copy?: boolean; output?: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

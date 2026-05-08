@@ -14,10 +14,11 @@ decisionCommand
   .requiredOption('--title <text>', 'Decision title')
   .requiredOption('--rationale <text>', 'Rationale / reasoning')
   .option('--impact <text>', 'Impact on the codebase or team')
-  .action((options: { title: string; rationale: string; impact?: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { title: string; rationale: string; impact?: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -44,16 +45,17 @@ decisionCommand
     }
   });
 
-// memory decision list [--status active|superseded|rejected]
+// memory decision list [--status active|superseded|rejected|all]
 decisionCommand
   .command('list')
   .description('List decisions')
-  .option('--status <status>', 'Filter by status: active | superseded | rejected')
+  .option('--status <status>', 'Filter by status: active | superseded | rejected | all')
   .option('--limit <n>', 'Max entries', '20')
-  .action((options: { status?: string; limit: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { status?: string; limit: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -66,7 +68,7 @@ decisionCommand
       const decisions = listDecisions(
         db,
         workspace.id,
-        options.status as DecisionStatus | undefined,
+        options.status as DecisionStatus | 'all' | undefined,
         limit,
       );
 
@@ -98,10 +100,11 @@ decisionCommand
   .description('Update the status of a decision')
   .requiredOption('--id <id>', 'Decision ID (or prefix)')
   .requiredOption('--status <status>', 'New status: active | superseded | rejected')
-  .action((options: { id: string; status: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { id: string; status: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

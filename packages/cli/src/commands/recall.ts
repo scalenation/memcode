@@ -7,10 +7,11 @@ export const recallCommand = new Command('recall')
   .description('Recall ranked memory entries matching a query')
   .requiredOption('--query <text>', 'Search query')
   .option('--limit <n>', 'Maximum results to return', '10')
-  .action(async (options: { query: string; limit: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action(async (options: { query: string; limit: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

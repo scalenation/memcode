@@ -7,10 +7,11 @@ export const checkpointCommand = new Command('checkpoint')
   .description('Create a checkpoint of the current project state')
   .option('--note <text>', 'Short note describing this checkpoint')
   .option('--trigger <trigger>', 'Trigger label (manual|pre-commit|post-commit|branch-switch)', 'manual')
-  .action(async (options: { note?: string; trigger: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action(async (options: { note?: string; trigger: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

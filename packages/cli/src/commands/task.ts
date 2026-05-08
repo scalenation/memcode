@@ -13,10 +13,11 @@ taskCommand
   .requiredOption('--title <text>', 'Task title')
   .option('--description <text>', 'Task description')
   .option('--priority <level>', 'Priority: high | medium | low', 'medium')
-  .action((options: { title: string; description?: string; priority: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { title: string; description?: string; priority: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -48,16 +49,17 @@ taskCommand
     }
   });
 
-// memory task list [--status open|in-progress|done|cancelled]
+// memory task list [--status open|in-progress|done|cancelled|all]
 taskCommand
   .command('list')
   .description('List tasks')
-  .option('--status <status>', 'Filter by status')
+  .option('--status <status>', 'Filter by status: open | in-progress | done | cancelled | all')
   .option('--limit <n>', 'Max entries', '20')
-  .action((options: { status?: string; limit: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { status?: string; limit: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -70,7 +72,7 @@ taskCommand
       const tasks = listTasks(
         db,
         workspace.id,
-        options.status as TaskStatus | undefined,
+        options.status as TaskStatus | 'all' | undefined,
         limit,
       );
 
@@ -106,12 +108,13 @@ taskCommand
 taskCommand
   .command('update')
   .description('Update the status of a task')
-  .requiredOption('--id <id>', 'Task ID')
+  .requiredOption('--id <id>', 'Task ID (or prefix)')
   .requiredOption('--status <status>', 'New status: open | in-progress | done | cancelled')
-  .action((options: { id: string; status: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { id: string; status: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

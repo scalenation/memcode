@@ -18,10 +18,11 @@ const TYPE_ICONS: Record<string, string> = {
 export const timelineCommand = new Command('timeline')
   .description('Show a chronological timeline of memory events')
   .option('--limit <n>', 'Number of entries to show', '30')
-  .action((options: { limit: string }) => {
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { limit: string; path?: string }) => {
     let project;
     try {
-      project = resolveProject();
+      project = resolveProject(options.path);
     } catch (err: unknown) {
       console.error(pc.red('Error:'), err instanceof Error ? err.message : String(err));
       process.exit(1);
