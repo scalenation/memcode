@@ -1,6 +1,6 @@
 {
   "name": "@memcode/cloud-client",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Optional encrypted cloud sync client for MemCode (Pro feature)",
   "keywords": [
     "memory",
@@ -30,7 +30,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@memcode/core": "workspace:*"
+    "@memcode/core": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
