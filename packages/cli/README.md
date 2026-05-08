@@ -9,6 +9,27 @@
 
 ---
 
+## Auto-inject project memory into every AI chat
+
+**New in 1.0.11** — Run `memory copilot setup` once and your project context is automatically injected at the start of every chat in VS Code Copilot and Claude Code — no copy-paste needed.
+
+```bash
+# Wire both VS Code Copilot and Claude Code in one shot:
+memory copilot setup
+
+# Or target a specific assistant:
+memory copilot setup --agent copilot
+memory copilot setup --agent claude
+```
+
+MemCode writes a persistent context section into:
+- **`.github/copilot-instructions.md`** — read automatically by VS Code Copilot
+- **`CLAUDE.md`** — read automatically by Claude Code
+
+The section refreshes automatically after every `memory checkpoint`. Run `memory copilot refresh` to update it manually at any time.
+
+---
+
 ## What is MemCode?
 
 Coding assistants forget everything when the session ends. MemCode fixes that.
@@ -107,6 +128,7 @@ memory checkpoint [options]
 | Option | Description |
 |---|---|
 | `--note <text>` | Human-readable description of what happened |
+| `--trigger <trigger>` | Override trigger label (e.g. `manual`, `git-commit`) |
 | `--path <path>` | Project path |
 
 When `--hooks` was used at init, this runs automatically on every `git commit`. Manual checkpoints are useful for major milestones.
@@ -145,6 +167,7 @@ memory context-pack [options]
 
 | Option | Description |
 |---|---|
+| `--copy` | Copy output to clipboard instead of printing |
 | `--path <path>` | Project path |
 
 Output includes: workspace metadata, recent checkpoints, open tasks, latest decisions, and a file-tree snapshot. Typically under 2 KB and renders in < 500 ms.
@@ -192,8 +215,26 @@ memory decision add [options]
 #### `memory decision list`
 
 ```bash
-memory decision list [--path <path>]
+memory decision list [options]
 ```
+
+| Option | Description |
+|---|---|
+| `--status <status>` | Filter by `active` \| `superseded` \| `rejected` \| `all` (default: `active`) |
+| `--limit <n>` | Max results (default: 20) |
+| `--path <path>` | Project path |
+
+#### `memory decision update`
+
+```bash
+memory decision update [options]
+```
+
+| Option | Description |
+|---|---|
+| `--id <id>` | Decision ID or unique prefix (required) |
+| `--status <status>` | New status: `active` \| `superseded` \| `rejected` |
+| `--path <path>` | Project path |
 
 ---
 
@@ -216,18 +257,82 @@ memory task add [options]
 #### `memory task list`
 
 ```bash
-memory task list [--status <status>] [--path <path>]
+memory task list [options]
 ```
 
 | Option | Description |
 |---|---|
-| `--status <status>` | Filter by `open` \| `done` \| `all` (default: `open`) |
+| `--status <status>` | Filter by `open` \| `in-progress` \| `done` \| `cancelled` \| `all` (default: `open`) |
+| `--limit <n>` | Max results (default: 20) |
+| `--path <path>` | Project path |
 
-#### `memory task done`
+#### `memory task update`
 
 ```bash
-memory task done <id> [--path <path>]
+memory task update [options]
 ```
+
+| Option | Description |
+|---|---|
+| `--id <id>` | Task ID or unique prefix (required) |
+| `--status <status>` | New status: `open` \| `in-progress` \| `done` \| `cancelled` |
+| `--priority <level>` | New priority: `low` \| `medium` \| `high` |
+| `--path <path>` | Project path |
+
+```bash
+# Mark a task done:
+memory task update --id abc123 --status done
+```
+
+---
+
+### `memory copilot`
+
+Wire MemCode into AI coding assistants so every new chat automatically receives project context.
+
+#### `memory copilot setup`
+
+Inject MemCode context into AI assistant config files.
+
+```bash
+memory copilot setup [options]
+```
+
+| Option | Description |
+|---|---|
+| `--agent <agent>` | `copilot` \| `claude` \| `all` (default: `all`) |
+| `--path <path>` | Project path |
+
+Writes context into:
+- `--agent copilot` → `.github/copilot-instructions.md` (VS Code Copilot)
+- `--agent claude` → `CLAUDE.md` (Claude Code)
+- `--agent all` → both files
+
+#### `memory copilot refresh`
+
+Re-generate the MemCode section in all configured AI assistant files.
+
+```bash
+memory copilot refresh [options]
+```
+
+| Option | Description |
+|---|---|
+| `--agent <agent>` | Limit refresh to `copilot` \| `claude` \| `all` |
+| `--quiet` | Suppress output (used by automatic refresh after checkpoint) |
+| `--path <path>` | Project path |
+
+Runs automatically after every `memory checkpoint` when any agent file is configured.
+
+#### `memory copilot status`
+
+Show which AI assistants have MemCode context wired for this project.
+
+```bash
+memory copilot status [--path <path>]
+```
+
+Outputs per-agent: file path, generation timestamp, and context size.
 
 ---
 

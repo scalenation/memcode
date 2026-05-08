@@ -36,12 +36,12 @@ export const checkpointCommand = new Command('checkpoint')
       console.log(`  Summary : ${cp.summary_short}`);
       console.log(`  At      : ${fmtDate(cp.created_at)}`);
 
-      // Auto-refresh Copilot context if already wired
+      // Auto-refresh all configured AI assistant context files
       if (hasMemcodeSection(projectPath)) {
         try {
           const pack = generateContextPack(db, workspace.id);
           writeMemcodeSection(projectPath, buildInstructionsHeader(workspace.name) + pack);
-          console.log(pc.dim('  ↳ Refreshed VS Code Copilot context'));
+          console.log(pc.dim('  ↳ Refreshed AI assistant context'));
         } catch { /* non-fatal */ }
       }
     } catch (err: unknown) {

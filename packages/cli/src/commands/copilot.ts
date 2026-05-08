@@ -5,19 +5,75 @@ import {
   writeFileSync,
   mkdirSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { generateContextPack } from '@memcode/core';
 import { resolveProject, findProjectRoot } from '../util';
 import pc from 'picocolors';
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── constants ───────────────────────────────────────────────────────────────
 
 const MARKER_START = '<!-- memcode:start -->';
 const MARKER_END = '<!-- memcode:end -->';
 
+export type Agent = 'copilot' | 'claude' | 'all';
+
+// ─── agent file paths ────────────────────────────────────────────────────────
+
+function copilotFilePath(projectPath: string): string {
+  return join(projectPath, '.github', 'copilot-instructions.md');
+}
+
+function claudeFilePath(projectPath: string): string {
+  return join(projectPath, 'CLAUDE.md');
+}
+
+/** Resolve the list of file paths to operate on for a given agent selector. */
+function agentFilePaths(projectPath: string, agent: Agent): string[] {
+  if (agent === 'copilot') return [copilotFilePath(projectPath)];
+  if (agent === 'claude') return [claudeFilePath(projectPath)];
+  return [copilotFilePath(projectPath), claudeFilePath(projectPath)];
+}
+
+// ─── section writer ──────────────────────────────────────────────────────────
+
 /**
- * The static instructions injected once, above the dynamic context block.
- * Tells Copilot how to interpret and use MemCode data.
+ * Upsert the MemCode block inside any file, preserving surrounding content.
+ */
+function upsertSection(filePath: string, body: string): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const section = `${MARKER_START}\n${body}\n${MARKER_END}`;
+
+  if (existsSync(filePath)) {
+    let existing = readFileSync(filePath, 'utf-8');
+    const si = existing.indexOf(MARKER_START);
+    const ei = existing.indexOf(MARKER_END);
+    if (si !== -1 && ei !== -1 && ei > si) {
+      existing =
+        existing.slice(0, si).trimEnd() +
+        (si > 0 ? '\n\n' : '') +
+        section +
+        existing.slice(ei + MARKER_END.length).trimStart();
+      if (!existing.endsWith('\n')) existing += '\n';
+    } else {
+      existing = existing.trimEnd() + '\n\n' + section + '\n';
+    }
+    writeFileSync(filePath, existing, 'utf-8');
+  } else {
+    writeFileSync(filePath, section + '\n', 'utf-8');
+  }
+}
+
+function hasSection(filePath: string): boolean {
+  if (!existsSync(filePath)) return false;
+  const c = readFileSync(filePath, 'utf-8');
+  return c.includes(MARKER_START) && c.includes(MARKER_END);
+}
+
+// ─── public helpers (used by checkpoint.ts) ──────────────────────────────────
+
+/**
+ * The static instructions block injected above the dynamic context.
+ * Tells the AI assistant how to interpret MemCode data.
  */
 export function buildInstructionsHeader(projectName: string): string {
   return [
@@ -38,55 +94,43 @@ export function buildInstructionsHeader(projectName: string): string {
 }
 
 /**
- * Write (or update) the MemCode section inside `.github/copilot-instructions.md`.
- * Preserves any content outside the MemCode markers.
+ * Write the MemCode context body to all agent files that are already configured.
+ * Used by `memory checkpoint` for automatic refresh.
  */
 export function writeMemcodeSection(projectPath: string, body: string): void {
-  const githubDir = join(projectPath, '.github');
-  const instructionsPath = join(githubDir, 'copilot-instructions.md');
-
-  mkdirSync(githubDir, { recursive: true });
-
-  const section = `${MARKER_START}\n${body}\n${MARKER_END}`;
-
-  if (existsSync(instructionsPath)) {
-    let existing = readFileSync(instructionsPath, 'utf-8');
-    const startIdx = existing.indexOf(MARKER_START);
-    const endIdx = existing.indexOf(MARKER_END);
-
-    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-      // Replace existing MemCode section, preserve everything else
-      existing =
-        existing.slice(0, startIdx).trimEnd() +
-        (startIdx > 0 ? '\n\n' : '') +
-        section +
-        existing.slice(endIdx + MARKER_END.length).trimStart();
-      if (!existing.endsWith('\n')) existing += '\n';
-    } else {
-      // Append to the end of the existing file
-      existing = existing.trimEnd() + '\n\n' + section + '\n';
-    }
-    writeFileSync(instructionsPath, existing, 'utf-8');
-  } else {
-    writeFileSync(instructionsPath, section + '\n', 'utf-8');
+  const files = [
+    copilotFilePath(projectPath),
+    claudeFilePath(projectPath),
+  ];
+  for (const f of files) {
+    if (hasSection(f)) upsertSection(f, body);
   }
 }
 
 /**
- * Check whether the project currently has a MemCode section in copilot-instructions.md.
+ * Return true if any agent file already has a MemCode section.
+ * Used by `memory checkpoint` to decide whether to auto-refresh.
  */
 export function hasMemcodeSection(projectPath: string): boolean {
-  const instructionsPath = join(projectPath, '.github', 'copilot-instructions.md');
-  if (!existsSync(instructionsPath)) return false;
-  const content = readFileSync(instructionsPath, 'utf-8');
-  return content.includes(MARKER_START) && content.includes(MARKER_END);
+  return (
+    hasSection(copilotFilePath(projectPath)) ||
+    hasSection(claudeFilePath(projectPath))
+  );
+}
+
+/** Return human-readable labels for which agent files are configured. */
+function configuredAgents(projectPath: string): string[] {
+  const labels: string[] = [];
+  if (hasSection(copilotFilePath(projectPath))) labels.push('VS Code Copilot');
+  if (hasSection(claudeFilePath(projectPath))) labels.push('Claude Code');
+  return labels;
 }
 
 // ─── command ─────────────────────────────────────────────────────────────────
 
 export const copilotCommand = new Command('copilot')
   .description(
-    'Wire MemCode into VS Code Copilot so every new chat automatically receives project context',
+    'Wire MemCode into AI coding assistants so every new chat automatically receives project context',
   );
 
 // ─── copilot setup ───────────────────────────────────────────────────────────
@@ -94,10 +138,22 @@ export const copilotCommand = new Command('copilot')
 copilotCommand
   .command('setup')
   .description(
-    'Inject MemCode context into .github/copilot-instructions.md — VS Code Copilot reads this on every chat',
+    'Inject MemCode context into AI assistant config files so every chat session receives project memory automatically',
+  )
+  .option(
+    '--agent <agent>',
+    'Which assistant to configure: copilot | claude | all (default: all)',
+    'all',
   )
   .option('--path <path>', 'Project path (defaults to current working directory)')
-  .action((options: { path?: string }) => {
+  .action((options: { agent: string; path?: string }) => {
+    const agent = (options.agent || 'all') as Agent;
+    const validAgents: Agent[] = ['copilot', 'claude', 'all'];
+    if (!validAgents.includes(agent)) {
+      console.error(pc.red('Invalid --agent value.'), `Use one of: ${validAgents.join(', ')}`);
+      process.exit(1);
+    }
+
     let project;
     try {
       project = resolveProject(options.path);
@@ -107,27 +163,35 @@ copilotCommand
     }
 
     const { db, workspace, projectPath } = project;
-    const instructionsPath = join(projectPath, '.github', 'copilot-instructions.md');
-    const isUpdate = hasMemcodeSection(projectPath);
+    const filePaths = agentFilePaths(projectPath, agent);
 
     try {
       const contextPack = generateContextPack(db, workspace.id);
       const body = buildInstructionsHeader(workspace.name) + contextPack;
-      writeMemcodeSection(projectPath, body);
 
-      console.log(
-        pc.green('✓'),
-        isUpdate ? 'Updated' : 'Created',
-        pc.bold(instructionsPath),
-      );
+      const agentLabels: Record<string, string> = {
+        [copilotFilePath(projectPath)]: 'VS Code Copilot  → .github/copilot-instructions.md',
+        [claudeFilePath(projectPath)]:  'Claude Code      → CLAUDE.md',
+      };
+
+      for (const filePath of filePaths) {
+        const wasUpdate = hasSection(filePath);
+        upsertSection(filePath, body);
+        console.log(pc.green('✓'), wasUpdate ? 'Updated' : 'Created', pc.bold(agentLabels[filePath] ?? filePath));
+      }
+
       console.log('');
-      console.log(pc.dim('VS Code Copilot reads this file automatically on every chat session.'));
-      console.log(pc.dim('The context updates automatically after each `memory checkpoint`.'));
+      console.log(pc.dim('These files are read automatically by the AI assistant at the start of every chat.'));
+      console.log(pc.dim('The context section refreshes automatically after each `memory checkpoint`.'));
       console.log('');
       console.log('Next steps:');
-      console.log(`  1. ${pc.dim('Add to .gitignore if you prefer not to commit it:')}  echo ".github/copilot-instructions.md" >> .gitignore`);
-      console.log(`  2. ${pc.dim('Or commit it')} so teammates share the same Copilot context automatically.`);
-      console.log(`  3. Run ${pc.cyan('memory copilot refresh')} any time to pull in the latest memory.`);
+      if (filePaths.includes(copilotFilePath(projectPath))) {
+        console.log(`  • Commit ${pc.cyan('.github/copilot-instructions.md')} so teammates share Copilot context, or gitignore it for personal use.`);
+      }
+      if (filePaths.includes(claudeFilePath(projectPath))) {
+        console.log(`  • Commit ${pc.cyan('CLAUDE.md')} so teammates share Claude Code context, or gitignore it for personal use.`);
+      }
+      console.log(`  • Run ${pc.cyan('memory copilot refresh')} any time to pull in the latest memory.`);
     } finally {
       db.close();
     }
@@ -138,11 +202,15 @@ copilotCommand
 copilotCommand
   .command('refresh')
   .description(
-    'Refresh the MemCode section in .github/copilot-instructions.md from current memory state',
+    'Refresh the MemCode section in all configured AI assistant files from current memory state',
+  )
+  .option(
+    '--agent <agent>',
+    'Which assistant file(s) to refresh: copilot | claude | all (default: all configured)',
   )
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .option('--quiet', 'Suppress output (used by automatic refresh)')
-  .action((options: { path?: string; quiet?: boolean }) => {
+  .action((options: { agent?: string; path?: string; quiet?: boolean }) => {
     let project;
     try {
       project = resolveProject(options.path);
@@ -154,11 +222,23 @@ copilotCommand
     }
 
     const { db, workspace, projectPath } = project;
-    const instructionsPath = join(projectPath, '.github', 'copilot-instructions.md');
 
-    if (!hasMemcodeSection(projectPath)) {
+    // If --agent not specified, refresh whichever files are already configured
+    const filesToRefresh: string[] = [];
+    if (options.agent) {
+      const agent = options.agent as Agent;
+      for (const f of agentFilePaths(projectPath, agent)) {
+        if (hasSection(f)) filesToRefresh.push(f);
+      }
+    } else {
+      for (const f of agentFilePaths(projectPath, 'all')) {
+        if (hasSection(f)) filesToRefresh.push(f);
+      }
+    }
+
+    if (filesToRefresh.length === 0) {
       if (!options.quiet) {
-        console.log(pc.yellow('!'), 'MemCode is not yet wired into VS Code Copilot for this project.');
+        console.log(pc.yellow('!'), 'MemCode is not yet wired into any AI assistant for this project.');
         console.log(`  Run ${pc.cyan('memory copilot setup')} first.`);
       }
       db.close();
@@ -168,9 +248,9 @@ copilotCommand
     try {
       const contextPack = generateContextPack(db, workspace.id);
       const body = buildInstructionsHeader(workspace.name) + contextPack;
-      writeMemcodeSection(projectPath, body);
-      if (!options.quiet) {
-        console.log(pc.green('✓'), 'Refreshed', pc.bold(instructionsPath));
+      for (const f of filesToRefresh) {
+        upsertSection(f, body);
+        if (!options.quiet) console.log(pc.green('✓'), 'Refreshed', pc.bold(f.replace(projectPath + '/', '')));
       }
     } finally {
       db.close();
@@ -181,41 +261,49 @@ copilotCommand
 
 copilotCommand
   .command('status')
-  .description('Show whether MemCode is wired into VS Code Copilot for this project')
+  .description('Show which AI assistants have MemCode context wired for this project')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action((options: { path?: string }) => {
     const projectPath = options.path ?? findProjectRoot();
-    const instructionsPath = join(projectPath, '.github', 'copilot-instructions.md');
 
-    if (!existsSync(instructionsPath)) {
-      console.log(pc.yellow('○'), pc.bold('Not configured'));
-      console.log(`  ${pc.dim(instructionsPath)} does not exist.`);
-      console.log(`  Run ${pc.cyan('memory copilot setup')} to enable automatic Copilot context injection.`);
-      return;
+    const checks: Array<{ label: string; filePath: string }> = [
+      { label: 'VS Code Copilot', filePath: copilotFilePath(projectPath) },
+      { label: 'Claude Code',     filePath: claudeFilePath(projectPath) },
+    ];
+
+    let anyActive = false;
+    for (const { label, filePath } of checks) {
+      const relPath = filePath.replace(projectPath + '/', '');
+      if (!existsSync(filePath)) {
+        console.log(pc.dim('○'), pc.bold(label), pc.dim(`(${relPath} — not created)`));
+        continue;
+      }
+      const content = readFileSync(filePath, 'utf-8');
+      if (!content.includes(MARKER_START) || !content.includes(MARKER_END)) {
+        console.log(pc.yellow('~'), pc.bold(label), pc.dim(`(${relPath} — file exists, MemCode section missing)`));
+        continue;
+      }
+
+      const si = content.indexOf(MARKER_START);
+      const ei = content.indexOf(MARKER_END);
+      const section = content.slice(si + MARKER_START.length, ei).trim();
+      const generatedMatch = section.match(/Generated (\S+)/);
+      const generatedAt = generatedMatch ? new Date(generatedMatch[1]).toLocaleString() : 'unknown';
+
+      console.log(pc.green('✓'), pc.bold(label));
+      console.log(`    File      : ${pc.cyan(relPath)}`);
+      console.log(`    Generated : ${generatedAt}`);
+      console.log(`    Size      : ${section.length.toLocaleString()} chars`);
+      anyActive = true;
     }
 
-    const content = readFileSync(instructionsPath, 'utf-8');
-    const hasSection = content.includes(MARKER_START) && content.includes(MARKER_END);
-
-    if (!hasSection) {
-      console.log(pc.yellow('○'), pc.bold('File exists but MemCode section is missing'));
-      console.log(`  ${pc.dim(instructionsPath)}`);
-      console.log(`  Run ${pc.cyan('memory copilot setup')} to inject the MemCode section.`);
-      return;
-    }
-
-    // Extract section dates/metadata from content
-    const startIdx = content.indexOf(MARKER_START);
-    const endIdx = content.indexOf(MARKER_END);
-    const section = content.slice(startIdx + MARKER_START.length, endIdx).trim();
-    const generatedMatch = section.match(/Generated (\S+)/);
-    const generatedAt = generatedMatch ? new Date(generatedMatch[1]).toLocaleString() : 'unknown';
-
-    console.log(pc.green('✓'), pc.bold('MemCode context is active'));
-    console.log(`  File       : ${pc.cyan(instructionsPath)}`);
-    console.log(`  Generated  : ${generatedAt}`);
-    console.log(`  Characters : ${section.length.toLocaleString()}`);
     console.log('');
-    console.log(pc.dim('VS Code Copilot reads this file automatically on every chat session.'));
-    console.log(pc.dim('Context auto-refreshes after each `memory checkpoint`.'));
+    if (anyActive) {
+      console.log(pc.dim('Context auto-refreshes after each `memory checkpoint`.'));
+      console.log(pc.dim('Run `memory copilot refresh` to update manually.'));
+    } else {
+      console.log(`Run ${pc.cyan('memory copilot setup')} to enable automatic context injection.`);
+    }
   });
+
+
