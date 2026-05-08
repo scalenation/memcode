@@ -20,6 +20,7 @@
     "fastify": "^4.28.0",
     "jose": "^5.9.6",
     "pg": "^8.13.0",
+    "serverless-http": "^4.0.0",
     "stripe": "^16.12.0"
   },
   "devDependencies": {
