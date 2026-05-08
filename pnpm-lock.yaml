@@ -27,11 +27,11 @@ importers:
   packages/cli:
     dependencies:
       '@memcode/cloud-client':
-        specifier: workspace:*
-        version: link:../cloud-client
+        specifier: ^1.0.4
+        version: 1.0.4
       '@memcode/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^1.0.7
+        version: 1.0.7
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -52,8 +52,8 @@ importers:
   packages/cloud-client:
     dependencies:
       '@memcode/core':
-        specifier: workspace:*
-        version: link:../core
+        specifier: ^1.0.7
+        version: 1.0.7
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -521,6 +521,14 @@ packages:
   '@lukeed/ms@2.0.2':
     resolution: {integrity: sha512-9I2Zn6+NJLfaGoz9jN3lpwDgAYvfGeNYdbAIjJOqzs4Tpc+VU3Jqq4IofSUBKajiDS8k9fZIg18/z13mpk1bsA==}
     engines: {node: '>=8'}
+
+  '@memcode/cloud-client@1.0.4':
+    resolution: {integrity: sha512-4FJLTkRGBjlFYmT7QqtgfzpwvtYTEkGaUzH31C50FJ0OMO4KLHPW2iP09ihLht1cpJz9aMgbxLhEq5j74ARgfQ==}
+    engines: {node: '>=22.15.0'}
+
+  '@memcode/core@1.0.7':
+    resolution: {integrity: sha512-315+cyjRO3bhtLLSecQYrJUmmOSqernx+fOx+6vkpheOhkLZE7nMrMIXRLocb12LPNEFqUTdOZMLxGfiLalDIQ==}
+    engines: {node: '>=22.15.0'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2208,6 +2216,12 @@ snapshots:
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
   '@lukeed/ms@2.0.2': {}
+
+  '@memcode/cloud-client@1.0.4':
+    dependencies:
+      '@memcode/core': 1.0.7
+
+  '@memcode/core@1.0.7': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
