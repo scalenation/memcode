@@ -102,6 +102,11 @@ decisionCommand
   .requiredOption('--status <status>', 'New status: active | superseded | rejected')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action((options: { id: string; status: string; path?: string }) => {
+    if (!options.id || options.id.trim() === '') {
+      console.error(pc.red('Error:'), '--id must not be empty');
+      process.exit(1);
+    }
+
     let project;
     try {
       project = resolveProject(options.path);

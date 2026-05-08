@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createTask, listTasks, updateTaskStatus } from '@memcode/core';
+import { createTask, listTasks, updateTask } from '@memcode/core';
 import { resolveProject, fmtDate, truncate } from '../util';
 import pc from 'picocolors';
 import type { TaskStatus, TaskPriority } from '@memcode/core';
@@ -104,14 +104,24 @@ taskCommand
     }
   });
 
-// memory task update --id <id> --status <status>
+// memory task update --id <id> [--status <status>] [--priority <priority>]
 taskCommand
   .command('update')
   .description('Update the status of a task')
   .requiredOption('--id <id>', 'Task ID (or prefix)')
-  .requiredOption('--status <status>', 'New status: open | in-progress | done | cancelled')
+  .option('--status <status>', 'New status: open | in-progress | done | cancelled')
+  .option('--priority <level>', 'New priority: low | medium | high')
   .option('--path <path>', 'Project path (defaults to current working directory)')
-  .action((options: { id: string; status: string; path?: string }) => {
+  .action((options: { id: string; status?: string; priority?: string; path?: string }) => {
+    if (!options.id || options.id.trim() === '') {
+      console.error(pc.red('Error:'), '--id must not be empty');
+      process.exit(1);
+    }
+    if (!options.status && !options.priority) {
+      console.error(pc.red('Error:'), 'Provide at least --status or --priority');
+      process.exit(1);
+    }
+
     let project;
     try {
       project = resolveProject(options.path);
@@ -122,15 +132,28 @@ taskCommand
 
     const { db } = project;
     const validStatuses: TaskStatus[] = ['open', 'in-progress', 'done', 'cancelled'];
-    if (!validStatuses.includes(options.status as TaskStatus)) {
+    const validPriorities: TaskPriority[] = ['low', 'medium', 'high'];
+
+    if (options.status && !validStatuses.includes(options.status as TaskStatus)) {
       console.error(pc.red('Invalid status.'), `Use one of: ${validStatuses.join(', ')}`);
+      db.close();
+      process.exit(1);
+    }
+    if (options.priority && !validPriorities.includes(options.priority as TaskPriority)) {
+      console.error(pc.red('Invalid priority.'), `Use one of: ${validPriorities.join(', ')}`);
       db.close();
       process.exit(1);
     }
 
     try {
-      updateTaskStatus(db, options.id, options.status as TaskStatus);
-      console.log(pc.green('✓'), `Task ${options.id.slice(0, 8)} status updated to ${options.status}`);
+      updateTask(db, options.id, {
+        status: options.status as TaskStatus | undefined,
+        priority: options.priority as TaskPriority | undefined,
+      });
+      const changes: string[] = [];
+      if (options.status) changes.push(`status → ${options.status}`);
+      if (options.priority) changes.push(`priority → ${options.priority}`);
+      console.log(pc.green('✓'), `Task ${options.id.slice(0, 8)} updated: ${changes.join(', ')}`);
     } finally {
       db.close();
     }

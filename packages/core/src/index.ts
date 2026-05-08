@@ -24,10 +24,12 @@ export {
   createTask,
   listTasks,
   updateTaskStatus,
+  updateTask,
 } from './items';
 export type {
   CreateDecisionOptions,
   CreateTaskOptions,
+  UpdateTaskOptions,
 } from './items';
 export { registry } from './providers';
 export type {

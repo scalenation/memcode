@@ -211,6 +211,14 @@ copilotCommand
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .option('--quiet', 'Suppress output (used by automatic refresh)')
   .action((options: { agent?: string; path?: string; quiet?: boolean }) => {
+    if (options.agent) {
+      const validAgents: Agent[] = ['copilot', 'claude', 'all'];
+      if (!validAgents.includes(options.agent as Agent)) {
+        console.error(pc.red('Invalid --agent value.'), `Use one of: ${validAgents.join(', ')}`);
+        process.exit(1);
+      }
+    }
+
     let project;
     try {
       project = resolveProject(options.path);

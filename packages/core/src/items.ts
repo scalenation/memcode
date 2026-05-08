@@ -167,3 +167,24 @@ export function updateTaskStatus(
     "UPDATE tasks SET status = ?, updated_at = ? WHERE id LIKE ? || '%'",
   ).run(status, Date.now(), id);
 }
+
+export interface UpdateTaskOptions {
+  status?: TaskStatus;
+  priority?: TaskPriority;
+}
+
+export function updateTask(
+  db: DatabaseSync,
+  id: string,
+  opts: UpdateTaskOptions,
+): void {
+  const sets: string[] = [];
+  const values: (string | number)[] = [];
+  if (opts.status !== undefined) { sets.push('status = ?'); values.push(opts.status); }
+  if (opts.priority !== undefined) { sets.push('priority = ?'); values.push(opts.priority); }
+  if (sets.length === 0) return;
+  sets.push('updated_at = ?');
+  values.push(Date.now());
+  values.push(id);
+  db.prepare(`UPDATE tasks SET ${sets.join(', ')} WHERE id LIKE ? || '%'`).run(...values);
+}
