@@ -11,24 +11,81 @@
 
 ## Auto-inject project memory into every AI chat
 
-**New in 1.0.11** — Run `memory copilot setup` once and your project context is automatically injected at the start of every chat in VS Code Copilot and Claude Code — no copy-paste needed.
+Run `memory copilot setup` once and your project context is automatically injected at the start of **every chat** — no copy-paste, no manual updates.
+
+Works with:
+- **VS Code Copilot** (via `.github/copilot-instructions.md`)
+- **Claude Code** (via `CLAUDE.md`)
+
+---
+
+### VS Code Copilot
+
+**How it works:** VS Code Copilot automatically reads `.github/copilot-instructions.md` in your repo at the start of every chat. MemCode writes your project memory into that file and keeps it fresh.
 
 ```bash
-# Wire both VS Code Copilot and Claude Code in one shot:
-memory copilot setup
-
-# Or target a specific assistant:
+# In your project root:
 memory copilot setup --agent copilot
+```
+
+This creates `.github/copilot-instructions.md` with your current memory. Open a new Copilot chat — your tasks, decisions, and recent checkpoints are already there.
+
+**To keep teammates in sync**, commit the file:
+```bash
+git add .github/copilot-instructions.md && git commit -m "Add Copilot memory context"
+```
+
+**To use it privately**, add it to `.gitignore` instead.
+
+---
+
+### Claude Code
+
+**How it works:** Claude Code automatically reads `CLAUDE.md` from your project root at the start of every session. MemCode writes your project memory into that file and keeps it fresh.
+
+```bash
+# In your project root:
 memory copilot setup --agent claude
 ```
 
-MemCode writes a persistent context section into:
-- **`.github/copilot-instructions.md`** — read automatically by VS Code Copilot
-- **`CLAUDE.md`** — read automatically by Claude Code
+This creates `CLAUDE.md` with your current memory. Start a new Claude Code session — your tasks, decisions, and recent checkpoints are already loaded.
 
-The section refreshes automatically after every `memory checkpoint`. Run `memory copilot refresh` to update it manually at any time.
+**To keep teammates in sync**, commit the file:
+```bash
+git add CLAUDE.md && git commit -m "Add Claude Code memory context"
+```
+
+**To use it privately**, add it to `.gitignore` instead.
 
 ---
+
+### Both at once
+
+```bash
+memory copilot setup          # default: --agent all
+```
+
+Sets up both `.github/copilot-instructions.md` and `CLAUDE.md` in one command.
+
+---
+
+### Keeping context up to date
+
+The context section **refreshes automatically** after every `memory checkpoint` (including git-commit hooks). To refresh manually:
+
+```bash
+memory copilot refresh                  # refresh all configured files
+memory copilot refresh --agent copilot  # refresh Copilot only
+memory copilot refresh --agent claude   # refresh Claude Code only
+```
+
+Check what's currently wired:
+
+```bash
+memory copilot status
+```
+
+
 
 ## What is MemCode?
 
