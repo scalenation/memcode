@@ -55,20 +55,21 @@ async function loadProfile() {
 
   profileData = await res.json();
   const { email, name, subscription } = profileData;
+  const activeSub = subscription && subscription.status !== 'canceled' ? subscription : null;
 
   // Nav
   document.getElementById('nav-email').textContent = email;
 
   // Overview
   document.getElementById('ov-email').textContent = email;
-  document.getElementById('ov-plan').textContent = subscription ? subscription.planName : 'Free';
+  document.getElementById('ov-plan').textContent = activeSub ? activeSub.planName : 'Free';
   document.getElementById('ov-sub-loading').hidden = true;
   document.getElementById('ov-sub-content').hidden = false;
-  if (subscription && subscription.status !== 'canceled') {
+  if (activeSub) {
     document.getElementById('ov-sub-content').hidden = false;
     document.getElementById('ov-free').hidden = true;
-    document.getElementById('ov-renews').textContent = fmtDate(subscription.currentPeriodEnd);
-    document.getElementById('ov-status-badge').innerHTML = statusBadge(subscription.status);
+    document.getElementById('ov-renews').textContent = fmtDate(activeSub.currentPeriodEnd);
+    document.getElementById('ov-status-badge').innerHTML = statusBadge(activeSub.status);
   } else {
     document.getElementById('ov-sub-content').hidden = true;
     document.getElementById('ov-free').hidden = false;
