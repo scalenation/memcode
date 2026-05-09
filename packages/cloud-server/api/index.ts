@@ -18,8 +18,6 @@ async function getApp() {
 export default async function (req: IncomingMessage, res: ServerResponse) {
   try {
     const fastify = await getApp();
-    // Use Fastify's built-in serverless handling
-    await fastify.server.emit('request', req, res);
     fastify.routing(req, res);
   } catch (err) {
     console.error('[api] error:', err);
