@@ -74,9 +74,6 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         ],
         success_url: `${config.appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${config.appUrl}/pricing`,
-        subscription_data: {
-          trial_period_days: 7,
-        },
         customer_update: { address: 'auto' },
         automatic_tax: { enabled: true },
       });
@@ -140,7 +137,7 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
 
   /**
    * POST /v1/billing/subscribe
-   * Called after the frontend confirms the SetupIntent. Creates a trial subscription.
+   * Called after the frontend confirms the SetupIntent. Creates a subscription.
    * Body: { customerId, paymentMethodId, plan? }
    */
   fastify.post<{ Body: { customerId: string; paymentMethodId: string; plan?: 'monthly' | 'yearly' } }>(
@@ -170,11 +167,10 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         invoice_settings: { default_payment_method: paymentMethodId },
       });
 
-      // Create subscription with 7-day trial
+      // Create subscription
       const subscription = await stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: priceId }],
-        trial_period_days: 7,
         default_payment_method: paymentMethodId,
       });
 

@@ -272,7 +272,7 @@ ${pc.yellow('Not authenticated.')}
 
 Run ${pc.cyan('memory sync auth')} to link your CLI to a MemCode Pro account.
 
-Don't have an account? Sign up at ${pc.cyan('https://memcode.pro/pricing')} ($3.99/month, 7-day free trial).
+Don't have an account? Sign up at ${pc.cyan('https://memcode.pro/pricing')} ($3.99/month).
 `;
 }
 

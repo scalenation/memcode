@@ -136,7 +136,7 @@ cardSubmit?.addEventListener('click', async () => {
   if (!clientSecret) return;
 
   cardSubmit.disabled = true;
-  cardSubmit.textContent = 'Processing…';
+  cardSubmit.textContent = 'Subscribing…';
   if (cardErrors) cardErrors.hidden = true;
 
   const email = emailInput?.value?.trim();
@@ -177,7 +177,7 @@ cardSubmit?.addEventListener('click', async () => {
       cardErrors.hidden = false;
     }
     cardSubmit.disabled = false;
-    cardSubmit.textContent = 'Start free trial →';
+    cardSubmit.textContent = 'Subscribe now →';
   }
 });
 
