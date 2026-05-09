@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { createInterface } from 'node:readline/promises';
+import { createInterface } from 'node:readline';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -7,8 +7,33 @@ import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
 import { findProjectRoot, resolveProject } from '../util';
 
-const DEFAULT_ENDPOINT = 'https://api.memcode.pro';
+const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const CLI_VERSION: string = (require('../../package.json') as { version: string }).version;
+const CLI_UA = `MemCode CLI/${CLI_VERSION}`;
+
+/**
+ * Prompt the user for a single line of input.
+ * When `muted` is true the typed characters are not echoed (for passwords).
+ */
+function askQuestion(question: string, muted = false): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stderr, terminal: true });
+    if (muted) {
+      (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => {
+        // Only allow the question text itself (contains the question string) — suppress typed chars
+        if (s === question || s.startsWith('\r') || s === '\n') process.stderr.write(s);
+      };
+    }
+    rl.question(question, (answer) => {
+      if (muted) process.stderr.write('\n');
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
 
 interface AuthConfig {
   endpoint: string;
@@ -30,10 +55,6 @@ function writeAuthConfig(cfg: AuthConfig): void {
   writeFileSync(AUTH_CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
 }
 
-async function prompt(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
-  return rl.question(question);
-}
-
 export const syncCommand = new Command('sync').description(
   'Sync project memory with the cloud (Pro feature — memcode.pro/pricing)',
 );
@@ -45,52 +66,27 @@ syncCommand
   .description('Authenticate with the MemCode cloud and save credentials locally')
   .option('--endpoint <url>', 'API endpoint', DEFAULT_ENDPOINT)
   .action(async (options: { endpoint: string }) => {
-    const rl = createInterface({ input: process.stdin, output: process.stderr });
     console.error(pc.bold('\nMemCode Cloud — authenticate\n'));
 
     try {
-      const email = await prompt(rl, 'Email: ');
-      process.stderr.write('Password: ');
-      // Hide password input
-      const password = await new Promise<string>((resolve) => {
-        let pwd = '';
-        process.stdin.setRawMode?.(true);
-        process.stdin.resume();
-        process.stdin.setEncoding('utf-8');
-        const onData = (ch: Buffer | string) => {
-          const char = ch.toString();
-          if (char === '\r' || char === '\n') {
-            process.stdin.setRawMode?.(false);
-            process.stdin.pause();
-            process.stdin.removeListener('data', onData);
-            process.stderr.write('\n');
-            resolve(pwd);
-          } else if (char === '\u0003') {
-            process.exit(0);
-          } else if (char === '\u007f') {
-            pwd = pwd.slice(0, -1);
-          } else {
-            pwd += char;
-          }
-        };
-        process.stdin.on('data', onData);
-      });
-
-      const passphrase = await prompt(rl, 'Encryption passphrase (used to encrypt your memory — remember this): ');
-      rl.close();
+      const email      = await askQuestion('Email: ');
+      const password   = await askQuestion('Password: ', true);
+      const passphrase = await askQuestion('Encryption passphrase (remember this — used to encrypt/decrypt your memory): ', true);
 
       if (!email || !password || !passphrase) {
         console.error(pc.red('All fields are required.'));
         process.exit(1);
       }
 
-      // Try login first, then register if account doesn't exist
       const endpoint = options.endpoint.replace(/\/$/, '');
       let token: string | null = null;
 
       const loginRes = await fetch(`${endpoint}/v1/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': CLI_UA,
+        },
         body: JSON.stringify({ email, password }),
       });
 
@@ -99,10 +95,13 @@ syncCommand
         token = body.token;
         console.log(pc.green('✓'), 'Logged in as', pc.cyan(email));
       } else if (loginRes.status === 401) {
-        // Try registering
+        // Try registering a new account
         const registerRes = await fetch(`${endpoint}/v1/auth/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': CLI_UA,
+          },
           body: JSON.stringify({ email, password }),
         });
         if (registerRes.ok) {
@@ -110,7 +109,7 @@ syncCommand
           token = body.token;
           console.log(pc.green('✓'), 'Account created for', pc.cyan(email));
         } else {
-          const err = (await registerRes.json().catch(() => ({}) )) as { error?: string };
+          const err = (await registerRes.json().catch(() => ({}))) as { error?: string };
           console.error(pc.red('✗'), err.error ?? 'Registration failed');
           process.exit(1);
         }
@@ -132,7 +131,6 @@ syncCommand
       console.log(`  ${pc.cyan('memory sync push')}  — push this workspace to the cloud`);
       console.log(`  ${pc.cyan('memory sync pull')}  — pull on another machine`);
     } catch (err) {
-      rl.close();
       console.error(pc.red('Error:'), (err as Error).message);
       process.exit(1);
     }
@@ -228,7 +226,7 @@ syncCommand
     try {
       const res = await fetch(
         `${auth.endpoint}/v1/sync/status?workspaceId=${encodeURIComponent(workspace.id)}`,
-        { headers: { Authorization: `Bearer ${auth.apiToken}` } },
+        { headers: { Authorization: `Bearer ${auth.apiToken}`, 'User-Agent': CLI_UA } },
       );
 
       if (res.status === 404) {
@@ -278,40 +276,12 @@ syncCommand
       process.exit(1);
     }
 
-    const rl = createInterface({ input: process.stdin, output: process.stderr });
     console.error(pc.bold('\nMemCode Cloud — change password\n'));
 
-    const readPassword = (label: string) =>
-      new Promise<string>((resolve) => {
-        process.stderr.write(label);
-        let pwd = '';
-        process.stdin.setRawMode?.(true);
-        process.stdin.resume();
-        process.stdin.setEncoding('utf-8');
-        const onData = (ch: Buffer | string) => {
-          const char = ch.toString();
-          if (char === '\r' || char === '\n') {
-            process.stdin.setRawMode?.(false);
-            process.stdin.pause();
-            process.stdin.removeListener('data', onData);
-            process.stderr.write('\n');
-            resolve(pwd);
-          } else if (char === '\u0003') {
-            process.exit(0);
-          } else if (char === '\u007f') {
-            pwd = pwd.slice(0, -1);
-          } else {
-            pwd += char;
-          }
-        };
-        process.stdin.on('data', onData);
-      });
-
     try {
-      const currentPassword = await readPassword('Current password: ');
-      const newPassword = await readPassword('New password (min 8 chars): ');
-      const confirmPassword = await readPassword('Confirm new password: ');
-      rl.close();
+      const currentPassword = await askQuestion('Current password: ', true);
+      const newPassword     = await askQuestion('New password (min 8 chars): ', true);
+      const confirmPassword = await askQuestion('Confirm new password: ', true);
 
       if (newPassword !== confirmPassword) {
         console.error(pc.red('✗'), 'Passwords do not match.');
@@ -327,6 +297,7 @@ syncCommand
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'User-Agent': CLI_UA,
           Authorization: `Bearer ${auth.apiToken}`,
         },
         body: JSON.stringify({ currentPassword, newPassword }),
@@ -336,12 +307,11 @@ syncCommand
         console.log(pc.green('✓'), 'Password changed successfully.');
         console.log(pc.dim('  Your encryption passphrase is unchanged — existing cloud data remains accessible.'));
       } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        console.error(pc.red('✗'), err.error ?? `Request failed (${res.status})`);
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        console.error(pc.red('✗'), body.error ?? `Request failed (${res.status})`);
         process.exit(1);
       }
     } catch (err) {
-      rl.close();
       console.error(pc.red('Error:'), (err as Error).message);
       process.exit(1);
     }
@@ -382,7 +352,7 @@ syncCommand
 
     try {
       const res = await fetch(`${auth.endpoint.replace(/\/$/, '')}/v1/auth/me`, {
-        headers: { Authorization: `Bearer ${auth.apiToken}` },
+        headers: { Authorization: `Bearer ${auth.apiToken}`, 'User-Agent': CLI_UA },
       });
 
       if (res.ok) {
