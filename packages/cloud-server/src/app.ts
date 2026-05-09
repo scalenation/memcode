@@ -2,9 +2,11 @@ import 'dotenv/config';
 import Fastify, { FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './config';
 import { pool } from './db/client';
+import { neon } from '@neondatabase/serverless';
 import { authRoutes } from './routes/auth';
 import { syncRoutes } from './routes/sync';
 import { billingRoutes } from './routes/billing';
@@ -49,6 +51,21 @@ export async function buildApp(): Promise<FastifyInstance> {
       fastify.log.warn('Landing package not found — skipping static serving');
     }
   }
+
+  // One-time migration endpoint — protected by a secret
+  fastify.post('/v1/admin/migrate', async (_req, reply) => {
+    if (_req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
+      return reply.status(401).send({ error: 'unauthorized' });
+    }
+    const sql = neon(config.databaseUrl);
+    const schemaPath = join(__dirname, 'db', 'schema.sql');
+    const schema = readFileSync(schemaPath, 'utf-8');
+    const stmts = schema.replace(/--[^\n]*/g, '').split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of stmts) {
+      await sql.unsafe(stmt);
+    }
+    return reply.send({ ok: true, stmts: stmts.length });
+  });
 
   // Health check
   fastify.get('/health', async (_req, reply) => {
