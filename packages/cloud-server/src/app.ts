@@ -62,7 +62,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     const schema = readFileSync(schemaPath, 'utf-8');
     const stmts = schema.replace(/--[^\n]*/g, '').split(';').map(s => s.trim()).filter(s => s.length > 0);
     for (const stmt of stmts) {
-      await sql.unsafe(stmt);
+      await sql.query(stmt, []);
     }
     const tables = await sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`;
     return reply.send({ ok: true, stmts: stmts.length, tables });
