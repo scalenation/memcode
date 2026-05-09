@@ -25,7 +25,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     { parseAs: 'buffer' },
     function (_req, body, done) {
       try {
-        const parsed = JSON.parse((body as Buffer).toString()) as unknown;
+        const str = (body as Buffer).toString();
+        const parsed = str.length > 0 ? JSON.parse(str) as unknown : {};
         Object.assign(_req, { rawBody: body });
         done(null, parsed);
       } catch (err) {
