@@ -92,6 +92,31 @@
     .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
     .stat-label { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px; }
     .stat-value { font-size: 1rem; font-weight: 700; }
+    /* Storage bar */
+    .storage-bar-wrap { margin-bottom: 16px; }
+    .storage-bar-track { height: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 999px; overflow: hidden; margin-bottom: 6px; }
+    .storage-bar-fill { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.4s ease; width: 0; }
+    .storage-bar-fill.warn { background: #fbbf24; }
+    .storage-bar-fill.danger-fill { background: var(--red); }
+    .storage-bar-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-dim); }
+    /* Workspace rows */
+    .ws-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .ws-row:last-child { border-bottom: none; }
+    .ws-info { flex: 1; min-width: 0; }
+    .ws-id { font-family: var(--mono); font-size: 0.82rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ws-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 3px; }
+    .ws-del-confirm { font-size: 0.78rem; color: var(--text-dim); margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+    /* Session rows */
+    .session-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .session-row:last-child { border-bottom: none; }
+    .session-icon { width: 34px; height: 34px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-dim); }
+    .session-info { flex: 1; min-width: 0; }
+    .session-ua { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; }
+    .current-badge { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; background: rgba(52,211,153,0.12); color: #34d399; border-radius: 999px; margin-left: 6px; }
+    /* Danger zone */
+    .danger-card { border-color: rgba(248,113,113,0.25) !important; }
+    .danger-card .card-title { color: var(--red) !important; }
   </style>
   <script>window.STRIPE_PK = 'pk_test_51TV5XBV05uXvy1RK24ZWaB1Z9kjjtj6mIGOXdPpffnyjOkllzR356cFGFl6WlWxrHBnbCrBPUe80AYdUWBW2EfSf000kzTvH0P';</script>
 </head>
@@ -110,6 +135,14 @@
     <button class="nav-item active" data-section="overview">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       Overview
+    </button>
+    <button class="nav-item" data-section="workspaces">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
+      Workspaces
+    </button>
+    <button class="nav-item" data-section="sessions">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      Sessions
     </button>
     <button class="nav-item" data-section="profile">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -145,6 +178,14 @@
         <div class="stat-card">
           <div class="stat-label">Plan</div>
           <div class="stat-value" id="ov-plan"><span class="skeleton" style="height:16px;width:60px;display:block"></span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Workspaces</div>
+          <div class="stat-value" id="ov-ws-count"><span class="skeleton" style="height:16px;width:30px;display:block"></span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Total syncs</div>
+          <div class="stat-value" id="ov-total-syncs"><span class="skeleton" style="height:16px;width:30px;display:block"></span></div>
         </div>
       </div>
       <div class="card">
@@ -204,6 +245,74 @@
           <button class="btn btn-primary" id="pw-save-btn">Update password</button>
         </div>
         <div id="pw-msg" class="form-msg"></div>
+      </div>
+      <div class="card danger-card">
+        <p class="card-title">Danger Zone</p>
+        <div class="info-row last">
+          <div>
+            <div style="font-size:0.88rem;font-weight:600">Delete account</div>
+            <div style="font-size:0.78rem;color:var(--text-dim);margin-top:2px">Permanently deletes your account, all synced data, and cancels your subscription.</div>
+          </div>
+          <button class="btn btn-danger btn-sm" id="delete-account-btn">Delete account</button>
+        </div>
+        <div class="inline-confirm" id="delete-account-confirm" hidden>
+          <p>This is <strong>irreversible</strong>. All workspaces, blobs, sessions, and your subscription will be permanently deleted.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-danger btn-sm" id="delete-account-confirm-btn">Yes, permanently delete</button>
+            <button class="btn btn-secondary btn-sm" id="delete-account-abort-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workspaces -->
+    <section id="section-workspaces" class="section">
+      <h1 class="section-title">Workspaces</h1>
+      <div class="card">
+        <p class="card-title">Storage &amp; Sync Usage</p>
+        <div class="storage-bar-wrap">
+          <div class="storage-bar-track">
+            <div class="storage-bar-fill" id="storage-bar-fill"></div>
+          </div>
+          <div class="storage-bar-labels">
+            <span id="storage-used-label">—</span>
+            <span id="storage-limit-label">—</span>
+          </div>
+        </div>
+        <div class="stat-grid" style="margin-bottom:0">
+          <div class="stat-card">
+            <div class="stat-label">Workspaces</div>
+            <div class="stat-value" id="ws-count-stat">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total syncs</div>
+            <div class="stat-value" id="ws-syncs-stat">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <p class="card-title">Synced workspaces</p>
+        <div id="ws-loading">
+          <div class="skeleton" style="height:58px;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:58px"></div>
+        </div>
+        <div id="ws-list" hidden></div>
+        <p id="ws-none" hidden style="font-size:0.84rem;color:var(--text-dim);margin:0">No workspaces synced yet.</p>
+      </div>
+    </section>
+
+    <!-- Sessions -->
+    <section id="section-sessions" class="section">
+      <h1 class="section-title">Sessions</h1>
+      <div class="card">
+        <p class="card-title">Active sessions</p>
+        <p style="font-size:0.83rem;color:var(--text-dim);margin:0 0 16px">All authenticated CLI and web sessions. Revoking a session immediately signs out that device.</p>
+        <div id="sessions-loading">
+          <div class="skeleton" style="height:52px;margin-bottom:8px"></div>
+          <div class="skeleton" style="height:52px"></div>
+        </div>
+        <div id="sessions-list" hidden></div>
+        <p id="sessions-none" hidden style="font-size:0.84rem;color:var(--text-dim);margin:0">No active sessions found. Sessions are tracked from new logins.</p>
       </div>
     </section>
 

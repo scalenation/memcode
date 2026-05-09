@@ -100,6 +100,16 @@ export async function buildApp(): Promise<FastifyInstance> {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT`,
       `CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_idx ON users(oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`,
+      `CREATE TABLE IF NOT EXISTS sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        ip TEXT,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        revoked BOOLEAN NOT NULL DEFAULT FALSE
+      )`,
+      `CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id)`,
     ];
     for (const sql of migrations) {
       try {

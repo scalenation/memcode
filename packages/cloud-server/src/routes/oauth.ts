@@ -118,7 +118,15 @@ export async function oauthRoutes(fastify: FastifyInstance): Promise<void> {
 
         try {
           const user = await findOrCreateOAuthUser(googleUser.email, 'google', googleUser.sub);
-          const jwt = await signToken({ sub: user.id, email: user.email });
+          let googleSid: string | undefined;
+          try {
+            const sr = await pool.query(
+              'INSERT INTO sessions (user_id, ip, user_agent) VALUES ($1, $2, $3) RETURNING id',
+              [user.id, request.ip ?? null, (request.headers['user-agent'] as string) ?? null],
+            );
+            googleSid = (sr.rows[0] as { id: string }).id;
+          } catch { /* sessions table may not exist yet */ }
+          const jwt = await signToken({ sub: user.id, email: user.email, sid: googleSid });
           return reply.redirect(`${config.appUrl}/dashboard.html?token=${encodeURIComponent(jwt)}`);
         } catch {
           return reply.redirect(`${config.appUrl}/login.html?error=server_error`);
@@ -188,7 +196,15 @@ export async function oauthRoutes(fastify: FastifyInstance): Promise<void> {
 
       try {
         const user = await findOrCreateOAuthUser(email, 'github', String(ghUser.id));
-        const jwt = await signToken({ sub: user.id, email: user.email });
+        let githubSid: string | undefined;
+        try {
+          const sr = await pool.query(
+            'INSERT INTO sessions (user_id, ip, user_agent) VALUES ($1, $2, $3) RETURNING id',
+            [user.id, request.ip ?? null, (request.headers['user-agent'] as string) ?? null],
+          );
+          githubSid = (sr.rows[0] as { id: string }).id;
+        } catch { /* sessions table may not exist yet */ }
+        const jwt = await signToken({ sub: user.id, email: user.email, sid: githubSid });
         return reply.redirect(`${config.appUrl}/dashboard.html?token=${encodeURIComponent(jwt)}`);
       } catch {
         return reply.redirect(`${config.appUrl}/login.html?error=server_error`);

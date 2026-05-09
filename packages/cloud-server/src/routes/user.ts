@@ -1,9 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
+import Stripe from 'stripe';
 import { pool } from '../db/client';
 import { authenticate } from '../middleware/authenticate';
 import type { TokenPayload } from '../middleware/authenticate';
 import { config } from '../config';
+
+const stripe = new Stripe(config.stripeSecretKey, { apiVersion: '2024-06-20' });
 
 export async function userRoutes(fastify: FastifyInstance): Promise<void> {
   /**
@@ -86,6 +89,158 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
         await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.sub]);
       }
 
+      return reply.send({ ok: true });
+    },
+  );
+
+  // ── Workspaces ─────────────────────────────────────────────────────────────
+
+  /**
+   * GET /v1/user/workspaces
+   * Returns workspace list with blob count, storage estimate, and last sync time.
+   */
+  fastify.get(
+    '/v1/user/workspaces',
+    { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+
+      const result = await pool.query(
+        `SELECT
+           w.id,
+           w.created_at,
+           COUNT(b.id)::int AS blob_count,
+           MAX(b.created_at) AS last_synced_at,
+           COALESCE(SUM(LENGTH(b.payload_encrypted)), 0)::bigint AS storage_bytes
+         FROM workspaces w
+         LEFT JOIN sync_blobs b ON b.workspace_id = w.id
+         WHERE w.user_id = $1
+         GROUP BY w.id, w.created_at
+         ORDER BY w.created_at DESC`,
+        [user.sub],
+      );
+
+      type WsRow = { id: string; created_at: string; blob_count: number; last_synced_at: string | null; storage_bytes: string };
+      const rows = result.rows as WsRow[];
+      const workspaces = rows.map(r => ({
+        id: r.id,
+        createdAt: r.created_at,
+        lastSyncedAt: r.last_synced_at,
+        blobCount: r.blob_count,
+        storageBytes: parseInt(r.storage_bytes, 10),
+      }));
+
+      return reply.send({
+        workspaces,
+        totalStorageBytes: workspaces.reduce((s, w) => s + w.storageBytes, 0),
+        totalBlobCount: workspaces.reduce((s, w) => s + w.blobCount, 0),
+      });
+    },
+  );
+
+  /**
+   * DELETE /v1/user/workspaces/:workspaceId
+   * Deletes a workspace and all its blobs.
+   */
+  fastify.delete<{ Params: { workspaceId: string } }>(
+    '/v1/user/workspaces/:workspaceId',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Params: { workspaceId: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Params: { workspaceId: string } }> & { user: TokenPayload }).user;
+      const { workspaceId } = request.params;
+
+      const ws = await pool.query('SELECT user_id FROM workspaces WHERE id = $1', [workspaceId]);
+      if ((ws.rowCount ?? 0) === 0) return reply.status(404).send({ error: 'Workspace not found' });
+      if ((ws.rows[0] as { user_id: string }).user_id !== user.sub) return reply.status(403).send({ error: 'Forbidden' });
+
+      await pool.query('DELETE FROM workspaces WHERE id = $1', [workspaceId]);
+      return reply.send({ ok: true });
+    },
+  );
+
+  // ── Sessions ───────────────────────────────────────────────────────────────
+
+  /**
+   * GET /v1/user/sessions
+   * Returns active (non-revoked) sessions for the current user.
+   */
+  fastify.get(
+    '/v1/user/sessions',
+    { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+
+      const result = await pool.query(
+        `SELECT id, ip, user_agent, created_at, last_seen_at
+         FROM sessions
+         WHERE user_id = $1 AND revoked = FALSE
+         ORDER BY last_seen_at DESC
+         LIMIT 30`,
+        [user.sub],
+      );
+
+      type SessRow = { id: string; ip: string | null; user_agent: string | null; created_at: string; last_seen_at: string };
+      const sessions = (result.rows as SessRow[]).map(r => ({
+        id: r.id,
+        ip: r.ip,
+        userAgent: r.user_agent,
+        createdAt: r.created_at,
+        lastSeenAt: r.last_seen_at,
+        isCurrent: r.id === user.sid,
+      }));
+
+      return reply.send({ sessions });
+    },
+  );
+
+  /**
+   * DELETE /v1/user/sessions/:sessionId
+   * Revokes a specific session.
+   */
+  fastify.delete<{ Params: { sessionId: string } }>(
+    '/v1/user/sessions/:sessionId',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Params: { sessionId: string } }> & { user: TokenPayload }).user;
+      const { sessionId } = request.params;
+
+      const r = await pool.query('SELECT user_id FROM sessions WHERE id = $1', [sessionId]);
+      if ((r.rowCount ?? 0) === 0) return reply.status(404).send({ error: 'Session not found' });
+      if ((r.rows[0] as { user_id: string }).user_id !== user.sub) return reply.status(403).send({ error: 'Forbidden' });
+
+      await pool.query('UPDATE sessions SET revoked = TRUE WHERE id = $1', [sessionId]);
+      return reply.send({ ok: true });
+    },
+  );
+
+  // ── Account deletion ───────────────────────────────────────────────────────
+
+  /**
+   * DELETE /v1/user/account
+   * Cancels active subscription and permanently deletes the user account and all data.
+   */
+  fastify.delete(
+    '/v1/user/account',
+    { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+
+      // Cancel any active Stripe subscription first (best-effort)
+      try {
+        const subResult = await pool.query(
+          `SELECT stripe_subscription_id FROM subscriptions
+           WHERE user_id = $1 AND status IN ('active', 'trialing')
+           LIMIT 1`,
+          [user.sub],
+        );
+        if ((subResult.rowCount ?? 0) > 0) {
+          const subId = (subResult.rows[0] as { stripe_subscription_id: string }).stripe_subscription_id;
+          await stripe.subscriptions.cancel(subId);
+        }
+      } catch { /* non-fatal — proceed with deletion */ }
+
+      // Delete user — cascades to subscriptions, workspaces, blobs, sessions
+      await pool.query('DELETE FROM users WHERE id = $1', [user.sub]);
       return reply.send({ ok: true });
     },
   );

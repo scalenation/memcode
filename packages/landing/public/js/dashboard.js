@@ -36,9 +36,14 @@ document.querySelectorAll('.nav-item[data-section]').forEach(btn => {
 function navigateTo(sectionId) {
   document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.toggle('active', b.dataset.section === sectionId));
   document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === `section-${sectionId}`));
-  // Lazy-load billing section PM list when first opened
   if (sectionId === 'billing' && !document.getElementById('pm-list').dataset.loaded) {
     loadPaymentMethods();
+  }
+  if (sectionId === 'workspaces' && !document.getElementById('ws-list').dataset.loaded) {
+    loadWorkspaces();
+  }
+  if (sectionId === 'sessions' && !document.getElementById('sessions-list').dataset.loaded) {
+    loadSessions();
   }
 }
 
@@ -86,6 +91,9 @@ async function loadProfile() {
     document.getElementById('billing-sub-active').hidden = true;
     document.getElementById('billing-free').hidden = false;
   }
+
+  // Load workspace stats for overview (fire-and-forget)
+  loadOverviewStats();
 }
 
 // ── Payment Methods ───────────────────────────────────────────────────────────
@@ -388,3 +396,256 @@ function showNotice(msg, type) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadProfile();
+
+// ── Overview workspace stats ──────────────────────────────────────────────────
+async function loadOverviewStats() {
+  try {
+    const res = await authFetch('/v1/user/workspaces');
+    if (!res.ok) return;
+    const { workspaces, totalBlobCount } = await res.json();
+    document.getElementById('ov-ws-count').textContent = workspaces.length;
+    document.getElementById('ov-total-syncs').textContent = totalBlobCount;
+  } catch { /* non-fatal */ }
+}
+
+// ── Workspaces ────────────────────────────────────────────────────────────────
+async function loadWorkspaces() {
+  const loading = document.getElementById('ws-loading');
+  const list = document.getElementById('ws-list');
+  const none = document.getElementById('ws-none');
+  loading.hidden = false;
+  list.hidden = true;
+  none.hidden = true;
+
+  try {
+    const res = await authFetch('/v1/user/workspaces');
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to load workspaces');
+    loading.hidden = true;
+
+    const { workspaces, totalStorageBytes, totalBlobCount } = body;
+
+    // Stats
+    document.getElementById('ws-count-stat').textContent = workspaces.length;
+    document.getElementById('ws-syncs-stat').textContent = totalBlobCount;
+
+    // Storage bar (500 MB soft limit display)
+    const limitBytes = 500 * 1024 * 1024;
+    const pct = Math.min(100, (totalStorageBytes / limitBytes) * 100);
+    const fill = document.getElementById('storage-bar-fill');
+    fill.style.width = `${pct.toFixed(1)}%`;
+    fill.classList.remove('warn', 'danger-fill');
+    if (pct > 80) fill.classList.add('danger-fill');
+    else if (pct > 60) fill.classList.add('warn');
+    document.getElementById('storage-used-label').textContent = fmtBytes(totalStorageBytes) + ' used';
+    document.getElementById('storage-limit-label').textContent = fmtBytes(limitBytes) + ' limit';
+
+    if (workspaces.length === 0) {
+      none.hidden = false;
+    } else {
+      renderWorkspaces(workspaces);
+      list.hidden = false;
+    }
+    list.dataset.loaded = '1';
+  } catch (err) {
+    if (document.getElementById('ws-loading')) {
+      document.getElementById('ws-loading').hidden = true;
+    }
+    showNotice(err.message ?? 'Failed to load workspaces.', 'error');
+  }
+}
+
+function renderWorkspaces(workspaces) {
+  const list = document.getElementById('ws-list');
+  list.innerHTML = '';
+  for (const ws of workspaces) {
+    const div = document.createElement('div');
+    div.className = 'ws-row';
+    const lastSync = ws.lastSyncedAt ? timeAgo(ws.lastSyncedAt) : 'Never';
+    div.innerHTML = `
+      <div class="ws-info">
+        <div class="ws-id">${esc(ws.id)}</div>
+        <div class="ws-meta">Last sync: ${lastSync} &nbsp;·&nbsp; ${ws.blobCount} blob${ws.blobCount !== 1 ? 's' : ''} &nbsp;·&nbsp; ${fmtBytes(ws.storageBytes)}</div>
+        <div class="ws-del-confirm" id="wsc-${esc(ws.id)}" hidden>
+          <span>Delete this workspace and all its blobs?</span>
+          <button class="btn btn-danger btn-sm" data-action="ws-delete-confirm" data-ws="${esc(ws.id)}">Delete</button>
+          <button class="btn btn-secondary btn-sm" data-action="ws-delete-cancel" data-ws="${esc(ws.id)}">Cancel</button>
+        </div>
+      </div>
+      <button class="btn btn-danger btn-sm" id="ws-del-btn-${esc(ws.id)}" data-action="ws-delete" data-ws="${esc(ws.id)}">Delete</button>
+    `;
+    list.appendChild(div);
+  }
+}
+
+document.getElementById('ws-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  const wsId = btn.dataset.ws;
+
+  if (action === 'ws-delete') {
+    btn.hidden = true;
+    document.getElementById(`wsc-${wsId}`).hidden = false;
+  }
+  if (action === 'ws-delete-cancel') {
+    document.getElementById(`wsc-${wsId}`).hidden = true;
+    document.getElementById(`ws-del-btn-${wsId}`).hidden = false;
+  }
+  if (action === 'ws-delete-confirm') {
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    try {
+      const res = await authFetch(`/v1/user/workspaces/${encodeURIComponent(wsId)}`, { method: 'DELETE' });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? 'Failed to delete workspace');
+      showNotice('Workspace deleted.', 'success');
+      document.getElementById('ws-list').removeAttribute('data-loaded');
+      loadWorkspaces();
+    } catch (err) {
+      showNotice(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+    }
+  }
+});
+
+// ── Sessions ──────────────────────────────────────────────────────────────────
+async function loadSessions() {
+  const loading = document.getElementById('sessions-loading');
+  const list = document.getElementById('sessions-list');
+  const none = document.getElementById('sessions-none');
+  loading.hidden = false;
+  list.hidden = true;
+  none.hidden = true;
+
+  try {
+    const res = await authFetch('/v1/user/sessions');
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to load sessions');
+    loading.hidden = true;
+
+    const { sessions } = body;
+    if (!sessions || sessions.length === 0) {
+      none.hidden = false;
+    } else {
+      renderSessions(sessions);
+      list.hidden = false;
+    }
+    list.dataset.loaded = '1';
+  } catch (err) {
+    if (document.getElementById('sessions-loading')) {
+      document.getElementById('sessions-loading').hidden = true;
+    }
+    showNotice(err.message ?? 'Failed to load sessions.', 'error');
+  }
+}
+
+function parseUA(ua) {
+  if (!ua) return 'Unknown device';
+  if (/memcode|memory.sync|memory-sync/i.test(ua)) return 'MemCode CLI';
+  if (/python/i.test(ua)) return 'Python CLI';
+  if (/curl/i.test(ua)) return 'Terminal (curl)';
+  if (/edg\//i.test(ua)) return 'Edge Browser';
+  if (/chrome/i.test(ua)) return 'Chrome Browser';
+  if (/firefox/i.test(ua)) return 'Firefox Browser';
+  if (/safari/i.test(ua)) return 'Safari Browser';
+  const first = ua.split(/[\s/]/)[0];
+  return first.length > 0 ? first : 'Unknown device';
+}
+
+function renderSessions(sessions) {
+  const list = document.getElementById('sessions-list');
+  list.innerHTML = '';
+  for (const sess of sessions) {
+    const div = document.createElement('div');
+    div.className = 'session-row';
+    const label = parseUA(sess.userAgent);
+    const metaParts = [];
+    if (sess.ip) metaParts.push(`IP: ${esc(sess.ip)}`);
+    metaParts.push(`Last seen: ${timeAgo(sess.lastSeenAt)}`);
+    metaParts.push(`Created: ${fmtDate(sess.createdAt)}`);
+    div.innerHTML = `
+      <div class="session-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      </div>
+      <div class="session-info">
+        <div class="session-ua">${esc(label)}${sess.isCurrent ? '<span class="current-badge">current</span>' : ''}</div>
+        <div class="session-meta">${metaParts.join(' · ')}</div>
+      </div>
+      ${!sess.isCurrent
+        ? `<button class="btn btn-danger btn-sm" data-action="revoke-session" data-sess="${esc(sess.id)}">Revoke</button>`
+        : '<span style="font-size:0.75rem;color:var(--text-dim)">This session</span>'}
+    `;
+    list.appendChild(div);
+  }
+}
+
+document.getElementById('sessions-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action="revoke-session"]');
+  if (!btn) return;
+  const sessId = btn.dataset.sess;
+  btn.disabled = true;
+  btn.textContent = 'Revoking…';
+  try {
+    const res = await authFetch(`/v1/user/sessions/${encodeURIComponent(sessId)}`, { method: 'DELETE' });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to revoke session');
+    showNotice('Session revoked.', 'success');
+    document.getElementById('sessions-list').removeAttribute('data-loaded');
+    loadSessions();
+  } catch (err) {
+    showNotice(err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Revoke';
+  }
+});
+
+// ── Delete account ────────────────────────────────────────────────────────────
+document.getElementById('delete-account-btn')?.addEventListener('click', () => {
+  document.getElementById('delete-account-confirm').hidden = false;
+  document.getElementById('delete-account-btn').hidden = true;
+});
+document.getElementById('delete-account-abort-btn')?.addEventListener('click', () => {
+  document.getElementById('delete-account-confirm').hidden = true;
+  document.getElementById('delete-account-btn').hidden = false;
+});
+document.getElementById('delete-account-confirm-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('delete-account-confirm-btn');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    const res = await authFetch('/v1/user/account', { method: 'DELETE' });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to delete account');
+    localStorage.removeItem('mc_token');
+    window.location.replace('/login?message=account_deleted');
+  } catch (err) {
+    showNotice(err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Yes, permanently delete';
+    document.getElementById('delete-account-confirm').hidden = true;
+    document.getElementById('delete-account-btn').hidden = false;
+  }
+});
+
+// ── Extra helpers ─────────────────────────────────────────────────────────────
+function fmtBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}d ago`;
+  return fmtDate(iso);
+}

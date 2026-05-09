@@ -57,7 +57,15 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       );
 
       const userId = result.rows[0].id as string;
-      const token = await signToken({ sub: userId, email: email.toLowerCase() });
+      let regSid: string | undefined;
+      try {
+        const sessionRes = await pool.query(
+          'INSERT INTO sessions (user_id, ip, user_agent) VALUES ($1, $2, $3) RETURNING id',
+          [userId, request.ip ?? null, (request.headers['user-agent'] as string) ?? null],
+        );
+        regSid = (sessionRes.rows[0] as { id: string }).id;
+      } catch { /* sessions table may not exist yet */ }
+      const token = await signToken({ sub: userId, email: email.toLowerCase(), sid: regSid });
       return reply.status(201).send({ token, userId, email: email.toLowerCase() });
     },
   );
@@ -106,7 +114,15 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(401).send({ error: 'Invalid email or password' });
       }
 
-      const token = await signToken({ sub: user.id, email: email.toLowerCase() });
+      let loginSid: string | undefined;
+      try {
+        const sessionRes = await pool.query(
+          'INSERT INTO sessions (user_id, ip, user_agent) VALUES ($1, $2, $3) RETURNING id',
+          [user.id, request.ip ?? null, (request.headers['user-agent'] as string) ?? null],
+        );
+        loginSid = (sessionRes.rows[0] as { id: string }).id;
+      } catch { /* sessions table may not exist yet */ }
+      const token = await signToken({ sub: user.id, email: email.toLowerCase(), sid: loginSid });
       return reply.send({ token, userId: user.id, email: email.toLowerCase() });
     },
   );
