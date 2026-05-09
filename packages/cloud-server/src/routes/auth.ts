@@ -240,8 +240,10 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       if (!emailRes.ok) {
-        fastify.log.error({ status: emailRes.status }, 'Resend email failed');
-        return reply.status(500).send({ error: 'Failed to send email. Please try again.' });
+        const resendErr = await emailRes.json().catch(() => ({})) as Record<string, unknown>;
+        fastify.log.error({ status: emailRes.status, resendErr }, 'Resend email failed');
+        const msg = typeof resendErr.message === 'string' ? resendErr.message : JSON.stringify(resendErr);
+        return reply.status(500).send({ error: `Email send failed: ${msg}` });
       }
 
       return reply.send({ ok: true });
