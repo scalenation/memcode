@@ -75,6 +75,48 @@
     }
     .manage-btn:hover { opacity: 0.88; }
     .manage-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .danger-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 20px; font-size: 0.88rem; font-weight: 600;
+      background: none; color: var(--red); border: 1px solid rgba(248,113,113,0.35);
+      border-radius: var(--radius-sm); cursor: pointer; transition: background 0.15s;
+    }
+    .danger-btn:hover { background: rgba(248,113,113,0.08); }
+    .danger-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* ── Inline card update form ── */
+    .card-update-form {
+      margin-top: 20px; padding: 20px 24px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .card-update-form label { font-size: 0.8rem; color: var(--text-dim); display: block; margin-bottom: 8px; }
+    #update-card-element {
+      padding: 12px 14px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); margin-bottom: 12px;
+    }
+    #update-card-errors { font-size: 0.82rem; color: var(--red); margin-bottom: 10px; display: none; }
+    .card-update-actions { display: flex; gap: 10px; }
+    .card-save-btn {
+      padding: 9px 20px; font-size: 0.88rem; font-weight: 600;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s;
+    }
+    .card-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .card-cancel-link {
+      padding: 9px 12px; font-size: 0.88rem; background: none;
+      border: 1px solid var(--border); color: var(--text-dim);
+      border-radius: var(--radius-sm); cursor: pointer; transition: color 0.15s;
+    }
+    .card-cancel-link:hover { color: var(--text); }
+    /* ── Cancel confirm ── */
+    .cancel-confirm {
+      margin-top: 16px; padding: 16px 20px;
+      background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.25);
+      border-radius: var(--radius-sm);
+    }
+    .cancel-confirm p { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 12px; }
+    .cancel-confirm-actions { display: flex; gap: 10px; }
 
     /* ── CLI block ── */
     .cli-block {
@@ -102,6 +144,7 @@
     }
     .dash-error.visible { display: block; }
   </style>
+  <script>window.STRIPE_PK = 'pk_test_51TV5XBV05uXvy1RK24ZWaB1Z9kjjtj6mIGOXdPpffnyjOkllzR356cFGFl6WlWxrHBnbCrBPUe80AYdUWBW2EfSf000kzTvH0P';</script>
 </head>
 <body>
 
@@ -153,14 +196,34 @@
           <span class="dash-value" id="sub-renews"></span>
         </div>
         <div class="billing-actions">
-          <button class="manage-btn" id="manage-billing-btn">
+          <button class="manage-btn" id="update-card-btn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-            Manage billing
+            Update payment method
+          </button>
+          <button class="danger-btn" id="cancel-sub-btn">
+            Cancel subscription
           </button>
         </div>
-        <p style="font-size:0.75rem;color:var(--text-dim);margin-top:10px">
-          Change payment method · cancel — all from the billing portal.
-        </p>
+
+        <!-- Inline card update form (hidden by default) -->
+        <div class="card-update-form" id="card-update-form" hidden>
+          <label>New card details</label>
+          <div id="update-card-element"></div>
+          <div id="update-card-errors"></div>
+          <div class="card-update-actions">
+            <button class="card-save-btn" id="card-save-btn">Save card</button>
+            <button class="card-cancel-link" id="card-update-cancel">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Cancel confirmation (hidden by default) -->
+        <div class="cancel-confirm" id="cancel-confirm" hidden>
+          <p>Your subscription will remain active until the end of the billing period. Cancel anyway?</p>
+          <div class="cancel-confirm-actions">
+            <button class="danger-btn" id="cancel-confirm-btn">Yes, cancel</button>
+            <button class="card-cancel-link" id="cancel-abort-btn">Keep subscription</button>
+          </div>
+        </div>
       </div>
       <!-- No sub (free) -->
       <div id="sub-free" hidden>
@@ -185,6 +248,7 @@
   </div>
 </main>
 
+<script src="https://js.stripe.com/v3/"></script>
 <script src="/js/dashboard.js"></script>
 </body>
 </html>

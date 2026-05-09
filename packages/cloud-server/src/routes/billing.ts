@@ -217,9 +217,107 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
-   * POST /v1/billing/portal
-   * Returns a Stripe Customer Portal URL so the subscriber can manage their plan.
+   * POST /v1/billing/update-payment
+   * Creates a new SetupIntent so the user can replace their payment method.
    * Requires auth.
+   */
+  fastify.post(
+    '/v1/billing/update-payment',
+    { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+      const userResult = await pool.query(
+        'SELECT stripe_customer_id FROM users WHERE id = $1',
+        [user.sub],
+      );
+      const row = userResult.rows[0] as { stripe_customer_id: string | null } | undefined;
+      if (!row?.stripe_customer_id) {
+        return reply.status(404).send({ error: 'No billing account found' });
+      }
+      const setupIntent = await stripe.setupIntents.create({
+        customer: row.stripe_customer_id,
+        payment_method_types: ['card'],
+        usage: 'off_session',
+      });
+      return reply.send({ clientSecret: setupIntent.client_secret });
+    },
+  );
+
+  /**
+   * POST /v1/billing/confirm-payment-update
+   * After SetupIntent confirmed on frontend, attach new PM and update subscription default.
+   * Body: { paymentMethodId }
+   * Requires auth.
+   */
+  fastify.post<{ Body: { paymentMethodId: string } }>(
+    '/v1/billing/confirm-payment-update',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Body: { paymentMethodId: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Body: { paymentMethodId: string } }> & { user: TokenPayload }).user;
+      const { paymentMethodId } = request.body;
+      const userResult = await pool.query(
+        'SELECT stripe_customer_id FROM users WHERE id = $1',
+        [user.sub],
+      );
+      const row = userResult.rows[0] as { stripe_customer_id: string | null } | undefined;
+      if (!row?.stripe_customer_id) {
+        return reply.status(404).send({ error: 'No billing account found' });
+      }
+      // Set as default on customer and active subscription
+      await stripe.customers.update(row.stripe_customer_id, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+      const subs = await stripe.subscriptions.list({ customer: row.stripe_customer_id, limit: 1 });
+      if (subs.data.length > 0) {
+        await stripe.subscriptions.update(subs.data[0].id, {
+          default_payment_method: paymentMethodId,
+        });
+      }
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
+   * POST /v1/billing/cancel
+   * Cancels the subscription at period end.
+   * Requires auth.
+   */
+  fastify.post(
+    '/v1/billing/cancel',
+    { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+      const userResult = await pool.query(
+        'SELECT stripe_customer_id FROM users WHERE id = $1',
+        [user.sub],
+      );
+      const row = userResult.rows[0] as { stripe_customer_id: string | null } | undefined;
+      if (!row?.stripe_customer_id) {
+        return reply.status(404).send({ error: 'No billing account found' });
+      }
+      const subs = await stripe.subscriptions.list({
+        customer: row.stripe_customer_id,
+        status: 'active',
+        limit: 1,
+      });
+      if (subs.data.length === 0) {
+        return reply.status(404).send({ error: 'No active subscription found' });
+      }
+      const cancelled = await stripe.subscriptions.update(subs.data[0].id, {
+        cancel_at_period_end: true,
+      });
+      // Update local DB status
+      await pool.query(
+        'UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE stripe_subscription_id = $2',
+        ['canceled', cancelled.id],
+      );
+      return reply.send({ ok: true, cancelAt: new Date(cancelled.cancel_at! * 1000).toISOString() });
+    },
+  );
+
+  /**
+   * POST /v1/billing/portal
+   * Kept for backwards compat — now unused by UI.
    */
   fastify.post(
     '/v1/billing/portal',

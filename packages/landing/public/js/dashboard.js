@@ -3,7 +3,6 @@ const API_BASE = window.location.hostname === 'localhost'
   : window.location.origin;
 
 // ── Token bootstrap ───────────────────────────────────────────────────────────
-// After OAuth redirect, token arrives as ?token=... in the URL
 const urlParams = new URLSearchParams(window.location.search);
 const urlToken  = urlParams.get('token');
 if (urlToken) {
@@ -12,9 +11,11 @@ if (urlToken) {
 }
 
 const token = localStorage.getItem('mc_token');
-if (!token) {
-  window.location.replace('/login');
-}
+if (!token) window.location.replace('/login');
+
+// ── Stripe ────────────────────────────────────────────────────────────────────
+const stripe = window.Stripe ? window.Stripe(window.STRIPE_PK) : null;
+let updateCardElement = null;
 
 // ── Sign out ──────────────────────────────────────────────────────────────────
 document.getElementById('signout-btn')?.addEventListener('click', () => {
@@ -22,7 +23,7 @@ document.getElementById('signout-btn')?.addEventListener('click', () => {
   window.location.replace('/login');
 });
 
-// ── Load profile ──────────────────────────────────────────────────────────────
+// ── Auth fetch helper ─────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
   return fetch(`${API_BASE}${path}`, {
     ...opts,
@@ -30,6 +31,7 @@ async function authFetch(path, opts = {}) {
   });
 }
 
+// ── Load profile ──────────────────────────────────────────────────────────────
 async function loadProfile() {
   const res = await authFetch('/v1/user/profile');
   if (res.status === 401) {
@@ -37,18 +39,13 @@ async function loadProfile() {
     window.location.replace('/login?error=session_expired');
     return;
   }
-  if (!res.ok) {
-    showError('Failed to load your profile. Please refresh.');
-    return;
-  }
+  if (!res.ok) { showError('Failed to load your profile. Please refresh.'); return; }
 
   const { email, subscription } = await res.json();
 
-  // Nav + account
   document.getElementById('nav-email').textContent = email;
   document.getElementById('acc-email').textContent  = email;
 
-  // Subscription
   document.getElementById('sub-loading').hidden = true;
   document.getElementById('sub-content').hidden = false;
 
@@ -57,12 +54,10 @@ async function loadProfile() {
     document.getElementById('sub-plan').textContent   = subscription.planName;
     document.getElementById('sub-renews').textContent = formatDate(subscription.currentPeriodEnd);
 
-    // Status badge
     const badge = document.getElementById('sub-status-badge');
-    const statusClass = `status-${subscription.status}`;
-    badge.innerHTML = `<span class="status-badge ${statusClass}"><span class="status-dot"></span>${capitalise(subscription.status.replace('_', ' '))}</span>`;
+    const cls   = `status-${subscription.status}`;
+    badge.innerHTML = `<span class="status-badge ${cls}"><span class="status-dot"></span>${capitalise(subscription.status.replace('_', ' '))}</span>`;
 
-    // Show CLI card only when active/trialing
     if (['active', 'trialing'].includes(subscription.status)) {
       document.getElementById('cli-card').hidden = false;
     }
@@ -71,21 +66,109 @@ async function loadProfile() {
   }
 }
 
-// ── Manage billing (Stripe portal) ────────────────────────────────────────────
-document.getElementById('manage-billing-btn')?.addEventListener('click', async () => {
-  const btn = document.getElementById('manage-billing-btn');
-  btn.disabled    = true;
-  btn.textContent = 'Opening…';
+// ── Update payment method ─────────────────────────────────────────────────────
+document.getElementById('update-card-btn')?.addEventListener('click', async () => {
+  const form = document.getElementById('card-update-form');
+  form.hidden = false;
+  document.getElementById('cancel-confirm').hidden = true;
+  document.getElementById('update-card-btn').hidden = true;
+
+  if (!updateCardElement && stripe) {
+    const elements = stripe.elements({ appearance: { theme: 'night' } });
+    updateCardElement = elements.create('card', {
+      style: { base: { color: '#e5e7eb', fontFamily: 'Inter, sans-serif', fontSize: '15px', '::placeholder': { color: '#6b7280' } } },
+    });
+    updateCardElement.mount('#update-card-element');
+  }
+});
+
+document.getElementById('card-update-cancel')?.addEventListener('click', () => {
+  document.getElementById('card-update-form').hidden = true;
+  document.getElementById('update-card-btn').hidden = false;
+  document.getElementById('update-card-errors').style.display = 'none';
+});
+
+document.getElementById('card-save-btn')?.addEventListener('click', async () => {
+  if (!stripe || !updateCardElement) return;
+  const saveBtn = document.getElementById('card-save-btn');
+  const errEl   = document.getElementById('update-card-errors');
+  saveBtn.disabled    = true;
+  saveBtn.textContent = 'Saving…';
+  errEl.style.display = 'none';
 
   try {
-    const res  = await authFetch('/v1/billing/portal', { method: 'POST' });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error ?? `Error ${res.status}`);
-    window.location.href = body.url;
+    // 1. Get a SetupIntent client secret
+    const siRes  = await authFetch('/v1/billing/update-payment', { method: 'POST' });
+    const siBody = await siRes.json();
+    if (!siRes.ok) throw new Error(siBody.error ?? 'Failed to start payment update');
+
+    // 2. Confirm the card on Stripe's side
+    const { setupIntent, error } = await stripe.confirmCardSetup(siBody.clientSecret, {
+      payment_method: { card: updateCardElement },
+    });
+    if (error) throw new Error(error.message);
+
+    // 3. Tell the backend to attach the new PM
+    const confirmRes = await authFetch('/v1/billing/confirm-payment-update', {
+      method: 'POST',
+      body: JSON.stringify({ paymentMethodId: setupIntent.payment_method }),
+    });
+    const confirmBody = await confirmRes.json();
+    if (!confirmRes.ok) throw new Error(confirmBody.error ?? 'Failed to save card');
+
+    document.getElementById('card-update-form').hidden = true;
+    document.getElementById('update-card-btn').hidden  = false;
+    showSuccess('Payment method updated successfully.');
   } catch (err) {
-    showError(err instanceof Error ? err.message : 'Could not open billing portal.');
+    errEl.textContent   = err instanceof Error ? err.message : 'Failed to update card.';
+    errEl.style.display = 'block';
+  } finally {
+    saveBtn.disabled    = false;
+    saveBtn.textContent = 'Save card';
+  }
+});
+
+// ── Cancel subscription ───────────────────────────────────────────────────────
+document.getElementById('cancel-sub-btn')?.addEventListener('click', () => {
+  document.getElementById('cancel-confirm').hidden    = false;
+  document.getElementById('card-update-form').hidden  = true;
+  document.getElementById('update-card-btn').hidden   = true;
+});
+
+document.getElementById('cancel-abort-btn')?.addEventListener('click', () => {
+  document.getElementById('cancel-confirm').hidden  = true;
+  document.getElementById('update-card-btn').hidden = false;
+});
+
+document.getElementById('cancel-confirm-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('cancel-confirm-btn');
+  btn.disabled    = true;
+  btn.textContent = 'Cancelling…';
+
+  try {
+    const res  = await authFetch('/v1/billing/cancel', { method: 'POST' });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to cancel');
+
+    document.getElementById('cancel-confirm').hidden  = true;
+    document.getElementById('update-card-btn').hidden = false;
+
+    // Update the renews label to show cancel date
+    const renewsEl = document.getElementById('sub-renews');
+    if (renewsEl && body.cancelAt) {
+      renewsEl.textContent = `Active until ${formatDate(body.cancelAt)}`;
+    }
+    // Update status badge
+    const badge = document.getElementById('sub-status-badge');
+    badge.innerHTML = `<span class="status-badge status-canceled"><span class="status-dot"></span>Cancels at period end</span>`;
+    // Hide cancel button to prevent double-cancel
+    document.getElementById('cancel-sub-btn').hidden = true;
+
+    showSuccess('Subscription cancelled. Access continues until the end of your billing period.');
+  } catch (err) {
+    showError(err instanceof Error ? err.message : 'Failed to cancel subscription.');
     btn.disabled    = false;
-    btn.innerHTML   = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg> Manage billing';
+    btn.textContent = 'Yes, cancel';
   }
 });
 
@@ -100,6 +183,16 @@ function showError(msg) {
   const el = document.getElementById('dash-error');
   el.textContent = msg;
   el.classList.add('visible');
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function showSuccess(msg) {
+  const el = document.getElementById('dash-error');
+  el.textContent = msg;
+  el.style.background   = 'rgba(52,211,153,0.08)';
+  el.style.borderColor  = 'rgba(52,211,153,0.25)';
+  el.style.color        = '#34d399';
+  el.classList.add('visible');
+  setTimeout(() => { el.classList.remove('visible'); el.removeAttribute('style'); }, 4000);
 }
 
 loadProfile();
