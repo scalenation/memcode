@@ -110,6 +110,14 @@ export async function buildApp(): Promise<FastifyInstance> {
         revoked BOOLEAN NOT NULL DEFAULT FALSE
       )`,
       `CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions(user_id)`,
+      `CREATE TABLE IF NOT EXISTS magic_link_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL UNIQUE,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used BOOLEAN NOT NULL DEFAULT FALSE
+      )`,
+      `CREATE INDEX IF NOT EXISTS magic_link_tokens_token_idx ON magic_link_tokens(token)`,
     ];
     for (const sql of migrations) {
       try {

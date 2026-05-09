@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { hash, compare } from 'bcryptjs';
+import { randomBytes } from 'crypto';
 import { pool } from '../db/client';
 import { signToken, authenticate } from '../middleware/authenticate';
 import type { TokenPayload } from '../middleware/authenticate';
+import { config } from '../config';
 
 interface RegisterBody {
   email: string;
@@ -170,6 +172,114 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
       const newHash = await hash(newPassword, 12);
       await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.sub]);
       return reply.send({ ok: true });
+    },
+  );
+
+  // ── Magic link ──────────────────────────────────────────────────────────────
+
+  /**
+   * POST /v1/auth/magic-link
+   * Body: { email }
+   * Sends a one-time login link to the user's email.
+   * Returns 200 regardless (to avoid email enumeration) but only sends if account exists.
+   */
+  fastify.post<{ Body: { email: string } }>(
+    '/v1/auth/magic-link',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email'],
+          properties: { email: { type: 'string' } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { email: string } }>, reply: FastifyReply) => {
+      if (!config.resendApiKey) {
+        return reply.status(503).send({ error: 'Email login is not configured on this server.' });
+      }
+
+      const email = (request.body.email ?? '').toLowerCase().trim();
+      if (!email) return reply.status(400).send({ error: 'Email is required.' });
+
+      const r = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+      // Always return 200 to avoid enumeration — just don't send email if no account
+      if ((r.rowCount ?? 0) === 0) {
+        return reply.send({ ok: true });
+      }
+      const userId = (r.rows[0] as { id: string }).id;
+
+      const token = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      await pool.query(
+        'INSERT INTO magic_link_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
+        [userId, token, expiresAt],
+      );
+
+      const link = `${config.appUrl}/v1/auth/magic-link/verify?token=${token}`;
+      const html = `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+          <h2 style="margin:0 0 8px">🧠 MemCode — sign in link</h2>
+          <p style="color:#666;margin:0 0 24px">Click the button below to sign in. This link expires in <strong>15 minutes</strong> and can only be used once.</p>
+          <a href="${link}" style="display:inline-block;background:#6366f1;color:#fff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:600">Sign in to MemCode →</a>
+          <p style="color:#999;font-size:0.82rem;margin-top:24px">If you didn't request this, you can safely ignore it.<br>Link: ${link}</p>
+        </div>`;
+
+      const emailRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: config.resendFromEmail,
+          to: email,
+          subject: 'Sign in to MemCode',
+          html,
+        }),
+      });
+
+      if (!emailRes.ok) {
+        fastify.log.error({ status: emailRes.status }, 'Resend email failed');
+        return reply.status(500).send({ error: 'Failed to send email. Please try again.' });
+      }
+
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
+   * GET /v1/auth/magic-link/verify?token=<hex>
+   * Validates the token, issues a JWT, redirects to /dashboard?mc_token=<jwt>
+   */
+  fastify.get<{ Querystring: { token?: string } }>(
+    '/v1/auth/magic-link/verify',
+    async (request: FastifyRequest<{ Querystring: { token?: string } }>, reply: FastifyReply) => {
+      const { token } = request.query;
+      if (!token) {
+        return reply.status(400).send({ error: 'Missing token.' });
+      }
+
+      const r = await pool.query(
+        `SELECT mlt.id, mlt.user_id, mlt.expires_at, mlt.used, u.email
+         FROM magic_link_tokens mlt
+         JOIN users u ON u.id = mlt.user_id
+         WHERE mlt.token = $1`,
+        [token],
+      );
+      if ((r.rowCount ?? 0) === 0) {
+        return reply.redirect(`${config.appUrl}/login?error=invalid_magic_link`);
+      }
+      const row = r.rows[0] as { id: string; user_id: string; expires_at: string; used: boolean; email: string };
+      if (row.used || new Date(row.expires_at) < new Date()) {
+        return reply.redirect(`${config.appUrl}/login?error=expired_magic_link`);
+      }
+
+      // Mark as used
+      await pool.query('UPDATE magic_link_tokens SET used = TRUE WHERE id = $1', [row.id]);
+
+      const jwt = await signToken({ sub: row.user_id, email: row.email });
+      return reply.redirect(`${config.appUrl}/dashboard?token=${jwt}`);
     },
   );
 }

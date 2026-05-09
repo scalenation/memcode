@@ -16,6 +16,9 @@ export const config = {
   stripePriceId: required('STRIPE_PRICE_ID'),
   stripePriceIdYearly: required('STRIPE_PRICE_ID_YEARLY'),
   appUrl: process.env.APP_URL ?? 'http://localhost:3000',
+  // Email (Resend) — optional; magic link is disabled if not configured
+  resendApiKey: process.env.RESEND_API_KEY,
+  resendFromEmail: process.env.RESEND_FROM_EMAIL ?? 'MemCode <noreply@memcode.pro>',
   // OAuth — optional; routes are skipped if not configured
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
