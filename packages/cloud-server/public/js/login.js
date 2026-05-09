@@ -13,12 +13,13 @@ const params = new URLSearchParams(window.location.search);
 const oauthError = params.get('error');
 if (oauthError) {
   const messages = {
-    oauth_denied:   'Sign-in was cancelled.',
-    invalid_state:  'Security check failed. Please try again.',
-    token_exchange: 'Failed to complete sign-in. Please try again.',
-    userinfo:       'Could not retrieve your profile. Please try again.',
-    no_email:       'Your GitHub account has no public email. Please add one and try again.',
-    server_error:   'A server error occurred. Please try again.',
+    oauth_denied:    'Sign-in was cancelled.',
+    invalid_state:   'Security check failed. Please try again.',
+    token_exchange:  'Failed to complete sign-in. Please try again.',
+    userinfo:        'Could not retrieve your profile. Please try again.',
+    no_email:        'Your GitHub account has no public email. Please add one and try again.',
+    server_error:    'A server error occurred. Please try again.',
+    not_configured:  'Google/GitHub sign-in is not yet configured. Please use email/password.',
   };
   showError(messages[oauthError] ?? 'Sign-in failed. Please try again.');
   history.replaceState(null, '', '/login.html');
