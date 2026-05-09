@@ -1,30 +1,29 @@
 import 'dotenv/config';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import serverless from 'serverless-http';
+import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app';
 
-let handler: ((req: IncomingMessage, res: ServerResponse) => void) | null = null;
+let app: FastifyInstance | null = null;
 
-async function getHandler() {
-  if (!handler) {
-    console.log('[api] init start');
-    const app = await buildApp();
-    console.log('[api] app built, calling ready()');
+async function getApp() {
+  if (!app) {
+    console.log('[api] building fastify app');
+    app = await buildApp();
     await app.ready();
-    console.log('[api] app ready');
-    handler = serverless(app);
-    console.log('[api] handler created');
+    console.log('[api] fastify app ready');
   }
-  return handler;
+  return app;
 }
 
 export default async function (req: IncomingMessage, res: ServerResponse) {
   try {
-    const h = await getHandler();
-    return h(req, res);
+    const fastify = await getApp();
+    // Use Fastify's built-in serverless handling
+    await fastify.server.emit('request', req, res);
+    fastify.routing(req, res);
   } catch (err) {
     console.error('[api] error:', err);
-    res.writeHead(500);
+    res.writeHead(500, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: String(err) }));
   }
 }
