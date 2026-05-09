@@ -12,7 +12,7 @@ async function getHandler() {
     console.log('[api] app built, calling ready()');
     await app.ready();
     console.log('[api] app ready');
-    handler = serverless(app.server);
+    handler = serverless(app);
     console.log('[api] handler created');
   }
   return handler;
