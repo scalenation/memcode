@@ -52,12 +52,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Health check
   fastify.get('/health', async (_req, reply) => {
-    try {
-      await pool.query('SELECT 1');
-      return reply.send({ status: 'ok', ts: new Date().toISOString() });
-    } catch {
-      return reply.status(503).send({ status: 'db_unavailable' });
-    }
+    return reply.send({ status: 'ok', ts: new Date().toISOString() });
   });
 
   // API routes
