@@ -69,24 +69,21 @@ syncCommand
     console.error(pc.bold('\nMemCode Cloud — authenticate\n'));
 
     try {
-      const email      = await askQuestion('Email: ');
-      const password   = await askQuestion('Password: ', true);
-      const passphrase = await askQuestion('Encryption passphrase (remember this — used to encrypt/decrypt your memory): ', true);
+      const email    = await askQuestion('Email: ');
+      const password = await askQuestion('Password: ', true);
 
-      if (!email || !password || !passphrase) {
-        console.error(pc.red('All fields are required.'));
+      if (!email || !password) {
+        console.error(pc.red('Email and password are required.'));
         process.exit(1);
       }
 
       const endpoint = options.endpoint.replace(/\/$/, '');
       let token: string | null = null;
+      let isNewAccount = false;
 
       const loginRes = await fetch(`${endpoint}/v1/auth/login`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': CLI_UA,
-        },
+        headers: { 'Content-Type': 'application/json', 'User-Agent': CLI_UA },
         body: JSON.stringify({ email, password }),
       });
 
@@ -94,19 +91,22 @@ syncCommand
         const body = (await loginRes.json()) as { token: string };
         token = body.token;
         console.log(pc.green('✓'), 'Logged in as', pc.cyan(email));
-      } else if (loginRes.status === 401) {
-        // Try registering a new account
+      } else if (loginRes.status === 404) {
+        // No account — offer to create one
+        const createAnswer = await askQuestion(`\nNo account found for ${pc.cyan(email)}. Create one? (y/N): `);
+        if (createAnswer.trim().toLowerCase() !== 'y') {
+          console.error(pc.yellow('Cancelled.'));
+          process.exit(0);
+        }
         const registerRes = await fetch(`${endpoint}/v1/auth/register`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': CLI_UA,
-          },
+          headers: { 'Content-Type': 'application/json', 'User-Agent': CLI_UA },
           body: JSON.stringify({ email, password }),
         });
         if (registerRes.ok) {
           const body = (await registerRes.json()) as { token: string };
           token = body.token;
+          isNewAccount = true;
           console.log(pc.green('✓'), 'Account created for', pc.cyan(email));
         } else {
           const err = (await registerRes.json().catch(() => ({}))) as { error?: string };
@@ -114,13 +114,34 @@ syncCommand
           process.exit(1);
         }
       } else {
+        // 401 wrong password, 403 OAuth account, or other server error
         const err = (await loginRes.json().catch(() => ({}))) as { error?: string };
         console.error(pc.red('✗'), err.error ?? 'Authentication failed');
+        if (loginRes.status === 403) {
+          console.error(pc.dim('  Tip: go to memcode.pro dashboard → Profile to set a CLI password.'));
+        }
         process.exit(1);
       }
 
       if (!token) {
         console.error(pc.red('Failed to obtain auth token.'));
+        process.exit(1);
+      }
+
+      // Prompt for encryption passphrase — explain what it is
+      console.error('');
+      console.error(pc.bold('Encryption passphrase'));
+      console.error(pc.dim('  This is a secret phrase used to encrypt your memory data before it leaves your'));
+      console.error(pc.dim('  computer. The server never sees it. Choose anything memorable — e.g. "blue-fox-2024"'));
+      console.error(pc.dim('  or "correct horse battery staple". You\'ll need it on every machine you sync from.'));
+      if (isNewAccount) {
+        console.error(pc.dim('  Write it down — if you forget it you cannot decrypt your existing cloud data.'));
+      }
+      console.error('');
+      const passphrase = await askQuestion('Encryption passphrase: ', true);
+
+      if (!passphrase) {
+        console.error(pc.red('Passphrase is required.'));
         process.exit(1);
       }
 
