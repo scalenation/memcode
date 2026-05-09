@@ -7,7 +7,7 @@ import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
 import { findProjectRoot, resolveProject } from '../util';
 
-const DEFAULT_ENDPOINT = 'https://api.memcode.dev';
+const DEFAULT_ENDPOINT = 'https://api.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
 
 interface AuthConfig {
@@ -35,7 +35,7 @@ async function prompt(rl: ReturnType<typeof createInterface>, question: string):
 }
 
 export const syncCommand = new Command('sync').description(
-  'Sync project memory with the cloud (Pro feature — memcode.dev/pricing)',
+  'Sync project memory with the cloud (Pro feature — memcode.pro/pricing)',
 );
 
 // ─── auth ───────────────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ syncCommand
       }
 
       if (res.status === 402) {
-        console.log(pc.yellow('Pro subscription required.'), `Upgrade at ${pc.cyan('https://memcode.dev/pricing')}`);
+        console.log(pc.yellow('Pro subscription required.'), `Upgrade at ${pc.cyan('https://memcode.pro/pricing')}`);
         return;
       }
 
@@ -272,7 +272,7 @@ ${pc.yellow('Not authenticated.')}
 
 Run ${pc.cyan('memory sync auth')} to link your CLI to a MemCode Pro account.
 
-Don't have an account? Sign up at ${pc.cyan('https://memcode.dev/pricing')} ($3.99/month, 7-day free trial).
+Don't have an account? Sign up at ${pc.cyan('https://memcode.pro/pricing')} ($3.99/month, 7-day free trial).
 `;
 }
 

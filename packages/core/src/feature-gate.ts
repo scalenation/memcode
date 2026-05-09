@@ -66,7 +66,7 @@ export class ProFeatureError extends Error {
     };
     super(
       `"${descriptions[flag]}" is a Pro feature.\n` +
-      `Upgrade at https://memcode.dev/pro or run 'memory sync auth' after subscribing.`,
+      `Upgrade at https://memcode.pro/pricing or run 'memory sync auth' after subscribing.`,
     );
     this.name = 'ProFeatureError';
   }

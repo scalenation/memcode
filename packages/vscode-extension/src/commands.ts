@@ -269,7 +269,7 @@ export function registerCommands(
   // ── Memory: Sync Now ────────────────────────────────────────────────
   reg('memcode.syncNow', () => {
     vscode.window.showInformationMessage(
-      'MemCode: Cloud sync is a Pro feature. Visit https://memcode.dev/pro to enable it.',
+      'MemCode: Cloud sync is a Pro feature. Visit https://memcode.pro/pricing to enable it.',
     );
   });
 }

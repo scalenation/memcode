@@ -34,7 +34,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // CORS — allow CLI and browser requests
   await fastify.register(cors, {
-    origin: [config.appUrl, 'https://memcode.dev', 'http://localhost:3000'],
+    origin: [config.appUrl, 'https://memcode.pro', 'http://localhost:3000'],
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   });
 

@@ -27,7 +27,7 @@
 | Requirement | Version |
 |---|---|
 | Node.js | ≥ 22.15.0 |
-| MemCode Cloud account | [memcode.dev/pricing](https://memcode.dev/pricing) (Pro, $3.99/month) |
+| MemCode Cloud account | [memcode.pro/pricing](https://memcode.pro/pricing) (Pro, $3.99/month) |
 
 ---
 
@@ -86,7 +86,7 @@ import { pushSync, deriveKey } from '@memcode/cloud-client';
 const key = await deriveKey(passphrase, workspaceId);
 
 const result = await pushSync(db, {
-  endpoint: 'https://api.memcode.dev',
+  endpoint: 'https://api.memcode.pro',
   apiToken: 'your-jwt-token',
   workspaceId: 'workspace-uuid',
   encryptionKey: key,
@@ -109,7 +109,7 @@ import { pullSync, deriveKey } from '@memcode/cloud-client';
 const key = await deriveKey(passphrase, workspaceId);
 
 const result = await pullSync(db, {
-  endpoint: 'https://api.memcode.dev',
+  endpoint: 'https://api.memcode.pro',
   apiToken: 'your-jwt-token',
   workspaceId: 'workspace-uuid',
   encryptionKey: key,
@@ -126,7 +126,7 @@ console.log(result.merged); // { checkpoints, decisions, tasks }
 
 ```ts
 export interface SyncConfig {
-  endpoint: string;       // Base URL of the MemCode API, e.g. 'https://api.memcode.dev'
+  endpoint: string;       // Base URL of the MemCode API, e.g. 'https://api.memcode.pro'
   apiToken: string;       // JWT obtained via POST /v1/auth/login
   workspaceId: string;    // Local workspace UUID (from .memory/config.json)
   encryptionKey: CryptoKey; // Derived via deriveKey()
@@ -161,7 +161,7 @@ const workspace = getOrCreateWorkspace(db, process.cwd());
 const key = await deriveKey('my-secret-passphrase', workspace.id);
 
 const syncConfig = {
-  endpoint: 'https://api.memcode.dev',
+  endpoint: 'https://api.memcode.pro',
   apiToken: process.env.MEMCODE_API_TOKEN!,
   workspaceId: workspace.id,
   encryptionKey: key,
@@ -185,7 +185,7 @@ console.log('Merged:', pullResult.merged);
 memory sync auth
 
 # Via API directly
-curl -X POST https://api.memcode.dev/v1/auth/login \
+curl -X POST https://api.memcode.pro/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email":"you@example.com","password":"your-password"}'
 # Returns: { "token": "eyJ..." }

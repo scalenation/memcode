@@ -26,7 +26,7 @@ cd "$DEMO_DIR"
 git init --quiet
 echo "# Demo Project" > README.md
 git add README.md
-git config user.email "demo@memcode.dev"
+git config user.email "demo@memcode.pro"
 git config user.name "Demo User"
 git commit -m "Initial commit" --quiet
 

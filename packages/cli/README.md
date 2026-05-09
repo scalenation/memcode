@@ -403,7 +403,7 @@ memory doctor [--path <path>]
 
 ---
 
-### `memory sync` _(Pro — [memcode.dev/pricing](https://memcode.dev/pricing))_
+### `memory sync` _(Pro — [memcode.pro/pricing](https://memcode.pro/pricing))_
 
 Encrypted cloud sync across machines. Requires a Pro subscription ($3.99/month, 7-day free trial).
 
@@ -520,7 +520,7 @@ Global auth config lives at `~/.config/memcode/auth.json` (mode `0600`):
 
 ```json
 {
-  "endpoint": "https://api.memcode.dev",
+  "endpoint": "https://api.memcode.pro",
   "apiToken": "...",
   "encryptionPassphrase": "..."
 }

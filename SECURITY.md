@@ -11,7 +11,7 @@
 
 **Please do not file a public GitHub issue for security vulnerabilities.**
 
-Email **security@memcode.dev** with:
+Email **security@memcode.pro** with:
 
 1. A description of the vulnerability and its potential impact.
 2. Steps to reproduce or a proof-of-concept.

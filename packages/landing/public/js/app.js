@@ -1,7 +1,7 @@
 /* global API endpoint — update to your deployed domain */
 const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:3000'
-  : 'https://api.memcode.dev';
+  : 'https://api.memcode.pro';
 
 // ─── Checkout flow ───────────────────────────────────────────────────────────
 

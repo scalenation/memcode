@@ -29,7 +29,7 @@ const lines = [
   pc.bold('  ──────────────────────────────────────────────────'),
   '',
   '  ' + pc.dim('Docs:  https://github.com/scalenation/memcode'),
-  '  ' + pc.dim('Pro:   https://memcode.dev/pro') + pc.dim('  (LLM summaries · semantic recall · team sync)'),
+  '  ' + pc.dim('Pro:   https://memcode.pro/pricing') + pc.dim('  (LLM summaries · semantic recall · team sync)'),
   '',
 ];
 
