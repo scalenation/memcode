@@ -59,14 +59,14 @@
       </div>
       <div class="terminal-body">
         <div class="terminal-line"><span class="prompt">$</span> npm install -g @memcode/cli</div>
-        <div class="terminal-line dim">+ @memcode/cli@1.0.4  ✓  zero native deps</div>
+        <div class="terminal-line dim">+ @memcode/cli@1.0.15  ✓  zero native deps</div>
         <div class="terminal-line"><span class="prompt">$</span> memory init --hooks</div>
         <div class="terminal-line success">✓  Initialized database — workspace id: a3f8b2c1…</div>
-        <div class="terminal-line success">✓  Installed git hooks (pre-commit, post-commit, branch-switch)</div>
-        <div class="terminal-line"><span class="prompt">$</span> git commit -m "feat: add auth module"</div>
-        <div class="terminal-line dim">[memcode] checkpoint saved → pre-commit</div>
-        <div class="terminal-line"><span class="prompt">$</span> memory recall --query "auth decisions"</div>
-        <div class="terminal-line success">→  Found 3 relevant items…</div>
+        <div class="terminal-line success">✓  Installed git hooks (post-commit, post-checkout)</div>
+        <div class="terminal-line"><span class="prompt">$</span> memory copilot setup</div>
+        <div class="terminal-line success">✓  Wrote .github/copilot-instructions.md</div>
+        <div class="terminal-line success">✓  Wrote CLAUDE.md</div>
+        <div class="terminal-line dim">  Open a new chat — your AI already knows your project.</div>
       </div>
     </div>
   </div>
@@ -110,9 +110,9 @@
         <p>Ask <code>memory recall --query "why did we use Redis?"</code> and get the exact decision record with rationale, from weeks ago.</p>
       </div>
       <div class="feature-card">
-        <div class="feature-icon">📦</div>
-        <h3>Context packs</h3>
-        <p>Generate a compact context bundle to paste at the start of any chat. Your AI picks up exactly where you left off, every time.</p>
+        <div class="feature-icon">🤖</div>
+        <h3>Auto-inject into every chat</h3>
+        <p>Run <code>memory copilot setup</code> once. Your project context is injected automatically at the start of every VS Code Copilot and Claude Code session — no copy-paste, no manual updates.</p>
       </div>
       <div class="feature-card feature-card-pro">
         <div class="feature-badge">Pro</div>
@@ -161,9 +161,9 @@
       <div class="step">
         <div class="step-num">4</div>
         <div class="step-content">
-          <h3>Recall context any time</h3>
-          <div class="code-block"><code>memory context-pack --copy</code></div>
-          <p class="step-note">Paste at the top of a new chat. Your assistant is instantly up to speed.</p>
+          <h3>Auto-inject into your AI</h3>
+          <div class="code-block"><code>memory copilot setup</code></div>
+          <p class="step-note">Writes context to <code>.github/copilot-instructions.md</code> and <code>CLAUDE.md</code>. Every new chat in VS Code Copilot or Claude Code starts with your full project memory — automatically refreshed after every checkpoint.</p>
         </div>
       </div>
       <div class="step step-pro">
@@ -201,6 +201,7 @@
           <li class="check">Unlimited checkpoints &amp; decisions</li>
           <li class="check">Automatic git hooks</li>
           <li class="check">Semantic recall</li>
+          <li class="check">Copilot &amp; Claude Code auto-inject</li>
           <li class="check">Context packs</li>
           <li class="check">VS Code extension</li>
           <li class="check">Open-source (MIT)</li>
