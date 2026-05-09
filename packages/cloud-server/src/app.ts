@@ -105,6 +105,7 @@ export async function buildApp(): Promise<FastifyInstance> {
           ON users(oauth_provider, oauth_sub)
           WHERE oauth_provider IS NOT NULL;
       `);
+      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;`);
     } catch (err) {
       fastify.log.warn({ err }, 'Schema migration warning (non-fatal)');
     }

@@ -358,8 +358,59 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
+   * POST /v1/billing/set-default-payment
+   * Sets a payment method as the customer + subscription default.
+   * Body: { paymentMethodId }
+   * Requires auth.
+   */
+  fastify.post<{ Body: { paymentMethodId: string } }>(
+    '/v1/billing/set-default-payment',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Body: { paymentMethodId: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Body: { paymentMethodId: string } }> & { user: TokenPayload }).user;
+      const { paymentMethodId } = request.body;
+      const userResult = await pool.query('SELECT stripe_customer_id FROM users WHERE id = $1', [user.sub]);
+      const row = userResult.rows[0] as { stripe_customer_id: string | null } | undefined;
+      if (!row?.stripe_customer_id) return reply.status(404).send({ error: 'No billing account found' });
+      // Verify ownership
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+      if (pm.customer !== row.stripe_customer_id) return reply.status(403).send({ error: 'Forbidden' });
+      await stripe.customers.update(row.stripe_customer_id, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+      const subs = await stripe.subscriptions.list({ customer: row.stripe_customer_id, limit: 1 });
+      if (subs.data.length > 0) {
+        await stripe.subscriptions.update(subs.data[0].id, { default_payment_method: paymentMethodId });
+      }
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
+   * DELETE /v1/billing/payment-method/:pmId
+   * Detaches a payment method from the customer.
+   * Requires auth.
+   */
+  fastify.delete<{ Params: { pmId: string } }>(
+    '/v1/billing/payment-method/:pmId',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Params: { pmId: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Params: { pmId: string } }> & { user: TokenPayload }).user;
+      const { pmId } = request.params;
+      const userResult = await pool.query('SELECT stripe_customer_id FROM users WHERE id = $1', [user.sub]);
+      const row = userResult.rows[0] as { stripe_customer_id: string | null } | undefined;
+      if (!row?.stripe_customer_id) return reply.status(404).send({ error: 'No billing account found' });
+      // Verify ownership before detaching
+      const pm = await stripe.paymentMethods.retrieve(pmId);
+      if (pm.customer !== row.stripe_customer_id) return reply.status(403).send({ error: 'Forbidden' });
+      await stripe.paymentMethods.detach(pmId);
+      return reply.send({ ok: true });
+    },
+  );
+
+  /**
    * POST /v1/billing/portal
-   * Kept for backwards compat — now unused by UI.
+   * Kept for backwards compat.
    */
   fastify.post(
     '/v1/billing/portal',

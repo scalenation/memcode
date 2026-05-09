@@ -10,274 +10,278 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
   <style>
-    /* ── Layout ── */
-    body { min-height: 100vh; display: flex; flex-direction: column; }
-    .dash-nav {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 24px; height: 60px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .dash-nav { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 60px; flex-shrink: 0; border-bottom: 1px solid var(--border); background: var(--bg); z-index: 10; }
     .dash-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1rem; text-decoration: none; color: var(--text); }
     .dash-nav-right { display: flex; align-items: center; gap: 12px; }
-    .dash-email { font-size: 0.82rem; color: var(--text-dim); }
-    .signout-btn {
-      font-size: 0.82rem; background: none; border: 1px solid var(--border);
-      color: var(--text-dim); border-radius: var(--radius-sm);
-      padding: 5px 12px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
-    }
+    .nav-email { font-size: 0.82rem; color: var(--text-dim); }
+    .signout-btn { font-size: 0.82rem; background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: var(--radius-sm); padding: 5px 12px; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
     .signout-btn:hover { color: var(--text); border-color: var(--accent); }
-    .dash-main { flex: 1; padding: 40px 24px; max-width: 720px; margin: 0 auto; width: 100%; }
-
-    /* ── Cards ── */
-    .dash-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px 32px;
-      margin-bottom: 20px;
-    }
-    .dash-card-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 16px; }
-    .dash-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-    .dash-label { font-size: 0.82rem; color: var(--text-dim); }
-    .dash-value { font-size: 0.92rem; font-weight: 600; }
-
-    /* ── Status badge ── */
-    .status-badge {
-      display: inline-flex; align-items: center; gap: 6px;
-      font-size: 0.75rem; font-weight: 700;
-      padding: 3px 10px; border-radius: 999px;
-    }
+    .app-shell { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 60px); }
+    .sidebar { width: 220px; flex-shrink: 0; border-right: 1px solid var(--border); background: var(--bg); display: flex; flex-direction: column; overflow-y: auto; padding: 16px 0; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 16px; margin: 1px 8px; font-size: 0.875rem; font-weight: 500; color: var(--text-dim); background: none; border: none; border-radius: var(--radius-sm); cursor: pointer; width: calc(100% - 16px); text-align: left; transition: background 0.12s, color 0.12s; }
+    .nav-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .nav-item.active { background: rgba(108,99,255,0.12); color: var(--accent); }
+    .nav-item svg { flex-shrink: 0; opacity: 0.7; }
+    .nav-item.active svg { opacity: 1; }
+    .sidebar-divider { border: none; border-top: 1px solid var(--border); margin: 10px 8px; }
+    .sidebar-spacer { flex: 1; }
+    .main-content { flex: 1; overflow-y: auto; padding: 36px 40px; }
+    .section { display: none; max-width: 660px; }
+    .section.active { display: block; }
+    .section-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 24px; }
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 20px; }
+    .card-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-dim); margin-bottom: 16px; }
+    .info-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .info-row.last { border-bottom: none; }
+    .info-label { font-size: 0.82rem; color: var(--text-dim); }
+    .info-value { font-size: 0.9rem; font-weight: 600; }
+    .status-badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
     .status-active   { background: rgba(52,211,153,0.15); color: #34d399; }
     .status-trialing { background: rgba(108,99,255,0.15); color: var(--accent); }
     .status-past_due { background: rgba(251,191,36,0.15); color: #fbbf24; }
     .status-canceled { background: rgba(248,113,113,0.12); color: var(--red); }
     .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-    /* ── Free plan state ── */
-    .upgrade-box {
-      background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.03));
-      border: 1px dashed rgba(108,99,255,0.3);
-      border-radius: var(--radius-sm);
-      padding: 20px 24px;
-      text-align: center;
-    }
-    .upgrade-box p { color: var(--text-dim); font-size: 0.88rem; margin-bottom: 14px; }
-
-    /* ── Billing actions ── */
-    .billing-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
-    .manage-btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 10px 20px; font-size: 0.88rem; font-weight: 600;
-      background: var(--accent); color: #fff; border: none;
-      border-radius: var(--radius-sm); cursor: pointer;
-      transition: opacity 0.15s;
-    }
-    .manage-btn:hover { opacity: 0.88; }
-    .manage-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .danger-btn {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 10px 20px; font-size: 0.88rem; font-weight: 600;
-      background: none; color: var(--red); border: 1px solid rgba(248,113,113,0.35);
-      border-radius: var(--radius-sm); cursor: pointer; transition: background 0.15s;
-    }
-    .danger-btn:hover { background: rgba(248,113,113,0.08); }
-    .danger-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    /* ── Inline card update form ── */
-    .card-update-form {
-      margin-top: 20px; padding: 20px 24px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-    }
-    .card-update-form label { font-size: 0.8rem; color: var(--text-dim); display: block; margin-bottom: 8px; }
-    #update-card-element {
-      padding: 12px 14px;
-      background: var(--bg-card); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); margin-bottom: 12px;
-    }
-    #update-card-errors { font-size: 0.82rem; color: var(--red); margin-bottom: 10px; display: none; }
-    .card-update-actions { display: flex; gap: 10px; }
-    .card-save-btn {
-      padding: 9px 20px; font-size: 0.88rem; font-weight: 600;
-      background: var(--accent); color: #fff; border: none;
-      border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s;
-    }
-    .card-save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .card-cancel-link {
-      padding: 9px 12px; font-size: 0.88rem; background: none;
-      border: 1px solid var(--border); color: var(--text-dim);
-      border-radius: var(--radius-sm); cursor: pointer; transition: color 0.15s;
-    }
-    .card-cancel-link:hover { color: var(--text); }
-    /* ── Payment method chips ── */
-    .pm-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-    .pm-chip {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-    }
-    .pm-chip.is-default { border-color: var(--accent); }
-    .pm-brand {
-      font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.06em; color: var(--text-dim); min-width: 36px;
-    }
-    .pm-last4 { font-family: var(--mono); font-size: 0.9rem; flex: 1; }
-    .pm-expiry { font-size: 0.75rem; color: var(--text-dim); }
-    .pm-default-badge {
-      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
-      letter-spacing: 0.06em; padding: 2px 8px;
-      background: rgba(108,99,255,0.15); color: var(--accent);
-      border-radius: 999px;
-    }
-    #pm-loading { height: 38px; margin-top: 4px; }
-
-    /* ── Cancel confirm ── */
-    .cancel-confirm {
-      margin-top: 16px; padding: 16px 20px;
-      background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.25);
-      border-radius: var(--radius-sm);
-    }
-    .cancel-confirm p { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 12px; }
-    .cancel-confirm-actions { display: flex; gap: 10px; }
-
-    /* ── CLI block ── */
-    .cli-block {
-      font-family: var(--mono); font-size: 0.88rem;
-      background: var(--bg); border: 1px solid var(--border);
-      border-radius: var(--radius-sm); padding: 12px 16px;
-      color: var(--text-dim); margin-top: 10px;
-    }
-    .cli-block span { color: var(--accent-2); }
-
-    /* ── Skeleton loader ── */
-    .skeleton {
-      background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
-      border-radius: 6px; height: 16px;
-    }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 0.85rem; font-weight: 600; border-radius: var(--radius-sm); cursor: pointer; border: none; transition: opacity 0.15s, background 0.15s; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+    .btn-secondary { background: none; border: 1px solid var(--border); color: var(--text-dim); }
+    .btn-secondary:hover:not(:disabled) { color: var(--text); border-color: var(--text-dim); }
+    .btn-danger { background: none; border: 1px solid rgba(248,113,113,0.35); color: var(--red); }
+    .btn-danger:hover:not(:disabled) { background: rgba(248,113,113,0.08); }
+    .btn-sm { padding: 5px 11px; font-size: 0.78rem; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: 0.8rem; font-weight: 500; color: var(--text-dim); margin-bottom: 6px; }
+    .field input { width: 100%; padding: 10px 12px; font-size: 0.9rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); outline: none; transition: border-color 0.15s; }
+    .field input:focus { border-color: var(--accent); }
+    .field input[readonly] { opacity: 0.5; cursor: not-allowed; }
+    .field-row { display: flex; gap: 12px; }
+    .field-row .field { flex: 1; }
+    .form-actions { display: flex; gap: 10px; margin-top: 4px; }
+    .form-msg { font-size: 0.82rem; margin-top: 8px; display: none; }
+    .form-msg.error   { color: var(--red); display: block; }
+    .form-msg.success { color: #34d399; display: block; }
+    .skeleton { background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-    /* ── Error notice ── */
-    .dash-error {
-      background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25);
-      border-radius: var(--radius-sm); padding: 14px 16px;
-      color: var(--red); font-size: 0.88rem; margin-bottom: 20px; display: none;
-    }
-    .dash-error.visible { display: block; }
+    .notice-bar { border-radius: var(--radius-sm); padding: 12px 16px; font-size: 0.85rem; margin-bottom: 20px; display: none; }
+    .notice-bar.visible { display: block; }
+    .notice-bar.error   { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); color: var(--red); }
+    .notice-bar.success { background: rgba(52,211,153,0.08);  border: 1px solid rgba(52,211,153,0.25);  color: #34d399; }
+    .upgrade-box { background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.03)); border: 1px dashed rgba(108,99,255,0.3); border-radius: var(--radius-sm); padding: 20px 24px; text-align: center; }
+    .upgrade-box p { color: var(--text-dim); font-size: 0.88rem; margin: 0 0 14px; }
+    .cli-block { font-family: var(--mono); font-size: 0.88rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; color: var(--text-dim); margin-top: 10px; }
+    .cli-block span { color: var(--accent-2); }
+    .pm-table { display: flex; flex-direction: column; gap: 6px; }
+    .pm-row { display: flex; align-items: center; gap: 10px; padding: 11px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    .pm-row.is-default { border-color: var(--accent); }
+    .pm-brand-icon { width: 38px; height: 24px; border-radius: 4px; background: var(--bg-card); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 0.58rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; color: var(--text-dim); flex-shrink: 0; }
+    .pm-digits { font-family: var(--mono); font-size: 0.88rem; flex: 1; }
+    .pm-expiry { font-size: 0.76rem; color: var(--text-dim); }
+    .pm-default-badge { font-size: 0.67rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 8px; background: rgba(108,99,255,0.15); color: var(--accent); border-radius: 999px; }
+    .pm-actions { display: flex; gap: 5px; flex-shrink: 0; }
+    .pm-delete-confirm { display: flex; align-items: center; gap: 8px; padding: 8px 14px 10px; font-size: 0.78rem; color: var(--text-dim); background: rgba(248,113,113,0.05); border: 1px solid rgba(248,113,113,0.2); border-top: none; border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+    .add-card-form { margin-top: 12px; padding: 18px 18px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    .add-card-form label { font-size: 0.8rem; color: var(--text-dim); display: block; margin-bottom: 8px; font-weight: 500; }
+    #add-card-element { padding: 12px 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 10px; }
+    #add-card-errors { font-size: 0.82rem; color: var(--red); margin-bottom: 8px; display: none; }
+    .inline-confirm { margin-top: 14px; padding: 14px 16px; background: rgba(248,113,113,0.05); border: 1px solid rgba(248,113,113,0.22); border-radius: var(--radius-sm); }
+    .inline-confirm p { font-size: 0.83rem; color: var(--text-dim); margin: 0 0 10px; }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .stat-label { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 6px; }
+    .stat-value { font-size: 1rem; font-weight: 700; }
   </style>
   <script>window.STRIPE_PK = 'pk_test_51TV5XBV05uXvy1RK24ZWaB1Z9kjjtj6mIGOXdPpffnyjOkllzR356cFGFl6WlWxrHBnbCrBPUe80AYdUWBW2EfSf000kzTvH0P';</script>
 </head>
 <body>
 
-<!-- ── Nav ── -->
 <nav class="dash-nav">
-  <a href="/" class="dash-logo">
-    <span>🧠</span>
-    <span>MemCode</span>
-  </a>
+  <a href="/" class="dash-logo"><span>🧠</span><span>MemCode</span></a>
   <div class="dash-nav-right">
-    <span class="dash-email" id="nav-email"></span>
+    <span class="nav-email" id="nav-email"></span>
     <button class="signout-btn" id="signout-btn">Sign out</button>
   </div>
 </nav>
 
-<!-- ── Main ── -->
-<main class="dash-main">
-  <div id="dash-error" class="dash-error"></div>
+<div class="app-shell">
+  <aside class="sidebar">
+    <button class="nav-item active" data-section="overview">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Overview
+    </button>
+    <button class="nav-item" data-section="profile">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      Profile
+    </button>
+    <button class="nav-item" data-section="billing">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      Billing
+    </button>
+    <button class="nav-item" data-section="cli">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      CLI
+    </button>
+    <div class="sidebar-spacer"></div>
+    <hr class="sidebar-divider" />
+    <button class="nav-item" id="signout-sidebar">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign out
+    </button>
+  </aside>
 
-  <!-- Account card -->
-  <div class="dash-card">
-    <p class="dash-card-title">Account</p>
-    <div class="dash-row">
-      <span class="dash-label">Email</span>
-      <span class="dash-value" id="acc-email"><span class="skeleton" style="width:160px"></span></span>
-    </div>
-  </div>
+  <main class="main-content">
+    <div id="global-notice" class="notice-bar"></div>
 
-  <!-- Subscription card -->
-  <div class="dash-card" id="sub-card">
-    <p class="dash-card-title">Subscription</p>
-    <div id="sub-loading">
-      <div class="skeleton" style="width:100%;height:14px;margin-bottom:12px"></div>
-      <div class="skeleton" style="width:60%;height:14px"></div>
-    </div>
-    <div id="sub-content" hidden>
-      <!-- Active sub -->
-      <div id="sub-active" hidden>
-        <div class="dash-row" style="margin-bottom:12px">
-          <span class="dash-label">Plan</span>
-          <span class="dash-value" id="sub-plan"></span>
+    <!-- Overview -->
+    <section id="section-overview" class="section active">
+      <h1 class="section-title">Overview</h1>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Email</div>
+          <div class="stat-value" id="ov-email"><span class="skeleton" style="height:16px;width:140px;display:block"></span></div>
         </div>
-        <div class="dash-row" style="margin-bottom:12px">
-          <span class="dash-label">Status</span>
-          <span id="sub-status-badge"></span>
+        <div class="stat-card">
+          <div class="stat-label">Plan</div>
+          <div class="stat-value" id="ov-plan"><span class="skeleton" style="height:16px;width:60px;display:block"></span></div>
         </div>
-        <div class="dash-row">
-          <span class="dash-label">Renews</span>
-          <span class="dash-value" id="sub-renews"></span>
+      </div>
+      <div class="card">
+        <p class="card-title">Subscription</p>
+        <div id="ov-sub-loading">
+          <div class="skeleton" style="height:14px;width:100%;margin-bottom:10px"></div>
+          <div class="skeleton" style="height:14px;width:55%"></div>
         </div>
-        <div class="dash-row" style="margin-top:12px;align-items:flex-start">
-          <span class="dash-label" style="padding-top:2px">Payment</span>
-          <div style="flex:1;min-width:0;margin-left:8px">
-            <div id="pm-loading" class="skeleton" style="width:180px"></div>
-            <div id="pm-list" class="pm-list" hidden></div>
-            <div id="pm-none" style="font-size:0.82rem;color:var(--text-dim)" hidden>No saved cards</div>
-          </div>
+        <div id="ov-sub-content" hidden>
+          <div class="info-row"><span class="info-label">Status</span><span id="ov-status-badge"></span></div>
+          <div class="info-row last"><span class="info-label">Renews</span><span class="info-value" id="ov-renews"></span></div>
         </div>
-        <div class="billing-actions">
-          <button class="manage-btn" id="update-card-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-            Update payment method
-          </button>
-          <button class="danger-btn" id="cancel-sub-btn">
-            Cancel subscription
-          </button>
-        </div>
-
-        <!-- Inline card update form (hidden by default) -->
-        <div class="card-update-form" id="card-update-form" hidden>
-          <label>New card details</label>
-          <div id="update-card-element"></div>
-          <div id="update-card-errors"></div>
-          <div class="card-update-actions">
-            <button class="card-save-btn" id="card-save-btn">Save card</button>
-            <button class="card-cancel-link" id="card-update-cancel">Cancel</button>
-          </div>
-        </div>
-
-        <!-- Cancel confirmation (hidden by default) -->
-        <div class="cancel-confirm" id="cancel-confirm" hidden>
-          <p>Your subscription will remain active until the end of the billing period. Cancel anyway?</p>
-          <div class="cancel-confirm-actions">
-            <button class="danger-btn" id="cancel-confirm-btn">Yes, cancel</button>
-            <button class="card-cancel-link" id="cancel-abort-btn">Keep subscription</button>
+        <div id="ov-free" hidden style="margin-top:4px">
+          <div class="upgrade-box">
+            <p>You're on the <strong>Free</strong> plan. Upgrade to Pro for encrypted cloud sync.</p>
+            <a href="/#pricing" class="btn btn-primary">Upgrade to Pro</a>
           </div>
         </div>
       </div>
-      <!-- No sub (free) -->
-      <div id="sub-free" hidden>
-        <div class="upgrade-box">
-          <p>You're on the <strong>Free</strong> plan. Upgrade to Pro for encrypted cloud sync across all your machines.</p>
-          <a href="/#pricing" class="btn btn-primary">Upgrade to Pro →</a>
+    </section>
+
+    <!-- Profile -->
+    <section id="section-profile" class="section">
+      <h1 class="section-title">Profile</h1>
+      <div class="card">
+        <p class="card-title">Account Information</p>
+        <div class="field">
+          <label for="profile-name">Display name</label>
+          <input type="text" id="profile-name" placeholder="Your name" maxlength="128" autocomplete="name" />
+        </div>
+        <div class="field">
+          <label for="profile-email">Email address</label>
+          <input type="email" id="profile-email" readonly />
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="profile-save-btn">Save changes</button>
+        </div>
+        <div id="profile-msg" class="form-msg"></div>
+      </div>
+      <div class="card">
+        <p class="card-title">Change Password</p>
+        <div class="field">
+          <label for="pw-current">Current password</label>
+          <input type="password" id="pw-current" autocomplete="current-password" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="pw-new">New password</label>
+            <input type="password" id="pw-new" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label for="pw-confirm">Confirm new password</label>
+            <input type="password" id="pw-confirm" autocomplete="new-password" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="pw-save-btn">Update password</button>
+        </div>
+        <div id="pw-msg" class="form-msg"></div>
+      </div>
+    </section>
+
+    <!-- Billing -->
+    <section id="section-billing" class="section">
+      <h1 class="section-title">Billing</h1>
+      <div class="card">
+        <p class="card-title">Subscription</p>
+        <div id="billing-sub-loading">
+          <div class="skeleton" style="height:14px;width:100%;margin-bottom:10px"></div>
+          <div class="skeleton" style="height:14px;width:55%"></div>
+        </div>
+        <div id="billing-sub-content" hidden>
+          <div id="billing-sub-active" hidden>
+            <div class="info-row"><span class="info-label">Plan</span><span class="info-value" id="billing-plan"></span></div>
+            <div class="info-row"><span class="info-label">Status</span><span id="billing-status-badge"></span></div>
+            <div class="info-row last"><span class="info-label">Renews</span><span class="info-value" id="billing-renews"></span></div>
+            <div style="margin-top:16px">
+              <button class="btn btn-danger btn-sm" id="cancel-sub-btn">Cancel subscription</button>
+            </div>
+            <div class="inline-confirm" id="cancel-confirm" hidden>
+              <p>Your access continues until the end of the current period. Cancel anyway?</p>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-danger btn-sm" id="cancel-confirm-btn">Yes, cancel</button>
+                <button class="btn btn-secondary btn-sm" id="cancel-abort-btn">Keep subscription</button>
+              </div>
+            </div>
+          </div>
+          <div id="billing-free" hidden>
+            <div class="upgrade-box">
+              <p>You're on the <strong>Free</strong> plan. Upgrade to Pro for encrypted cloud sync.</p>
+              <a href="/#pricing" class="btn btn-primary">Upgrade to Pro</a>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </div>
 
-  <!-- CLI card -->
-  <div class="dash-card" id="cli-card" hidden>
-    <p class="dash-card-title">Link your CLI</p>
-    <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:10px">
-      Authenticate the MemCode CLI to start syncing workspaces:
-    </p>
-    <div class="cli-block"><span>$</span> memory sync auth</div>
-    <p style="font-size:0.8rem;color:var(--text-dim);margin-top:12px">
-      Enter your email and password (or set one with <code style="font-family:var(--mono)">memory sync set-password</code>) when prompted.
-    </p>
-  </div>
-</main>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <p class="card-title" style="margin-bottom:0">Payment Methods</p>
+          <button class="btn btn-secondary btn-sm" id="add-card-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add card
+          </button>
+        </div>
+        <div id="pm-loading">
+          <div class="skeleton" style="height:44px;margin-bottom:7px"></div>
+          <div class="skeleton" style="height:44px"></div>
+        </div>
+        <div id="pm-list" class="pm-table" hidden></div>
+        <p id="pm-none" style="font-size:0.84rem;color:var(--text-dim);margin:0" hidden>No saved payment methods.</p>
+        <div class="add-card-form" id="add-card-form" hidden>
+          <label>Card details</label>
+          <div id="add-card-element"></div>
+          <div id="add-card-errors"></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" id="add-card-save-btn">Add card</button>
+            <button class="btn btn-secondary btn-sm" id="add-card-cancel-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLI -->
+    <section id="section-cli" class="section">
+      <h1 class="section-title">CLI Setup</h1>
+      <div class="card">
+        <p class="card-title">Link your CLI</p>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin:0 0 12px">Authenticate the MemCode CLI to start syncing workspaces:</p>
+        <div class="cli-block"><span>$</span> memory sync auth</div>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-top:12px;margin-bottom:0">
+          Enter your email and password when prompted.<br/>
+          Set a password with <code style="font-family:var(--mono)">memory sync set-password</code>
+        </p>
+      </div>
+    </section>
+  </main>
+</div>
 
 <script src="https://js.stripe.com/v3/"></script>
 <script src="/js/dashboard.js"></script>
