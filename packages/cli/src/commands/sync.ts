@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline/promises';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import pc from 'picocolors';
@@ -263,6 +263,145 @@ syncCommand
       console.log(`  Endpoint:     ${pc.dim(auth.endpoint)}`);
     } catch (err) {
       console.error(pc.red('Error:'), (err as Error).message);
+    }
+  });
+
+// ─── set-password ───────────────────────────────────────────────────────────
+
+syncCommand
+  .command('set-password')
+  .description('Change your MemCode account password')
+  .action(async () => {
+    const auth = readAuthConfig();
+    if (!auth) {
+      console.log(noAuthMsg());
+      process.exit(1);
+    }
+
+    const rl = createInterface({ input: process.stdin, output: process.stderr });
+    console.error(pc.bold('\nMemCode Cloud — change password\n'));
+
+    const readPassword = (label: string) =>
+      new Promise<string>((resolve) => {
+        process.stderr.write(label);
+        let pwd = '';
+        process.stdin.setRawMode?.(true);
+        process.stdin.resume();
+        process.stdin.setEncoding('utf-8');
+        const onData = (ch: Buffer | string) => {
+          const char = ch.toString();
+          if (char === '\r' || char === '\n') {
+            process.stdin.setRawMode?.(false);
+            process.stdin.pause();
+            process.stdin.removeListener('data', onData);
+            process.stderr.write('\n');
+            resolve(pwd);
+          } else if (char === '\u0003') {
+            process.exit(0);
+          } else if (char === '\u007f') {
+            pwd = pwd.slice(0, -1);
+          } else {
+            pwd += char;
+          }
+        };
+        process.stdin.on('data', onData);
+      });
+
+    try {
+      const currentPassword = await readPassword('Current password: ');
+      const newPassword = await readPassword('New password (min 8 chars): ');
+      const confirmPassword = await readPassword('Confirm new password: ');
+      rl.close();
+
+      if (newPassword !== confirmPassword) {
+        console.error(pc.red('✗'), 'Passwords do not match.');
+        process.exit(1);
+      }
+      if (newPassword.length < 8) {
+        console.error(pc.red('✗'), 'New password must be at least 8 characters.');
+        process.exit(1);
+      }
+
+      const endpoint = auth.endpoint.replace(/\/$/, '');
+      const res = await fetch(`${endpoint}/v1/user/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.apiToken}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      if (res.ok) {
+        console.log(pc.green('✓'), 'Password changed successfully.');
+        console.log(pc.dim('  Your encryption passphrase is unchanged — existing cloud data remains accessible.'));
+      } else {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        console.error(pc.red('✗'), err.error ?? `Request failed (${res.status})`);
+        process.exit(1);
+      }
+    } catch (err) {
+      rl.close();
+      console.error(pc.red('Error:'), (err as Error).message);
+      process.exit(1);
+    }
+  });
+
+// ─── logout ──────────────────────────────────────────────────────────────────
+
+syncCommand
+  .command('logout')
+  .description('Clear locally stored cloud credentials')
+  .action(() => {
+    if (!existsSync(AUTH_CONFIG_PATH)) {
+      console.log(pc.yellow('~'), 'No credentials stored — already logged out.');
+      return;
+    }
+    try {
+      unlinkSync(AUTH_CONFIG_PATH);
+      console.log(pc.green('✓'), 'Logged out — credentials cleared.');
+      console.log(pc.dim(`  Run ${pc.cyan('memory sync auth')} to authenticate again.`));
+    } catch (err) {
+      console.error(pc.red('Error:'), (err as Error).message);
+      process.exit(1);
+    }
+  });
+
+// ─── whoami ──────────────────────────────────────────────────────────────────
+
+syncCommand
+  .command('whoami')
+  .description('Show the current cloud authentication state')
+  .action(async () => {
+    const auth = readAuthConfig();
+    if (!auth) {
+      console.log(pc.yellow('Not logged in.'));
+      console.log(`  Run ${pc.cyan('memory sync auth')} to authenticate.`);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${auth.endpoint.replace(/\/$/, '')}/v1/auth/me`, {
+        headers: { Authorization: `Bearer ${auth.apiToken}` },
+      });
+
+      if (res.ok) {
+        const { email } = (await res.json()) as { email: string };
+        console.log(pc.green('✓'), 'Authenticated as', pc.cyan(email));
+        console.log(`  Endpoint : ${pc.dim(auth.endpoint)}`);
+        console.log(`  Config   : ${pc.dim(AUTH_CONFIG_PATH)}`);
+      } else if (res.status === 401) {
+        console.log(pc.red('✗'), 'Token expired or revoked.');
+        console.log(`  Run ${pc.cyan('memory sync auth')} to re-authenticate.`);
+      } else {
+        console.log(pc.yellow('~'), `Server returned ${res.status} — could not verify token.`);
+        console.log(`  Endpoint : ${pc.dim(auth.endpoint)}`);
+      }
+    } catch {
+      // Offline / unreachable
+      console.log(pc.yellow('~'), 'Cannot reach server — showing local credentials.');
+      console.log(`  Endpoint : ${pc.dim(auth.endpoint)}`);
+      console.log(`  Config   : ${pc.dim(AUTH_CONFIG_PATH)}`);
     }
   });
 
