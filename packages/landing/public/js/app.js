@@ -151,6 +151,9 @@ cardSubmit?.addEventListener('click', async () => {
 
     if (error) throw new Error(error.message);
 
+    // Prevent replay of the same setup intent
+    delete cardSubmit.dataset.clientSecret;
+
     const paymentMethodId = setupIntent.payment_method;
 
     const res = await fetch(`${API_BASE}/v1/billing/subscribe`, {

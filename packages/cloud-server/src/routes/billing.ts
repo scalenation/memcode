@@ -162,6 +162,25 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
       const { customerId, paymentMethodId, plan = 'monthly' } = request.body;
       const priceId = plan === 'yearly' ? config.stripePriceIdYearly : config.stripePriceId;
 
+      // Idempotency guard: return existing active/trialing subscription for this customer
+      const existing = await stripe.subscriptions.list({
+        customer: customerId,
+        status: 'active',
+        limit: 1,
+      });
+      if (existing.data.length === 0) {
+        const existingTrialing = await stripe.subscriptions.list({
+          customer: customerId,
+          status: 'trialing',
+          limit: 1,
+        });
+        if (existingTrialing.data.length > 0) {
+          return reply.send({ subscriptionId: existingTrialing.data[0].id, status: existingTrialing.data[0].status });
+        }
+      } else {
+        return reply.send({ subscriptionId: existing.data[0].id, status: existing.data[0].status });
+      }
+
       // Attach card as customer default payment method
       await stripe.customers.update(customerId, {
         invoice_settings: { default_payment_method: paymentMethodId },
