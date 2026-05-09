@@ -52,6 +52,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   }
 
+  // Root info
+  fastify.get('/', async (_req, reply) => {
+    return reply.send({ name: 'MemCode Cloud API', version: '1.0.0', status: 'ok' });
+  });
+
   // One-time migration endpoint — protected by a secret
   fastify.post('/v1/admin/migrate', async (_req, reply) => {
     if (_req.headers['x-admin-secret'] !== process.env.ADMIN_SECRET) {
