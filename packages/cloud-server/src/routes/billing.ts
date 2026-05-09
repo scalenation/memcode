@@ -40,6 +40,7 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Get or create Stripe customer for this email
       let customerId: string;
+      let checkoutDbUserId: string | undefined;
       const userResult = await pool.query(
         'SELECT id, stripe_customer_id FROM users WHERE email = $1',
         [email.toLowerCase()],
@@ -47,6 +48,7 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
 
       if ((userResult.rowCount ?? 0) > 0) {
         const user = userResult.rows[0] as { id: string; stripe_customer_id: string | null };
+        checkoutDbUserId = user.id;
         if (user.stripe_customer_id) {
           customerId = user.stripe_customer_id;
         } else {
@@ -62,21 +64,35 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         customerId = customer.id;
       }
 
-      const session = await stripe.checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ['card'],
-        mode: 'subscription',
-        line_items: [
-          {
-            price: priceId,
-            quantity: 1,
-          },
-        ],
-        success_url: `${config.appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${config.appUrl}/pricing`,
-        customer_update: { address: 'auto' },
-        automatic_tax: { enabled: true },
-      });
+      const createCheckoutSession = async (cid: string) =>
+        stripe.checkout.sessions.create({
+          customer: cid,
+          payment_method_types: ['card'],
+          mode: 'subscription',
+          line_items: [{ price: priceId, quantity: 1 }],
+          success_url: `${config.appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url: `${config.appUrl}/pricing`,
+          customer_update: { address: 'auto' },
+          automatic_tax: { enabled: true },
+        });
+
+      let session: Stripe.Checkout.Session;
+      try {
+        session = await createCheckoutSession(customerId);
+      } catch (err) {
+        if ((err as Stripe.StripeRawError).code === 'resource_missing') {
+          const customer = await stripe.customers.create({ email: email.toLowerCase() });
+          customerId = customer.id;
+          if (checkoutDbUserId) {
+            await pool.query('UPDATE users SET stripe_customer_id = $1 WHERE id = $2', [
+              customerId, checkoutDbUserId,
+            ]);
+          }
+          session = await createCheckoutSession(customerId);
+        } else {
+          throw err;
+        }
+      }
 
       return reply.send({ url: session.url });
     },
@@ -103,6 +119,7 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
       const { email } = request.body;
 
       let customerId: string;
+      let dbUserId: string | undefined;
       const userResult = await pool.query(
         'SELECT id, stripe_customer_id FROM users WHERE email = $1',
         [email.toLowerCase()],
@@ -110,6 +127,7 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
 
       if ((userResult.rowCount ?? 0) > 0) {
         const user = userResult.rows[0] as { id: string; stripe_customer_id: string | null };
+        dbUserId = user.id;
         if (user.stripe_customer_id) {
           customerId = user.stripe_customer_id;
         } else {
@@ -125,11 +143,33 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         customerId = customer.id;
       }
 
-      const setupIntent = await stripe.setupIntents.create({
-        customer: customerId,
-        payment_method_types: ['card'],
-        usage: 'off_session',
-      });
+      let setupIntent: Stripe.SetupIntent;
+      try {
+        setupIntent = await stripe.setupIntents.create({
+          customer: customerId,
+          payment_method_types: ['card'],
+          usage: 'off_session',
+        });
+      } catch (err) {
+        // Stale customer ID (e.g. deleted from Stripe dashboard) — recreate
+        if ((err as Stripe.StripeRawError).code === 'resource_missing') {
+          const customer = await stripe.customers.create({ email: email.toLowerCase() });
+          customerId = customer.id;
+          if (dbUserId) {
+            await pool.query('UPDATE users SET stripe_customer_id = $1 WHERE id = $2', [
+              customerId,
+              dbUserId,
+            ]);
+          }
+          setupIntent = await stripe.setupIntents.create({
+            customer: customerId,
+            payment_method_types: ['card'],
+            usage: 'off_session',
+          });
+        } else {
+          throw err;
+        }
+      }
 
       return reply.send({ clientSecret: setupIntent.client_secret, customerId });
     },
