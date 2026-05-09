@@ -111,9 +111,13 @@ export async function oauthRoutes(fastify: FastifyInstance): Promise<void> {
         if (!userRes.ok) return reply.redirect(`${config.appUrl}/login.html?error=userinfo`);
         const googleUser = await userRes.json() as { sub: string; email: string };
 
-        const user = await findOrCreateOAuthUser(googleUser.email, 'google', googleUser.sub);
-        const jwt = await signToken({ sub: user.id, email: user.email });
-        return reply.redirect(`${config.appUrl}/dashboard.html?token=${encodeURIComponent(jwt)}`);
+        try {
+          const user = await findOrCreateOAuthUser(googleUser.email, 'google', googleUser.sub);
+          const jwt = await signToken({ sub: user.id, email: user.email });
+          return reply.redirect(`${config.appUrl}/dashboard.html?token=${encodeURIComponent(jwt)}`);
+        } catch {
+          return reply.redirect(`${config.appUrl}/login.html?error=server_error`);
+        }
       },
     );
   } else {
@@ -175,9 +179,13 @@ export async function oauthRoutes(fastify: FastifyInstance): Promise<void> {
         }
         if (!email) return reply.redirect(`${config.appUrl}/login.html?error=no_email`);
 
-        const user = await findOrCreateOAuthUser(email, 'github', String(ghUser.id));
-        const jwt = await signToken({ sub: user.id, email: user.email });
-        return reply.redirect(`${config.appUrl}/dashboard.html?token=${encodeURIComponent(jwt)}`);
+        try {
+          const user = await findOrCreateOAuthUser(email, 'github', String(ghUser.id));
+          const jwt = await signToken({ sub: user.id, email: user.email });
+          return reply.redirect(`${config.appUrl}/dashboard.html?token=${encodeURIComponent(jwt)}`);
+        } catch {
+          return reply.redirect(`${config.appUrl}/login.html?error=server_error`);
+        }
       },
     );
   } else {

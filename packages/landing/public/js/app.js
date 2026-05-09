@@ -167,7 +167,12 @@ cardSubmit?.addEventListener('click', async () => {
       throw new Error(body.error ?? `Server error ${res.status}`);
     }
 
-    // Success!
+    // Success! Store auth token so user is auto-logged in on the dashboard
+    const subBody = await res.json().catch(() => ({}));
+    if (subBody.token) {
+      localStorage.setItem('mc_token', subBody.token);
+    }
+
     closeModal();
     const overlay = document.getElementById('success-overlay');
     if (overlay) {

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import Stripe from 'stripe';
 import { pool } from '../db/client';
 import { config } from '../config';
-import { authenticate } from '../middleware/authenticate';
+import { authenticate, signToken } from '../middleware/authenticate';
 import type { TokenPayload } from '../middleware/authenticate';
 
 const stripe = new Stripe(config.stripeSecretKey, { apiVersion: '2024-06-20' });
@@ -204,6 +204,17 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
           [email.toLowerCase(), '!LOCKED', customerId],
         );
         await upsertSubscription(subscription);
+
+        // Issue a JWT so the frontend can auto-log in after checkout
+        const userRow = await pool.query(
+          'SELECT id FROM users WHERE email = $1',
+          [email.toLowerCase()],
+        );
+        if ((userRow.rowCount ?? 0) > 0) {
+          const userId = (userRow.rows[0] as { id: string }).id;
+          const token = await signToken({ sub: userId, email: email.toLowerCase() });
+          return reply.send({ subscriptionId: subscription.id, status: subscription.status, token });
+        }
       }
 
       return reply.send({ subscriptionId: subscription.id, status: subscription.status });

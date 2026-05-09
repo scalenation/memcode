@@ -18,6 +18,7 @@ if (oauthError) {
     token_exchange: 'Failed to complete sign-in. Please try again.',
     userinfo:       'Could not retrieve your profile. Please try again.',
     no_email:       'Your GitHub account has no public email. Please add one and try again.',
+    server_error:   'A server error occurred. Please try again.',
   };
   showError(messages[oauthError] ?? 'Sign-in failed. Please try again.');
   history.replaceState(null, '', '/login.html');

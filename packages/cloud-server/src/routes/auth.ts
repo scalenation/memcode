@@ -96,6 +96,11 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(401).send({ error: 'Invalid email or password' });
       }
 
+      // Accounts created via OAuth or checkout can't use password login until a password is set
+      if (user.password_hash === '!LOCKED' || user.password_hash === '!OAUTH') {
+        return reply.status(401).send({ error: 'This account was created via Google/GitHub sign-in or checkout. Please sign in with the SSO button above, or reset your password.' });
+      }
+
       const valid = await compare(password, user.password_hash);
       if (!valid) {
         return reply.status(401).send({ error: 'Invalid email or password' });
