@@ -3,55 +3,25 @@ const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:3000'
   : 'https://api.memcode.pro';
 
-// ─── Billing plan state ───────────────────────────────────────────────────────
+// ─── Checkout flow ───────────────────────────────────────────────────────────
 
-let currentPlan = 'monthly'; // 'monthly' | 'yearly'
+let currentPlan = 'monthly'; // set when a checkout button is clicked
 
-const toggleMonthly = document.getElementById('toggle-monthly');
-const toggleYearly  = document.getElementById('toggle-yearly');
+const modal      = document.getElementById('checkout-modal');
+const modalClose = document.getElementById('modal-close-btn');
+const backdrop   = modal?.querySelector('.modal-backdrop');
+const form       = document.getElementById('checkout-form');
+const emailInput = document.getElementById('checkout-email');
+const submitBtn  = document.getElementById('checkout-submit');
+const errorEl    = document.getElementById('checkout-error');
 
-function applyPlan(plan) {
+function openModal(plan) {
+  if (!modal) return;
   currentPlan = plan;
-
-  // Toggle button styles
-  toggleMonthly?.classList.toggle('toggle-btn-active', plan === 'monthly');
-  toggleYearly?.classList.toggle('toggle-btn-active', plan === 'yearly');
-
-  // Show/hide price displays
-  const priceMonthly = document.getElementById('pro-price-monthly');
-  const priceYearly  = document.getElementById('pro-price-yearly');
-  if (priceMonthly) priceMonthly.hidden = plan !== 'monthly';
-  if (priceYearly)  priceYearly.hidden  = plan !== 'yearly';
-
-  // Show/hide billing notes
-  const noteMonthly = document.getElementById('billing-note-monthly');
-  const noteYearly  = document.getElementById('billing-note-yearly');
-  if (noteMonthly) noteMonthly.hidden = plan !== 'monthly';
-  if (noteYearly)  noteYearly.hidden  = plan !== 'yearly';
-
-  // Update modal price text
   const modalPriceText = document.getElementById('modal-price-text');
   if (modalPriceText) {
     modalPriceText.textContent = plan === 'yearly' ? '€40/year' : '$3.99/month';
   }
-}
-
-toggleMonthly?.addEventListener('click', () => applyPlan('monthly'));
-toggleYearly?.addEventListener('click',  () => applyPlan('yearly'));
-
-// ─── Checkout flow ───────────────────────────────────────────────────────────
-
-const checkoutBtn  = document.getElementById('checkout-btn');
-const modal        = document.getElementById('checkout-modal');
-const modalClose   = document.getElementById('modal-close-btn');
-const backdrop     = modal?.querySelector('.modal-backdrop');
-const form         = document.getElementById('checkout-form');
-const emailInput   = document.getElementById('checkout-email');
-const submitBtn    = document.getElementById('checkout-submit');
-const errorEl      = document.getElementById('checkout-error');
-
-function openModal() {
-  if (!modal) return;
   modal.hidden = false;
   document.body.style.overflow = 'hidden';
   emailInput?.focus();
@@ -63,7 +33,8 @@ function closeModal() {
   document.body.style.overflow = '';
 }
 
-checkoutBtn?.addEventListener('click', openModal);
+document.getElementById('checkout-btn-monthly')?.addEventListener('click', () => openModal('monthly'));
+document.getElementById('checkout-btn-yearly')?.addEventListener('click',  () => openModal('yearly'));
 modalClose?.addEventListener('click', closeModal);
 backdrop?.addEventListener('click', closeModal);
 

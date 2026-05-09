@@ -321,12 +321,13 @@ code {
 .pricing { padding: 96px 0; }
 .pricing-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 24px;
-  max-width: 800px;
+  max-width: 1080px;
   margin: 48px auto 0;
+  align-items: start;
 }
-@media (max-width: 640px) { .pricing-grid { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .pricing-grid { grid-template-columns: 1fr; max-width: 480px; } }
 
 .pricing-card {
   background: var(--bg-card);
@@ -339,6 +340,11 @@ code {
   border: 2px solid var(--accent);
   background: var(--bg-card2);
   box-shadow: 0 0 40px rgba(108,99,255,0.12);
+}
+.pricing-card-yearly {
+  border: 2px solid var(--green);
+  background: var(--bg-card2);
+  box-shadow: 0 0 40px rgba(52,211,153,0.1);
 }
 .pricing-badge {
   position: absolute;
@@ -353,7 +359,18 @@ code {
   border-radius: 999px;
   white-space: nowrap;
 }
+.pricing-badge-green { background: linear-gradient(135deg,#34d399,#059669); }
 .pricing-header h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; }
+.yearly-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(52,211,153,0.15);
+  color: var(--green);
+  padding: 2px 8px;
+  border-radius: 999px;
+  vertical-align: middle;
+  margin-left: 4px;
+}
 .pricing-price {
   display: flex;
   align-items: baseline;
@@ -362,6 +379,7 @@ code {
 }
 .price-amount { font-size: 2.8rem; font-weight: 800; line-height: 1; }
 .price-period { color: var(--text-dim); font-size: 0.9rem; }
+.pricing-equiv { font-size: 0.8rem; color: var(--green); font-weight: 600; margin-bottom: 4px; }
 .pricing-trial { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 24px; }
 .pricing-features {
   list-style: none;
@@ -376,41 +394,6 @@ code {
 .pricing-features .cross::before { content: '×'; color: var(--text-dim); }
 .pricing-features .pro-check { color: var(--text); }
 .pricing-card-note { font-size: 0.75rem; color: var(--text-dim); text-align: center; margin-top: 12px; }
-
-/* ─── Billing toggle ─────────────────────────────────────────────────────── */
-.billing-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 40px;
-}
-.toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s, color 0.2s, border-color 0.2s;
-}
-.toggle-btn:hover { border-color: var(--accent); color: var(--text); }
-.toggle-btn-active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.savings-badge {
-  font-size: 0.7rem;
-  font-weight: 700;
-  background: rgba(255,255,255,0.2);
-  padding: 2px 7px;
-  border-radius: 999px;
-}
-.toggle-btn-active .savings-badge { background: rgba(255,255,255,0.25); }
-.toggle-btn:not(.toggle-btn-active) .savings-badge { background: var(--accent-dim, rgba(108,99,255,0.15)); color: var(--accent); }
-.price-equiv { font-size: 0.8rem; color: var(--text-dim); margin-left: 4px; }
 
 /* ─── Modal ──────────────────────────────────────────────────────────────── */
 .modal { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; }

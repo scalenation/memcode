@@ -186,14 +186,7 @@
     <h2 class="section-title">Simple, honest pricing</h2>
     <p class="section-sub">The CLI is free and open-source, forever. Pro adds cloud sync.</p>
 
-    <!-- Billing period toggle -->
-    <div class="billing-toggle">
-      <button id="toggle-monthly" class="toggle-btn toggle-btn-active" data-plan="monthly">Monthly</button>
-      <button id="toggle-yearly" class="toggle-btn" data-plan="yearly">
-        Yearly
-        <span class="savings-badge">Save ~16%</span>
-      </button>
-    </div>
+    <div class="pricing-grid">
       <!-- Free -->
       <div class="pricing-card">
         <div class="pricing-header">
@@ -220,19 +213,14 @@
         </a>
       </div>
 
-      <!-- Pro -->
+      <!-- Pro Monthly -->
       <div class="pricing-card pricing-card-pro">
         <div class="pricing-badge">Most Popular</div>
         <div class="pricing-header">
           <h3>Pro</h3>
-          <div class="pricing-price" id="pro-price-monthly">
+          <div class="pricing-price">
             <span class="price-amount">$3.99</span>
             <span class="price-period">/ month</span>
-          </div>
-          <div class="pricing-price" id="pro-price-yearly" hidden>
-            <span class="price-amount">€40</span>
-            <span class="price-period">/ year</span>
-            <span class="price-equiv">(≈€3.33/mo)</span>
           </div>
           <p class="pricing-trial">7-day free trial · cancel any time</p>
         </div>
@@ -244,11 +232,36 @@
           <li class="check pro-check">Sync unlimited workspaces</li>
           <li class="check">Priority support</li>
         </ul>
-        <button id="checkout-btn" class="btn btn-primary btn-full btn-lg">
+        <button id="checkout-btn-monthly" class="btn btn-primary btn-full btn-lg">
           Start free trial →
         </button>
-        <p class="pricing-card-note" id="billing-note-monthly">Billed monthly. No contract. Cancel from your account portal.</p>
-        <p class="pricing-card-note" id="billing-note-yearly" hidden>Billed annually in EUR. No contract. Cancel from your account portal.</p>
+        <p class="pricing-card-note">Billed monthly. No contract. Cancel from your account portal.</p>
+      </div>
+
+      <!-- Pro Yearly -->
+      <div class="pricing-card pricing-card-yearly">
+        <div class="pricing-badge pricing-badge-green">Best Value</div>
+        <div class="pricing-header">
+          <h3>Pro <span class="yearly-label">Yearly</span></h3>
+          <div class="pricing-price">
+            <span class="price-amount">€40</span>
+            <span class="price-period">/ year</span>
+          </div>
+          <p class="pricing-equiv">≈ €3.33 / month · save ~16%</p>
+          <p class="pricing-trial">7-day free trial · cancel any time</p>
+        </div>
+        <ul class="pricing-features">
+          <li class="check">Everything in Free</li>
+          <li class="check pro-check">Cross-machine cloud sync</li>
+          <li class="check pro-check">AES-256-GCM E2E encryption</li>
+          <li class="check pro-check">Zero-knowledge architecture</li>
+          <li class="check pro-check">Sync unlimited workspaces</li>
+          <li class="check">Priority support</li>
+        </ul>
+        <button id="checkout-btn-yearly" class="btn btn-primary btn-full btn-lg">
+          Start free trial →
+        </button>
+        <p class="pricing-card-note">Billed annually in EUR. No contract. Cancel from your account portal.</p>
       </div>
     </div>
 
