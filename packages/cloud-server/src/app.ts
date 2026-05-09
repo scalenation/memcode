@@ -10,6 +10,8 @@ import { neon } from '@neondatabase/serverless';
 import { authRoutes } from './routes/auth';
 import { syncRoutes } from './routes/sync';
 import { billingRoutes } from './routes/billing';
+import { oauthRoutes } from './routes/oauth';
+import { userRoutes } from './routes/user';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
@@ -87,6 +89,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   await fastify.register(authRoutes);
   await fastify.register(syncRoutes);
   await fastify.register(billingRoutes);
+  await fastify.register(oauthRoutes);
+  await fastify.register(userRoutes);
 
   return fastify;
 }

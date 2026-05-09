@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — MemCode</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    /* ── Layout ── */
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    .dash-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 60px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .dash-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1rem; text-decoration: none; color: var(--text); }
+    .dash-nav-right { display: flex; align-items: center; gap: 12px; }
+    .dash-email { font-size: 0.82rem; color: var(--text-dim); }
+    .signout-btn {
+      font-size: 0.82rem; background: none; border: 1px solid var(--border);
+      color: var(--text-dim); border-radius: var(--radius-sm);
+      padding: 5px 12px; cursor: pointer; transition: color 0.15s, border-color 0.15s;
+    }
+    .signout-btn:hover { color: var(--text); border-color: var(--accent); }
+    .dash-main { flex: 1; padding: 40px 24px; max-width: 720px; margin: 0 auto; width: 100%; }
+
+    /* ── Cards ── */
+    .dash-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 20px;
+    }
+    .dash-card-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 16px; }
+    .dash-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+    .dash-label { font-size: 0.82rem; color: var(--text-dim); }
+    .dash-value { font-size: 0.92rem; font-weight: 600; }
+
+    /* ── Status badge ── */
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 0.75rem; font-weight: 700;
+      padding: 3px 10px; border-radius: 999px;
+    }
+    .status-active   { background: rgba(52,211,153,0.15); color: #34d399; }
+    .status-trialing { background: rgba(108,99,255,0.15); color: var(--accent); }
+    .status-past_due { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .status-canceled { background: rgba(248,113,113,0.12); color: var(--red); }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    /* ── Free plan state ── */
+    .upgrade-box {
+      background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.03));
+      border: 1px dashed rgba(108,99,255,0.3);
+      border-radius: var(--radius-sm);
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .upgrade-box p { color: var(--text-dim); font-size: 0.88rem; margin-bottom: 14px; }
+
+    /* ── Billing actions ── */
+    .billing-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+    .manage-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 20px; font-size: 0.88rem; font-weight: 600;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius-sm); cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .manage-btn:hover { opacity: 0.88; }
+    .manage-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── CLI block ── */
+    .cli-block {
+      font-family: var(--mono); font-size: 0.88rem;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 12px 16px;
+      color: var(--text-dim); margin-top: 10px;
+    }
+    .cli-block span { color: var(--accent-2); }
+
+    /* ── Skeleton loader ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+      border-radius: 6px; height: 16px;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ── Error notice ── */
+    .dash-error {
+      background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25);
+      border-radius: var(--radius-sm); padding: 14px 16px;
+      color: var(--red); font-size: 0.88rem; margin-bottom: 20px; display: none;
+    }
+    .dash-error.visible { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- ── Nav ── -->
+<nav class="dash-nav">
+  <a href="/" class="dash-logo">
+    <span>🧠</span>
+    <span>MemCode</span>
+  </a>
+  <div class="dash-nav-right">
+    <span class="dash-email" id="nav-email"></span>
+    <button class="signout-btn" id="signout-btn">Sign out</button>
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<main class="dash-main">
+  <div id="dash-error" class="dash-error"></div>
+
+  <!-- Account card -->
+  <div class="dash-card">
+    <p class="dash-card-title">Account</p>
+    <div class="dash-row">
+      <span class="dash-label">Email</span>
+      <span class="dash-value" id="acc-email"><span class="skeleton" style="width:160px"></span></span>
+    </div>
+  </div>
+
+  <!-- Subscription card -->
+  <div class="dash-card" id="sub-card">
+    <p class="dash-card-title">Subscription</p>
+    <div id="sub-loading">
+      <div class="skeleton" style="width:100%;height:14px;margin-bottom:12px"></div>
+      <div class="skeleton" style="width:60%;height:14px"></div>
+    </div>
+    <div id="sub-content" hidden>
+      <!-- Active sub -->
+      <div id="sub-active" hidden>
+        <div class="dash-row" style="margin-bottom:12px">
+          <span class="dash-label">Plan</span>
+          <span class="dash-value" id="sub-plan"></span>
+        </div>
+        <div class="dash-row" style="margin-bottom:12px">
+          <span class="dash-label">Status</span>
+          <span id="sub-status-badge"></span>
+        </div>
+        <div class="dash-row">
+          <span class="dash-label">Renews</span>
+          <span class="dash-value" id="sub-renews"></span>
+        </div>
+        <div class="billing-actions">
+          <button class="manage-btn" id="manage-billing-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            Manage billing
+          </button>
+        </div>
+        <p style="font-size:0.75rem;color:var(--text-dim);margin-top:10px">
+          Change payment method · cancel — all from the billing portal.
+        </p>
+      </div>
+      <!-- No sub (free) -->
+      <div id="sub-free" hidden>
+        <div class="upgrade-box">
+          <p>You're on the <strong>Free</strong> plan. Upgrade to Pro for encrypted cloud sync across all your machines.</p>
+          <a href="/#pricing" class="btn btn-primary">Upgrade to Pro →</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CLI card -->
+  <div class="dash-card" id="cli-card" hidden>
+    <p class="dash-card-title">Link your CLI</p>
+    <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:10px">
+      Authenticate the MemCode CLI to start syncing workspaces:
+    </p>
+    <div class="cli-block"><span>$</span> memory sync auth</div>
+    <p style="font-size:0.8rem;color:var(--text-dim);margin-top:12px">
+      Enter your email and password (or set one with <code style="font-family:var(--mono)">memory sync set-password</code>) when prompted.
+    </p>
+  </div>
+</main>
+
+<script src="/js/dashboard.js"></script>
+</body>
+</html>

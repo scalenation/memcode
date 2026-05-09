@@ -7,8 +7,10 @@
     }
   },
   "rewrites": [
-    { "source": "/health", "destination": "/api/index" },
-    { "source": "/v1/(.*)", "destination": "/api/index" }
+    { "source": "/health",    "destination": "/api/index" },
+    { "source": "/v1/(.*)",   "destination": "/api/index" },
+    { "source": "/dashboard", "destination": "/dashboard.html" },
+    { "source": "/login",     "destination": "/login.html" }
   ],
   "env": {
     "SERVE_STATIC": "false"

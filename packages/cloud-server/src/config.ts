@@ -16,4 +16,9 @@ export const config = {
   stripePriceId: required('STRIPE_PRICE_ID'),
   stripePriceIdYearly: required('STRIPE_PRICE_ID_YEARLY'),
   appUrl: process.env.APP_URL ?? 'http://localhost:3000',
+  // OAuth — optional; routes are skipped if not configured
+  googleClientId: process.env.GOOGLE_CLIENT_ID,
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET,
+  githubClientId: process.env.GITHUB_CLIENT_ID,
+  githubClientSecret: process.env.GITHUB_CLIENT_SECRET,
 };

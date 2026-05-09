@@ -28,7 +28,10 @@
       <li><a href="#pricing">Pricing</a></li>
       <li><a href="https://github.com/scalenation/memcode" target="_blank" rel="noopener">GitHub</a></li>
     </ul>
-    <a href="#pricing" class="btn btn-primary btn-sm">Get Pro — $3.99/mo</a>
+    <div style="display:flex;gap:10px;align-items:center">
+      <a href="/login" class="btn btn-ghost btn-sm">Sign in</a>
+      <a href="#pricing" class="btn btn-primary btn-sm">Get Pro — $3.99/mo</a>
+    </div>
   </nav>
 </header>
 
@@ -402,7 +405,11 @@
   <div class="success-box">
     <div class="success-icon">🎉</div>
     <h2>You're on Pro!</h2>
-    <p>Your subscription is active. Now link the CLI to your account:</p>
+    <p>Your subscription is active. Sign in to manage your billing, or link the CLI to start syncing:</p>
+    <div style="margin:16px 0">
+      <a href="/dashboard" class="btn btn-primary">Go to dashboard →</a>
+    </div>
+    <p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">Or link the CLI directly:</p>
     <div class="code-block"><code>memory sync auth</code></div>
     <p class="success-note">Enter your email and password when prompted. Then push your first workspace:</p>
     <div class="code-block"><code>cd my-project &amp;&amp; memory sync push</code></div>
