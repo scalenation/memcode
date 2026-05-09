@@ -61,8 +61,45 @@ async function loadProfile() {
     if (['active', 'trialing'].includes(subscription.status)) {
       document.getElementById('cli-card').hidden = false;
     }
+
+    // Load saved payment methods in parallel
+    loadPaymentMethods();
   } else {
     document.getElementById('sub-free').hidden = false;
+  }
+}
+
+// ── Load saved payment methods ────────────────────────────────────────────────
+async function loadPaymentMethods() {
+  try {
+    const res  = await authFetch('/v1/billing/payment-methods');
+    const body = await res.json();
+    document.getElementById('pm-loading').hidden = true;
+
+    const methods = body.paymentMethods ?? [];
+    if (methods.length === 0) {
+      document.getElementById('pm-none').hidden = false;
+      return;
+    }
+
+    const list = document.getElementById('pm-list');
+    list.innerHTML = '';
+    for (const pm of methods) {
+      const exp   = `${String(pm.expMonth).padStart(2, '0')}/${String(pm.expYear).slice(-2)}`;
+      const chip  = document.createElement('div');
+      chip.className = `pm-chip${pm.isDefault ? ' is-default' : ''}`;
+      chip.innerHTML = `
+        <span class="pm-brand">${escapeHtml(pm.brand)}</span>
+        <span class="pm-last4">···· ${escapeHtml(pm.last4)}</span>
+        <span class="pm-expiry">${exp}</span>
+        ${pm.isDefault ? '<span class="pm-default-badge">Default</span>' : ''}
+      `;
+      list.appendChild(chip);
+    }
+    list.hidden = false;
+  } catch (_) {
+    document.getElementById('pm-loading').hidden = true;
+    document.getElementById('pm-none').hidden = false;
   }
 }
 
@@ -119,6 +156,11 @@ document.getElementById('card-save-btn')?.addEventListener('click', async () => 
     document.getElementById('card-update-form').hidden = true;
     document.getElementById('update-card-btn').hidden  = false;
     showSuccess('Payment method updated successfully.');
+    // Refresh the saved card display
+    document.getElementById('pm-list').hidden = true;
+    document.getElementById('pm-none').hidden = true;
+    document.getElementById('pm-loading').hidden = false;
+    loadPaymentMethods();
   } catch (err) {
     errEl.textContent   = err instanceof Error ? err.message : 'Failed to update card.';
     errEl.style.display = 'block';
@@ -178,6 +220,9 @@ function formatDate(iso) {
 }
 function capitalise(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
+}
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 function showError(msg) {
   const el = document.getElementById('dash-error');

@@ -217,6 +217,48 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
+   * GET /v1/billing/payment-methods
+   * Returns the saved payment methods for the authenticated user's Stripe customer.
+   * Requires auth.
+   */
+  fastify.get(
+    '/v1/billing/payment-methods',
+    { preHandler: authenticate },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+      const userResult = await pool.query(
+        'SELECT stripe_customer_id FROM users WHERE id = $1',
+        [user.sub],
+      );
+      const row = userResult.rows[0] as { stripe_customer_id: string | null } | undefined;
+      if (!row?.stripe_customer_id) {
+        return reply.send({ paymentMethods: [] });
+      }
+      // Fetch the customer so we know the default PM
+      const customer = await stripe.customers.retrieve(row.stripe_customer_id) as Stripe.Customer;
+      const defaultPmId =
+        typeof customer.invoice_settings?.default_payment_method === 'string'
+          ? customer.invoice_settings.default_payment_method
+          : (customer.invoice_settings?.default_payment_method as Stripe.PaymentMethod | null)?.id ?? null;
+
+      const pmList = await stripe.paymentMethods.list({
+        customer: row.stripe_customer_id,
+        type: 'card',
+        limit: 10,
+      });
+      const paymentMethods = pmList.data.map((pm) => ({
+        id: pm.id,
+        brand: pm.card?.brand ?? 'card',
+        last4: pm.card?.last4 ?? '????',
+        expMonth: pm.card?.exp_month ?? 0,
+        expYear: pm.card?.exp_year ?? 0,
+        isDefault: pm.id === defaultPmId,
+      }));
+      return reply.send({ paymentMethods });
+    },
+  );
+
+  /**
    * POST /v1/billing/update-payment
    * Creates a new SetupIntent so the user can replace their payment method.
    * Requires auth.
