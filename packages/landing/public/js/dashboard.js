@@ -78,6 +78,12 @@ async function loadProfile() {
   document.getElementById('profile-name').value = name ?? '';
   document.getElementById('profile-email').value = email;
 
+  // Show "Set CLI Password" card for OAuth/checkout accounts that have no password yet
+  if (profileData.hasPassword === false) {
+    document.getElementById('set-cli-password-card').hidden = false;
+    document.getElementById('pw-save-btn').closest('.card').hidden = true; // hide change-password card
+  }
+
   // Billing subscription
   document.getElementById('billing-sub-loading').hidden = true;
   document.getElementById('billing-sub-content').hidden = false;
@@ -368,6 +374,44 @@ document.getElementById('pw-save-btn')?.addEventListener('click', async () => {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Update password';
+  }
+});
+
+// ── Set initial CLI password (OAuth accounts) ─────────────────────────────────
+document.getElementById('cli-pw-save-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('cli-pw-save-btn');
+  const msgEl = document.getElementById('cli-pw-msg');
+  const newPassword = document.getElementById('cli-pw-new').value;
+  const confirmPassword = document.getElementById('cli-pw-confirm').value;
+
+  if (!newPassword || !confirmPassword) {
+    setMsg(msgEl, 'Both fields are required.', 'error'); return;
+  }
+  if (newPassword !== confirmPassword) {
+    setMsg(msgEl, 'Passwords do not match.', 'error'); return;
+  }
+  if (newPassword.length < 8) {
+    setMsg(msgEl, 'Password must be at least 8 characters.', 'error'); return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Setting…';
+  setMsg(msgEl, '', null);
+
+  try {
+    const res = await authFetch('/v1/auth/set-password', { method: 'POST', body: JSON.stringify({ newPassword }) });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to set password');
+    document.getElementById('cli-pw-new').value = '';
+    document.getElementById('cli-pw-confirm').value = '';
+    setMsg(msgEl, 'Password set! You can now use memory sync auth from the CLI.', 'success');
+    document.getElementById('set-cli-password-card').hidden = true;
+    document.getElementById('pw-save-btn').closest('.card').hidden = false;
+  } catch (err) {
+    setMsg(msgEl, err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Set password';
   }
 });
 

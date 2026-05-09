@@ -101,17 +101,17 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
         | undefined;
 
       if (!user) {
-        return reply.status(401).send({ error: 'Invalid email or password' });
+        return reply.status(404).send({ error: 'No account found with that email address.' });
       }
 
       // Accounts created via OAuth or checkout can't use password login until a password is set
       if (user.password_hash === '!LOCKED' || user.password_hash === '!OAUTH') {
-        return reply.status(401).send({ error: 'This account was created via Google/GitHub sign-in or checkout. Please sign in with the SSO button above, or reset your password.' });
+        return reply.status(403).send({ error: 'This account was created via Google/GitHub sign-in or checkout. Use the web dashboard to set a password first.' });
       }
 
       const valid = await compare(password, user.password_hash);
       if (!valid) {
-        return reply.status(401).send({ error: 'Invalid email or password' });
+        return reply.status(401).send({ error: 'Incorrect password.' });
       }
 
       let loginSid: string | undefined;
@@ -137,6 +137,39 @@ export async function authRoutes(fastify: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
       return reply.send({ userId: user.sub, email: user.email });
+    },
+  );
+
+  /**
+   * POST /v1/auth/set-password
+   * For accounts created via OAuth/checkout that don't yet have a CLI password.
+   * Body: { email, newPassword }  — no current password required (account is !LOCKED)
+   * Returns: { ok: true }
+   * Note: requires a valid JWT (user must be signed in via OAuth on the dashboard).
+   */
+  fastify.post<{ Body: { email: string; newPassword: string } }>(
+    '/v1/auth/set-password',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Body: { email: string; newPassword: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Body: { email: string; newPassword: string } }> & { user: TokenPayload }).user;
+      const { newPassword } = request.body;
+
+      if (!newPassword || newPassword.length < 8) {
+        return reply.status(400).send({ error: 'Password must be at least 8 characters.' });
+      }
+
+      const r = await pool.query('SELECT password_hash FROM users WHERE id = $1', [user.sub]);
+      const row = r.rows[0] as { password_hash: string } | undefined;
+      if (!row) return reply.status(404).send({ error: 'User not found' });
+
+      // Only allow setting a password when the account is locked (no existing password)
+      if (row.password_hash !== '!LOCKED' && row.password_hash !== '!OAUTH') {
+        return reply.status(400).send({ error: 'Account already has a password. Use the change password form instead.' });
+      }
+
+      const newHash = await hash(newPassword, 12);
+      await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, user.sub]);
+      return reply.send({ ok: true });
     },
   );
 }

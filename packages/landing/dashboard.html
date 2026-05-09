@@ -246,6 +246,24 @@
         </div>
         <div id="pw-msg" class="form-msg"></div>
       </div>
+      <div class="card" id="set-cli-password-card" hidden>
+        <p class="card-title">Set CLI Password</p>
+        <p style="font-size:0.83rem;color:var(--text-dim);margin:0 0 14px">Your account was created via Google/GitHub sign-in. Set a password to use <code style="font-size:0.82rem">memory sync auth</code> from the CLI.</p>
+        <div class="field-row">
+          <div class="field">
+            <label for="cli-pw-new">New password</label>
+            <input type="password" id="cli-pw-new" autocomplete="new-password" placeholder="Min 8 characters" />
+          </div>
+          <div class="field">
+            <label for="cli-pw-confirm">Confirm password</label>
+            <input type="password" id="cli-pw-confirm" autocomplete="new-password" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="cli-pw-save-btn">Set password</button>
+        </div>
+        <div id="cli-pw-msg" class="form-msg"></div>
+      </div>
       <div class="card danger-card">
         <p class="card-title">Danger Zone</p>
         <div class="info-row last">

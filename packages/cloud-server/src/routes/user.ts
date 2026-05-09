@@ -20,11 +20,14 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
 
       let userName: string | null = null;
+      let hasPassword = false;
       try {
-        const userResult = await pool.query('SELECT name FROM users WHERE id = $1', [user.sub]);
-        userName = (userResult.rows[0] as { name: string | null } | undefined)?.name ?? null;
+        const userResult = await pool.query('SELECT name, password_hash FROM users WHERE id = $1', [user.sub]);
+        const userRow = (userResult.rows[0] as { name: string | null; password_hash: string } | undefined);
+        userName = userRow?.name ?? null;
+        hasPassword = !!userRow && userRow.password_hash !== '!LOCKED' && userRow.password_hash !== '!OAUTH';
       } catch {
-        // name column may not exist yet — non-fatal
+        // non-fatal
       }
 
       const subResult = await pool.query(
@@ -50,7 +53,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
-      return reply.send({ userId: user.sub, email: user.email, name: userName, subscription });
+      return reply.send({ userId: user.sub, email: user.email, name: userName, subscription, hasPassword });
     },
   );
 
