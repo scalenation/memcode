@@ -92,5 +92,22 @@ export async function buildApp(): Promise<FastifyInstance> {
   await fastify.register(oauthRoutes);
   await fastify.register(userRoutes);
 
+  // Run incremental schema migrations on every cold start (all statements are idempotent)
+  fastify.addHook('onReady', async () => {
+    try {
+      await pool.query(`
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT;
+      `);
+      await pool.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_idx
+          ON users(oauth_provider, oauth_sub)
+          WHERE oauth_provider IS NOT NULL;
+      `);
+    } catch (err) {
+      fastify.log.warn({ err }, 'Schema migration warning (non-fatal)');
+    }
+  });
+
   return fastify;
 }
