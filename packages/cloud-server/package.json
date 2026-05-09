@@ -5,7 +5,7 @@
   "private": true,
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc && cp src/db/schema.sql dist/db/schema.sql",
+    "build": "tsc && cp src/db/schema.sql dist/db/schema.sql && mkdir -p public/css public/js && cp ../../packages/landing/index.html public/ && cp ../../packages/landing/public/css/style.css public/css/ && cp ../../packages/landing/public/js/app.js public/js/",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
