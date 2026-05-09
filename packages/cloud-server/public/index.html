@@ -10,6 +10,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/style.css" />
+  <script>window.STRIPE_PK = 'pk_test_51TV5XBV05uXvy1RK24ZWaB1Z9kjjtj6mIGOXdPpffnyjOkllzR356cFGFl6WlWxrHBnbCrBPUe80AYdUWBW2EfSf000kzTvH0P';</script>
+  <script src="https://js.stripe.com/v3/" defer></script>
 </head>
 <body>
 
@@ -270,26 +272,43 @@
       <div class="modal-backdrop"></div>
       <div class="modal-box">
         <button class="modal-close" id="modal-close-btn" aria-label="Close">✕</button>
-        <h3>Start your free trial</h3>
-        <p>Enter your email to continue to secure checkout.</p>
-        <form id="checkout-form">
-          <label for="checkout-email">Email address</label>
-          <input
-            type="email"
-            id="checkout-email"
-            name="email"
-            placeholder="you@example.com"
-            required
-            autocomplete="email"
-          />
-          <button type="submit" class="btn btn-primary btn-full" id="checkout-submit">
-            Continue to checkout →
+
+        <!-- Step 1: Email -->
+        <div id="checkout-step-1">
+          <h3>Start your free trial</h3>
+          <p class="modal-sub">No charge for 7 days. Cancel anytime.</p>
+          <form id="checkout-form">
+            <label for="checkout-email">Email address</label>
+            <input
+              type="email"
+              id="checkout-email"
+              name="email"
+              placeholder="you@example.com"
+              required
+              autocomplete="email"
+            />
+            <button type="submit" class="btn btn-primary btn-full" id="checkout-submit">
+              Continue →
+            </button>
+            <p id="checkout-error" class="form-error" hidden></p>
+          </form>
+        </div>
+
+        <!-- Step 2: Card details (embedded Stripe Elements) -->
+        <div id="checkout-step-2" hidden>
+          <h3>Payment details</h3>
+          <p class="modal-sub">7-day free trial · then <span id="modal-price-text">$3.99/month</span> · cancel anytime</p>
+          <p id="trial-email-display" class="modal-email-display"></p>
+          <div id="card-element"></div>
+          <p id="card-errors" class="form-error" hidden></p>
+          <button class="btn btn-primary btn-full" id="card-submit-btn">
+            Start free trial →
           </button>
-          <p id="checkout-error" class="form-error" hidden></p>
-        </form>
+          <button class="btn-text-link" id="back-to-email-btn">← Change email</button>
+        </div>
+
         <p class="modal-note">
-          Powered by <strong>Stripe</strong>. We never store your card details.
-          7-day free trial, then <span id="modal-price-text">$3.99/month</span>.
+          Secured by <strong>Stripe</strong>. Card details never touch our servers.
         </p>
       </div>
     </div>

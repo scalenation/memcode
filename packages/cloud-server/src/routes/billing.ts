@@ -86,6 +86,116 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
+   * POST /v1/billing/setup-intent
+   * Creates a Stripe SetupIntent so the frontend can collect card details via
+   * Stripe Elements (no redirect). Returns clientSecret + customerId.
+   * Body: { email }
+   */
+  fastify.post<{ Body: { email: string } }>(
+    '/v1/billing/setup-intent',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email'],
+          properties: { email: { type: 'string' } },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: { email: string } }>, reply: FastifyReply) => {
+      const { email } = request.body;
+
+      let customerId: string;
+      const userResult = await pool.query(
+        'SELECT id, stripe_customer_id FROM users WHERE email = $1',
+        [email.toLowerCase()],
+      );
+
+      if ((userResult.rowCount ?? 0) > 0) {
+        const user = userResult.rows[0] as { id: string; stripe_customer_id: string | null };
+        if (user.stripe_customer_id) {
+          customerId = user.stripe_customer_id;
+        } else {
+          const customer = await stripe.customers.create({ email: email.toLowerCase() });
+          customerId = customer.id;
+          await pool.query('UPDATE users SET stripe_customer_id = $1 WHERE id = $2', [
+            customerId,
+            user.id,
+          ]);
+        }
+      } else {
+        const customer = await stripe.customers.create({ email: email.toLowerCase() });
+        customerId = customer.id;
+      }
+
+      const setupIntent = await stripe.setupIntents.create({
+        customer: customerId,
+        payment_method_types: ['card'],
+        usage: 'off_session',
+      });
+
+      return reply.send({ clientSecret: setupIntent.client_secret, customerId });
+    },
+  );
+
+  /**
+   * POST /v1/billing/subscribe
+   * Called after the frontend confirms the SetupIntent. Creates a trial subscription.
+   * Body: { customerId, paymentMethodId, plan? }
+   */
+  fastify.post<{ Body: { customerId: string; paymentMethodId: string; plan?: 'monthly' | 'yearly' } }>(
+    '/v1/billing/subscribe',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['customerId', 'paymentMethodId'],
+          properties: {
+            customerId: { type: 'string' },
+            paymentMethodId: { type: 'string' },
+            plan: { type: 'string', enum: ['monthly', 'yearly'] },
+          },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{ Body: { customerId: string; paymentMethodId: string; plan?: 'monthly' | 'yearly' } }>,
+      reply: FastifyReply,
+    ) => {
+      const { customerId, paymentMethodId, plan = 'monthly' } = request.body;
+      const priceId = plan === 'yearly' ? config.stripePriceIdYearly : config.stripePriceId;
+
+      // Attach card as customer default payment method
+      await stripe.customers.update(customerId, {
+        invoice_settings: { default_payment_method: paymentMethodId },
+      });
+
+      // Create subscription with 7-day trial
+      const subscription = await stripe.subscriptions.create({
+        customer: customerId,
+        items: [{ price: priceId }],
+        trial_period_days: 7,
+        default_payment_method: paymentMethodId,
+      });
+
+      // Provision user account if not yet created
+      const customer = await stripe.customers.retrieve(customerId) as Stripe.Customer;
+      const email = customer.email;
+      if (email) {
+        await pool.query(
+          `INSERT INTO users (email, password_hash, stripe_customer_id)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (email) DO UPDATE SET stripe_customer_id = $3`,
+          [email.toLowerCase(), '!LOCKED', customerId],
+        );
+        await upsertSubscription(subscription);
+      }
+
+      return reply.send({ subscriptionId: subscription.id, status: subscription.status });
+    },
+  );
+
+  /**
    * POST /v1/billing/portal
    * Returns a Stripe Customer Portal URL so the subscriber can manage their plan.
    * Requires auth.

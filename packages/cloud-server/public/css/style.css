@@ -441,6 +441,42 @@ code {
 }
 .modal-box input[type="email"]:focus { border-color: var(--accent); }
 .modal-note { font-size: 0.75rem !important; color: var(--text-dim) !important; text-align: center; margin-top: 12px !important; }
+.modal-sub { color: var(--text-dim); font-size: 0.88rem; margin-bottom: 20px !important; }
+.modal-email-display {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  margin-bottom: 16px !important;
+  word-break: break-all;
+}
+/* Stripe Elements card container */
+#card-element {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  transition: border-color 0.15s;
+}
+#card-element.StripeElement--focus { border-color: var(--accent); }
+#card-element.StripeElement--invalid { border-color: var(--red); }
+.btn-text-link {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: center;
+  margin-top: 10px;
+  padding: 4px 0;
+  transition: color 0.15s;
+}
+.btn-text-link:hover { color: var(--text); }
 .form-error { color: var(--red); font-size: 0.85rem; margin-top: 8px; }
 
 /* ─── FAQ ────────────────────────────────────────────────────────────────── */
