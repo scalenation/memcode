@@ -135,6 +135,8 @@ cardSubmit?.addEventListener('click', async () => {
   const clientSecret = cardSubmit.dataset.clientSecret;
   if (!clientSecret) return;
 
+  // Prevent double-clicks — remove secret immediately before any async work
+  delete cardSubmit.dataset.clientSecret;
   cardSubmit.disabled = true;
   cardSubmit.textContent = 'Subscribing…';
   if (cardErrors) cardErrors.hidden = true;
@@ -150,9 +152,6 @@ cardSubmit?.addEventListener('click', async () => {
     });
 
     if (error) throw new Error(error.message);
-
-    // Prevent replay of the same setup intent
-    delete cardSubmit.dataset.clientSecret;
 
     const paymentMethodId = setupIntent.payment_method;
 
@@ -184,6 +183,8 @@ cardSubmit?.addEventListener('click', async () => {
       cardErrors.textContent = err instanceof Error ? err.message : 'Payment failed. Please try again.';
       cardErrors.hidden = false;
     }
+    // Restore clientSecret so the user can retry with the same SetupIntent
+    cardSubmit.dataset.clientSecret = clientSecret;
     cardSubmit.disabled = false;
     cardSubmit.textContent = 'Subscribe now →';
   }
