@@ -149,9 +149,6 @@ function renderPaymentMethods(methods) {
 
   list.hidden = false;
   document.getElementById('pm-none').hidden = true;
-
-  // Event delegation
-  list.addEventListener('click', handlePmClick);
 }
 
 async function handlePmClick(e) {
@@ -205,9 +202,8 @@ async function handlePmClick(e) {
   }
 }
 
-// Remove stale delegation when reloading
-const listEl = document.getElementById('pm-list');
-const origList = listEl.cloneNode(false);
+// Single persistent event delegation on the PM list
+document.getElementById('pm-list').addEventListener('click', handlePmClick);
 
 // ── Add card ──────────────────────────────────────────────────────────────────
 document.getElementById('add-card-btn')?.addEventListener('click', () => {

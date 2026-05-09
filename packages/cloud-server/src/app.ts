@@ -95,19 +95,18 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Run incremental schema migrations on every cold start (all statements are idempotent)
   fastify.addHook('onReady', async () => {
-    try {
-      await pool.query(`
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT;
-        ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT;
-      `);
-      await pool.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_idx
-          ON users(oauth_provider, oauth_sub)
-          WHERE oauth_provider IS NOT NULL;
-      `);
-      await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;`);
-    } catch (err) {
-      fastify.log.warn({ err }, 'Schema migration warning (non-fatal)');
+    const migrations = [
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_idx ON users(oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`,
+    ];
+    for (const sql of migrations) {
+      try {
+        await pool.query(sql);
+      } catch (err) {
+        fastify.log.warn({ err, sql }, 'Schema migration warning (non-fatal)');
+      }
     }
   });
 

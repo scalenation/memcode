@@ -16,11 +16,13 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
 
-      const userResult = await pool.query(
-        'SELECT name FROM users WHERE id = $1',
-        [user.sub],
-      );
-      const userRow = userResult.rows[0] as { name: string | null } | undefined;
+      let userName: string | null = null;
+      try {
+        const userResult = await pool.query('SELECT name FROM users WHERE id = $1', [user.sub]);
+        userName = (userResult.rows[0] as { name: string | null } | undefined)?.name ?? null;
+      } catch {
+        // name column may not exist yet — non-fatal
+      }
 
       const subResult = await pool.query(
         `SELECT status, stripe_price_id, current_period_end
@@ -45,7 +47,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
-      return reply.send({ userId: user.sub, email: user.email, name: userRow?.name ?? null, subscription });
+      return reply.send({ userId: user.sub, email: user.email, name: userName, subscription });
     },
   );
 
