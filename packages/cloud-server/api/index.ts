@@ -8,9 +8,13 @@ let handler: ReturnType<typeof serverless> | null = null;
 
 async function getHandler() {
   if (!handler) {
+    console.log('[api] building app...');
     const app = await buildApp();
+    console.log('[api] calling app.ready()...');
     await app.ready();
-    handler = serverless(app);
+    console.log('[api] wrapping with serverless...');
+    handler = serverless(app.server);
+    console.log('[api] handler ready');
   }
   return handler;
 }
