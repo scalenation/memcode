@@ -10,9 +10,8 @@ export const pool = {
     text: string,
     params?: unknown[],
   ): Promise<{ rows: T[]; rowCount: number }> => {
-    // neon() accepts a plain string at runtime despite the TemplateStringsArray typing
-    const rawSql = sql as unknown as (t: string, ...p: unknown[]) => Promise<unknown[]>;
-    const rows = (await rawSql(text, ...(params ?? []))) as T[];
+    // Use sql.query() which accepts plain strings with $1/$2 params
+    const rows = (await sql.query(text, params ?? [])) as T[];
     return { rows, rowCount: rows.length };
   },
 };
