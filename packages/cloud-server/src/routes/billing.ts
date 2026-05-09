@@ -237,12 +237,19 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(404).send({ error: 'No billing account found' });
       }
 
-      const portalSession = await stripe.billingPortal.sessions.create({
-        customer: row.stripe_customer_id,
-        return_url: `${config.appUrl}/dashboard`,
-      });
-
-      return reply.send({ url: portalSession.url });
+      try {
+        const portalSession = await stripe.billingPortal.sessions.create({
+          customer: row.stripe_customer_id,
+          return_url: `${config.appUrl}/dashboard`,
+        });
+        return reply.send({ url: portalSession.url });
+      } catch (err) {
+        const stripeErr = err as { message?: string; type?: string };
+        fastify.log.error({ err }, 'Stripe billing portal error');
+        return reply.status(502).send({
+          error: stripeErr.message ?? 'Failed to open billing portal. Please try again.',
+        });
+      }
     },
   );
 
