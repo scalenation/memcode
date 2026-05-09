@@ -64,7 +64,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     for (const stmt of stmts) {
       await sql.unsafe(stmt);
     }
-    return reply.send({ ok: true, stmts: stmts.length });
+    const tables = await sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`;
+    return reply.send({ ok: true, stmts: stmts.length, tables });
   });
 
   // Health check
