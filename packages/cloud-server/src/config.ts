@@ -14,5 +14,6 @@ export const config = {
   stripeSecretKey: required('STRIPE_SECRET_KEY'),
   stripeWebhookSecret: required('STRIPE_WEBHOOK_SECRET'),
   stripePriceId: required('STRIPE_PRICE_ID'),
+  stripePriceIdYearly: required('STRIPE_PRICE_ID_YEARLY'),
   appUrl: process.env.APP_URL ?? 'http://localhost:3000',
 };

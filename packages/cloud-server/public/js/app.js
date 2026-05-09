@@ -3,6 +3,42 @@ const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:3000'
   : 'https://api.memcode.pro';
 
+// ─── Billing plan state ───────────────────────────────────────────────────────
+
+let currentPlan = 'monthly'; // 'monthly' | 'yearly'
+
+const toggleMonthly = document.getElementById('toggle-monthly');
+const toggleYearly  = document.getElementById('toggle-yearly');
+
+function applyPlan(plan) {
+  currentPlan = plan;
+
+  // Toggle button styles
+  toggleMonthly?.classList.toggle('toggle-btn-active', plan === 'monthly');
+  toggleYearly?.classList.toggle('toggle-btn-active', plan === 'yearly');
+
+  // Show/hide price displays
+  const priceMonthly = document.getElementById('pro-price-monthly');
+  const priceYearly  = document.getElementById('pro-price-yearly');
+  if (priceMonthly) priceMonthly.hidden = plan !== 'monthly';
+  if (priceYearly)  priceYearly.hidden  = plan !== 'yearly';
+
+  // Show/hide billing notes
+  const noteMonthly = document.getElementById('billing-note-monthly');
+  const noteYearly  = document.getElementById('billing-note-yearly');
+  if (noteMonthly) noteMonthly.hidden = plan !== 'monthly';
+  if (noteYearly)  noteYearly.hidden  = plan !== 'yearly';
+
+  // Update modal price text
+  const modalPriceText = document.getElementById('modal-price-text');
+  if (modalPriceText) {
+    modalPriceText.textContent = plan === 'yearly' ? '€40/year' : '$3.99/month';
+  }
+}
+
+toggleMonthly?.addEventListener('click', () => applyPlan('monthly'));
+toggleYearly?.addEventListener('click',  () => applyPlan('yearly'));
+
 // ─── Checkout flow ───────────────────────────────────────────────────────────
 
 const checkoutBtn  = document.getElementById('checkout-btn');
@@ -48,7 +84,7 @@ form?.addEventListener('submit', async (e) => {
     const res = await fetch(`${API_BASE}/v1/billing/checkout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, plan: currentPlan }),
     });
 
     if (!res.ok) {

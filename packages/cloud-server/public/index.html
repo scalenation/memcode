@@ -186,7 +186,14 @@
     <h2 class="section-title">Simple, honest pricing</h2>
     <p class="section-sub">The CLI is free and open-source, forever. Pro adds cloud sync.</p>
 
-    <div class="pricing-grid">
+    <!-- Billing period toggle -->
+    <div class="billing-toggle">
+      <button id="toggle-monthly" class="toggle-btn toggle-btn-active" data-plan="monthly">Monthly</button>
+      <button id="toggle-yearly" class="toggle-btn" data-plan="yearly">
+        Yearly
+        <span class="savings-badge">Save ~16%</span>
+      </button>
+    </div>
       <!-- Free -->
       <div class="pricing-card">
         <div class="pricing-header">
@@ -218,9 +225,14 @@
         <div class="pricing-badge">Most Popular</div>
         <div class="pricing-header">
           <h3>Pro</h3>
-          <div class="pricing-price">
+          <div class="pricing-price" id="pro-price-monthly">
             <span class="price-amount">$3.99</span>
             <span class="price-period">/ month</span>
+          </div>
+          <div class="pricing-price" id="pro-price-yearly" hidden>
+            <span class="price-amount">€40</span>
+            <span class="price-period">/ year</span>
+            <span class="price-equiv">(≈€3.33/mo)</span>
           </div>
           <p class="pricing-trial">7-day free trial · cancel any time</p>
         </div>
@@ -235,7 +247,8 @@
         <button id="checkout-btn" class="btn btn-primary btn-full btn-lg">
           Start free trial →
         </button>
-        <p class="pricing-card-note">Billed monthly. No contract. Cancel from your account portal.</p>
+        <p class="pricing-card-note" id="billing-note-monthly">Billed monthly. No contract. Cancel from your account portal.</p>
+        <p class="pricing-card-note" id="billing-note-yearly" hidden>Billed annually in EUR. No contract. Cancel from your account portal.</p>
       </div>
     </div>
 
@@ -263,7 +276,7 @@
         </form>
         <p class="modal-note">
           Powered by <strong>Stripe</strong>. We never store your card details.
-          7-day free trial, then $3.99/month.
+          7-day free trial, then <span id="modal-price-text">$3.99/month</span>.
         </p>
       </div>
     </div>

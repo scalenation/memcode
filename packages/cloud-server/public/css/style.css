@@ -377,6 +377,41 @@ code {
 .pricing-features .pro-check { color: var(--text); }
 .pricing-card-note { font-size: 0.75rem; color: var(--text-dim); text-align: center; margin-top: 12px; }
 
+/* ─── Billing toggle ─────────────────────────────────────────────────────── */
+.billing-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+}
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.toggle-btn:hover { border-color: var(--accent); color: var(--text); }
+.toggle-btn-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.savings-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(255,255,255,0.2);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.toggle-btn-active .savings-badge { background: rgba(255,255,255,0.25); }
+.toggle-btn:not(.toggle-btn-active) .savings-badge { background: var(--accent-dim, rgba(108,99,255,0.15)); color: var(--accent); }
+.price-equiv { font-size: 0.8rem; color: var(--text-dim); margin-left: 4px; }
+
 /* ─── Modal ──────────────────────────────────────────────────────────────── */
 .modal { position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center; }
 .modal[hidden] { display: none; }

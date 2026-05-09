@@ -9,6 +9,7 @@ const stripe = new Stripe(config.stripeSecretKey, { apiVersion: '2024-06-20' });
 
 interface CheckoutBody {
   email: string;
+  plan?: 'monthly' | 'yearly';
 }
 
 export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
@@ -26,12 +27,16 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         body: {
           type: 'object',
           required: ['email'],
-          properties: { email: { type: 'string' } },
+          properties: {
+            email: { type: 'string' },
+            plan: { type: 'string', enum: ['monthly', 'yearly'] },
+          },
         },
       },
     },
     async (request: FastifyRequest<{ Body: CheckoutBody }>, reply: FastifyReply) => {
-      const { email } = request.body;
+      const { email, plan = 'monthly' } = request.body;
+      const priceId = plan === 'yearly' ? config.stripePriceIdYearly : config.stripePriceId;
 
       // Get or create Stripe customer for this email
       let customerId: string;
@@ -63,7 +68,7 @@ export async function billingRoutes(fastify: FastifyInstance): Promise<void> {
         mode: 'subscription',
         line_items: [
           {
-            price: config.stripePriceId,
+            price: priceId,
             quantity: 1,
           },
         ],
