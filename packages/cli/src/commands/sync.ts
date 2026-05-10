@@ -5,7 +5,7 @@ import { join, basename } from 'node:path';
 import { homedir, hostname } from 'node:os';
 import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
-import { findProjectRoot, resolveProject } from '../util';
+import { findProjectRoot, resolveProject, getMemoryDir } from '../util';
 
 const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
@@ -53,6 +53,25 @@ function readAuthConfig(): AuthConfig | null {
 function writeAuthConfig(cfg: AuthConfig): void {
   mkdirSync(join(homedir(), '.config', 'memcode'), { recursive: true });
   writeFileSync(AUTH_CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
+/**
+ * Return the cloud workspace ID for a project. We prefer the ID stored in
+ * `.memory/config.json` because that file is meant to be committed to git,
+ * making the workspace ID portable across machines. Falls back to the local
+ * SQLite-derived ID when no config file is present.
+ */
+function getCloudWorkspaceId(projectPath: string, localId: string): string {
+  const configPath = join(getMemoryDir(projectPath), 'config.json');
+  try {
+    if (existsSync(configPath)) {
+      const cfg = JSON.parse(readFileSync(configPath, 'utf-8')) as { workspaceId?: string };
+      if (cfg.workspaceId) return cfg.workspaceId;
+    }
+  } catch {
+    // ignore — fall through to local ID
+  }
+  return localId;
 }
 
 export const syncCommand = new Command('sync').description(
@@ -172,7 +191,8 @@ syncCommand
 
     const projectPath = options.path ?? findProjectRoot();
     const { db, workspace } = resolveProject(projectPath);
-    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
+    const cloudWorkspaceId = getCloudWorkspaceId(projectPath, workspace.id);
+    const encryptionKey = deriveKey(auth.encryptionPassphrase, cloudWorkspaceId);
 
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
@@ -185,7 +205,7 @@ syncCommand
           'User-Agent': CLI_UA,
         },
         body: JSON.stringify({
-          workspaceId: workspace.id,
+          workspaceId: cloudWorkspaceId,
           name: basename(projectPath),
           machineName: hostname(),
         }),
@@ -195,7 +215,7 @@ syncCommand
         endpoint: auth.endpoint,
         apiToken: auth.apiToken,
         encryptionKey,
-        workspaceId: workspace.id,
+        workspaceId: cloudWorkspaceId,
       });
       console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
       console.log(pc.dim(`  cursor: ${result.cursor}`));
@@ -220,7 +240,8 @@ syncCommand
 
     const projectPath = options.path ?? findProjectRoot();
     const { db, workspace } = resolveProject(projectPath);
-    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
+    const cloudWorkspaceId = getCloudWorkspaceId(projectPath, workspace.id);
+    const encryptionKey = deriveKey(auth.encryptionPassphrase, cloudWorkspaceId);
 
     console.log(pc.bold('Pulling memory from cloud…'));
     try {
@@ -228,7 +249,7 @@ syncCommand
         endpoint: auth.endpoint,
         apiToken: auth.apiToken,
         encryptionKey,
-        workspaceId: workspace.id,
+        workspaceId: cloudWorkspaceId,
       });
 
       if (result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
@@ -259,7 +280,8 @@ syncCommand
 
     const projectPath = options.path ?? findProjectRoot();
     const { db, workspace } = resolveProject(projectPath);
-    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
+    const cloudWorkspaceId = getCloudWorkspaceId(projectPath, workspace.id);
+    const encryptionKey = deriveKey(auth.encryptionPassphrase, cloudWorkspaceId);
 
     console.log(pc.bold(`Restoring checkpoint ${pc.cyan(blobId.slice(0, 8) + '…')}`));
     try {
@@ -267,7 +289,7 @@ syncCommand
         endpoint: auth.endpoint,
         apiToken: auth.apiToken,
         encryptionKey,
-        workspaceId: workspace.id,
+        workspaceId: cloudWorkspaceId,
         blobId,
       });
 
