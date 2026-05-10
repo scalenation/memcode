@@ -118,6 +118,12 @@ export async function buildApp(): Promise<FastifyInstance> {
         used BOOLEAN NOT NULL DEFAULT FALSE
       )`,
       `CREATE INDEX IF NOT EXISTS magic_link_tokens_token_idx ON magic_link_tokens(token)`,
+      // Session history metadata
+      `ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS name TEXT`,
+      `ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS machine_name TEXT`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS ip TEXT`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS user_agent TEXT`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS label TEXT`,
     ];
     for (const sql of migrations) {
       try {

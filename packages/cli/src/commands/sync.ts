@@ -1,8 +1,8 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { join, basename } from 'node:path';
+import { homedir, hostname } from 'node:os';
 import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
 import { findProjectRoot, resolveProject } from '../util';
@@ -176,6 +176,21 @@ syncCommand
 
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
+      // Register workspace with name and machine name (best-effort, non-fatal)
+      await fetch(`${auth.endpoint.replace(/\/$/, '')}/v1/sync/workspace`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${auth.apiToken}`,
+          'User-Agent': CLI_UA,
+        },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          name: basename(projectPath),
+          machineName: hostname(),
+        }),
+      }).catch(() => undefined);
+
       const result = await pushSync(db, {
         endpoint: auth.endpoint,
         apiToken: auth.apiToken,
@@ -224,6 +239,46 @@ syncCommand
       console.log(pc.dim(`  cursor: ${result.cursor}`));
     } catch (err) {
       console.error(pc.red('Pull failed:'), (err as Error).message);
+      process.exit(1);
+    }
+  });
+
+// ─── restore ────────────────────────────────────────────────────────────────
+
+syncCommand
+  .command('restore')
+  .description('Restore a specific checkpoint from the cloud by blob ID')
+  .argument('<blob-id>', 'The checkpoint blob ID to restore (from `memory sync history` or the dashboard)')
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action(async (blobId: string, options: { path?: string }) => {
+    const auth = readAuthConfig();
+    if (!auth) {
+      console.log(noAuthMsg());
+      process.exit(1);
+    }
+
+    const projectPath = options.path ?? findProjectRoot();
+    const { db, workspace } = resolveProject(projectPath);
+    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
+
+    console.log(pc.bold(`Restoring checkpoint ${pc.cyan(blobId.slice(0, 8) + '…')}`));
+    try {
+      const result = await pullSync(db, {
+        endpoint: auth.endpoint,
+        apiToken: auth.apiToken,
+        encryptionKey,
+        workspaceId: workspace.id,
+        blobId,
+      });
+
+      if (result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
+        console.log(pc.yellow('~'), 'Nothing new to restore — this checkpoint matches your current state.');
+      } else {
+        console.log(pc.green('✓'), `Restored: ${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
+      }
+      console.log(pc.dim(`  blob: ${blobId}`));
+    } catch (err) {
+      console.error(pc.red('Restore failed:'), (err as Error).message);
       process.exit(1);
     }
   });

@@ -131,8 +131,12 @@ export async function pullSync(
   const syncState = getSyncState(db, config.workspaceId);
   const cursor = syncState?.last_cursor ?? '0';
 
+  const pullUrl = config.blobId
+    ? `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&blobId=${encodeURIComponent(config.blobId)}`
+    : `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&cursor=${encodeURIComponent(cursor)}`;
+
   const response = await fetch(
-    `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&cursor=${encodeURIComponent(cursor)}`,
+    pullUrl,
     {
       headers: {
         Authorization: `Bearer ${config.apiToken}`,

@@ -117,6 +117,48 @@
     /* Danger zone */
     .danger-card { border-color: rgba(248,113,113,0.25) !important; }
     .danger-card .card-title { color: var(--red) !important; }
+    /* ── History ────────────────────────────────────────────── */
+    .hist-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+    .hist-search-wrap { flex: 1; display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 14px; transition: border-color .15s; }
+    .hist-search-wrap:focus-within { border-color: var(--accent); }
+    .hist-search-wrap svg { color: var(--text-dim); flex-shrink: 0; }
+    #hist-search { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-size: 0.88rem; padding: 10px 0; }
+    #hist-search::placeholder { color: var(--text-dim); }
+    .hist-count-badge { font-size: 0.75rem; color: var(--text-dim); white-space: nowrap; }
+    .hist-empty-state { text-align: center; padding: 60px 0; color: var(--text-dim); }
+    .hist-empty-state p { margin: 12px 0 0; font-size: 0.92rem; }
+    .hist-empty-sub { font-size: 0.8rem !important; color: var(--text-dim); }
+    .hist-empty-sub code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: monospace; }
+    /* Workspace card */
+    .hist-ws { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; transition: border-color .15s; }
+    .hist-ws.hidden { display: none; }
+    .hist-ws-header { display: flex; align-items: center; gap: 14px; padding: 16px 20px; cursor: pointer; user-select: none; }
+    .hist-ws-header:hover { background: rgba(255,255,255,0.025); }
+    .hist-ws-icon { width: 36px; height: 36px; background: rgba(99,102,241,0.12); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: #818cf8; }
+    .hist-ws-info { flex: 1; min-width: 0; }
+    .hist-ws-name { font-size: 0.95rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-ws-meta { font-size: 0.75rem; color: var(--text-dim); margin-top: 3px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .hist-ws-meta-item { display: flex; align-items: center; gap: 4px; }
+    .hist-ws-badge { font-size: 0.7rem; font-weight: 700; background: rgba(99,102,241,0.15); color: #818cf8; border-radius: 999px; padding: 2px 9px; white-space: nowrap; }
+    .hist-ws-chevron { color: var(--text-dim); transition: transform .2s; flex-shrink: 0; }
+    .hist-ws.open .hist-ws-chevron { transform: rotate(90deg); }
+    /* Checkpoints list */
+    .hist-checkpoints { display: none; border-top: 1px solid var(--border); }
+    .hist-ws.open .hist-checkpoints { display: block; }
+    .hist-cp { display: flex; align-items: flex-start; gap: 14px; padding: 13px 20px 13px 26px; border-bottom: 1px solid var(--border); }
+    .hist-cp:last-child { border-bottom: none; }
+    .hist-cp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-top: 6px; flex-shrink: 0; }
+    .hist-cp-body { flex: 1; min-width: 0; }
+    .hist-cp-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .hist-cp-time { font-size: 0.82rem; font-weight: 500; color: var(--text); }
+    .hist-cp-label { font-size: 0.75rem; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+    .hist-cp-details { font-size: 0.75rem; color: var(--text-dim); margin-top: 5px; display: flex; flex-wrap: wrap; gap: 10px; }
+    .hist-cp-detail-item { display: flex; align-items: center; gap: 4px; }
+    .hist-cp-restore { margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .hist-cp-restore code { font-family: monospace; font-size: 0.78rem; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hist-cp-copy { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 0.72rem; color: var(--text-dim); cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; flex-shrink: 0; }
+    .hist-cp-copy:hover { color: var(--text); border-color: var(--text-dim); }
+    .hist-cp-copy.copied { color: #34d399; border-color: #34d399; }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
 </head>
@@ -140,9 +182,9 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3S3 13.66 3 12"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
       Workspaces
     </button>
-    <button class="nav-item" data-section="sessions">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-      Sessions
+    <button class="nav-item" data-section="history">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      History
     </button>
     <button class="nav-item" data-section="profile">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -320,18 +362,31 @@
     </section>
 
     <!-- Sessions -->
-    <section id="section-sessions" class="section">
-      <h1 class="section-title">Sessions</h1>
-      <div class="card">
-        <p class="card-title">Active sessions</p>
-        <p style="font-size:0.83rem;color:var(--text-dim);margin:0 0 16px">All authenticated CLI and web sessions. Revoking a session immediately signs out that device.</p>
-        <div id="sessions-loading">
-          <div class="skeleton" style="height:52px;margin-bottom:8px"></div>
-          <div class="skeleton" style="height:52px"></div>
+    <!-- History -->
+    <section id="section-history" class="section">
+      <h1 class="section-title">Session History</h1>
+
+      <div class="hist-toolbar">
+        <div class="hist-search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="hist-search" type="search" placeholder="Search sessions or checkpoints…" autocomplete="off" />
         </div>
-        <div id="sessions-list" hidden></div>
-        <p id="sessions-none" hidden style="font-size:0.84rem;color:var(--text-dim);margin:0">No active sessions found. Sessions are tracked from new logins.</p>
+        <span id="hist-count" class="hist-count-badge"></span>
       </div>
+
+      <div id="hist-loading">
+        <div class="skeleton" style="height:80px;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:80px;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:80px"></div>
+      </div>
+
+      <div id="hist-empty" hidden class="hist-empty-state">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <p>No sync history yet.</p>
+        <p class="hist-empty-sub">Run <code>memory sync push</code> from your project to create your first checkpoint.</p>
+      </div>
+
+      <div id="hist-list"></div>
     </section>
 
     <!-- Billing -->

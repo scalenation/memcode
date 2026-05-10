@@ -7,6 +7,8 @@ export interface CloudConfig {
   /** Per-workspace encryption key (32 bytes, hex-encoded) */
   encryptionKey: string;
   apiToken: string;
+  /** If set, pull a specific blob by ID (point-in-time restore) */
+  blobId?: string;
 }
 
 export interface SyncPayload {
