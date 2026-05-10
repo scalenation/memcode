@@ -42,8 +42,8 @@ function navigateTo(sectionId) {
   if (sectionId === 'workspaces' && !document.getElementById('ws-list').dataset.loaded) {
     loadWorkspaces();
   }
-  if (sectionId === 'sessions' && !document.getElementById('sessions-list').dataset.loaded) {
-    loadSessions();
+  if (sectionId === 'history' && !document.getElementById('hist-list').dataset.loaded) {
+    loadHistory();
   }
 }
 
@@ -694,3 +694,154 @@ function timeAgo(iso) {
   if (d < 30) return `${d}d ago`;
   return fmtDate(iso);
 }
+
+// ── Session History ───────────────────────────────────────────────────────────
+let historyData = [];
+
+async function loadHistory() {
+  const loading = document.getElementById('hist-loading');
+  const empty   = document.getElementById('hist-empty');
+  const list    = document.getElementById('hist-list');
+  loading.hidden = false;
+  empty.hidden   = true;
+  list.innerHTML = '';
+
+  try {
+    const res  = await authFetch('/v1/sync/history');
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to load history');
+
+    historyData = body.workspaces ?? [];
+    loading.hidden = true;
+
+    if (historyData.length === 0) {
+      empty.hidden = false;
+    } else {
+      renderHistory(historyData);
+    }
+    list.dataset.loaded = '1';
+  } catch (err) {
+    loading.hidden = true;
+    showNotice(err.message ?? 'Failed to load history.', 'error');
+  }
+}
+
+function parseCLIUA(ua) {
+  if (!ua) return null;
+  const cliMatch = ua.match(/MemCode-CLI\/([^\s]+)/i) || ua.match(/memcode[/-](\S+)/i);
+  if (cliMatch) return `MemCode CLI ${cliMatch[1]}`;
+  if (/memcode|memory.sync/i.test(ua)) return 'MemCode CLI';
+  if (/python/i.test(ua)) return 'Python';
+  if (/curl/i.test(ua)) return 'curl';
+  if (/edg\//i.test(ua)) return 'Edge';
+  if (/chrome/i.test(ua)) return 'Chrome';
+  if (/firefox/i.test(ua)) return 'Firefox';
+  if (/safari/i.test(ua)) return 'Safari';
+  return ua.split(/[\s/]/)[0] || 'Unknown';
+}
+
+function renderHistory(workspaces) {
+  const list = document.getElementById('hist-list');
+  list.innerHTML = '';
+  updateHistCount(workspaces.length);
+
+  for (const ws of workspaces) {
+    const cpCount = ws.checkpoints ? ws.checkpoints.length : 0;
+    const lastCp  = ws.checkpoints && ws.checkpoints[0];
+    const wsName  = ws.name || ws.id.slice(0, 12) + '…';
+
+    const card = document.createElement('div');
+    card.className = 'hist-ws';
+    card.dataset.wsId = ws.id;
+
+    const metaParts = [];
+    if (ws.machineName) metaParts.push(`<span class="hist-ws-meta-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>${esc(ws.machineName)}</span>`);
+    if (lastCp) metaParts.push(`<span class="hist-ws-meta-item"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Last sync ${timeAgo(lastCp.createdAt)}</span>`);
+    metaParts.push(`<span class="hist-ws-meta-item">Created ${fmtDate(ws.createdAt)}</span>`);
+
+    let checkpointsHtml = '';
+    if (cpCount > 0) {
+      for (const cp of ws.checkpoints) {
+        const uaLabel = parseCLIUA(cp.userAgent) || 'Unknown';
+        const restoreCmd = `memory sync restore ${cp.id}`;
+        const detailParts = [];
+        if (cp.ip) detailParts.push(`<span class="hist-cp-detail-item"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>${esc(cp.ip)}</span>`);
+        detailParts.push(`<span class="hist-cp-detail-item"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>${esc(uaLabel)}</span>`);
+        detailParts.push(`<span class="hist-cp-detail-item" title="${esc(new Date(cp.createdAt).toLocaleString())}">${esc(new Date(cp.createdAt).toLocaleString())}</span>`);
+
+        checkpointsHtml += `
+          <div class="hist-cp" data-blob-id="${esc(cp.id)}">
+            <div class="hist-cp-dot"></div>
+            <div class="hist-cp-body">
+              <div class="hist-cp-top">
+                <span class="hist-cp-time">${timeAgo(cp.createdAt)}</span>
+                ${cp.label ? `<span class="hist-cp-label">${esc(cp.label)}</span>` : ''}
+              </div>
+              <div class="hist-cp-details">${detailParts.join('')}</div>
+              <div class="hist-cp-restore">
+                <code>${esc(restoreCmd)}</code>
+                <button class="hist-cp-copy" data-copy="${esc(restoreCmd)}" title="Copy restore command">Copy</button>
+              </div>
+            </div>
+          </div>`;
+      }
+    } else {
+      checkpointsHtml = `<div style="padding:14px 20px;font-size:0.82rem;color:var(--text-dim)">No checkpoints yet.</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="hist-ws-header">
+        <div class="hist-ws-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h6l2 3h10a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/></svg>
+        </div>
+        <div class="hist-ws-info">
+          <div class="hist-ws-name">${esc(wsName)}</div>
+          <div class="hist-ws-meta">${metaParts.join('')}</div>
+        </div>
+        <span class="hist-ws-badge">${cpCount} checkpoint${cpCount !== 1 ? 's' : ''}</span>
+        <svg class="hist-ws-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="hist-checkpoints">${checkpointsHtml}</div>`;
+
+    // Toggle expand/collapse
+    card.querySelector('.hist-ws-header').addEventListener('click', () => {
+      card.classList.toggle('open');
+    });
+
+    // Copy restore command buttons
+    card.querySelectorAll('.hist-cp-copy').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+          btn.textContent = 'Copied!';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+        });
+      });
+    });
+
+    list.appendChild(card);
+  }
+}
+
+function updateHistCount(total) {
+  const badge = document.getElementById('hist-count');
+  if (badge) badge.textContent = total > 0 ? `${total} workspace${total !== 1 ? 's' : ''}` : '';
+}
+
+// Search filter
+document.getElementById('hist-search')?.addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase().trim();
+  const cards = document.querySelectorAll('.hist-ws');
+  let visible = 0;
+  cards.forEach(card => {
+    const wsId   = card.dataset.wsId ?? '';
+    const wsName = card.querySelector('.hist-ws-name')?.textContent?.toLowerCase() ?? '';
+    const machine = card.querySelector('.hist-ws-meta')?.textContent?.toLowerCase() ?? '';
+    const cpTexts = Array.from(card.querySelectorAll('.hist-cp-restore code')).map(c => c.textContent.toLowerCase()).join(' ');
+    const matches = !q || wsName.includes(q) || wsId.includes(q) || machine.includes(q) || cpTexts.includes(q);
+    card.classList.toggle('hidden', !matches);
+    if (matches) visible++;
+  });
+  updateHistCount(visible);
+});
