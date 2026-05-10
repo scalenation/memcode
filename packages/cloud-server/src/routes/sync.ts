@@ -115,13 +115,14 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'workspaceId query param is required' });
       }
 
-      // Verify workspace ownership
+      // Verify workspace ownership (if it exists — if not, just return no data)
       const ws = await pool.query(
         'SELECT user_id FROM workspaces WHERE id = $1',
         [workspaceId],
       );
       if ((ws.rowCount ?? 0) === 0) {
-        return reply.status(404).send({ error: 'Workspace not found' });
+        // Workspace not yet registered — nothing to pull
+        return reply.send({ blob: null, cursor });
       }
       if (ws.rows[0].user_id !== user.sub) {
         return reply.status(403).send({ error: 'Access denied' });
