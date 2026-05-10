@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — MemCode</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    body { min-height: 100vh; display: flex; flex-direction: column; }
+    .site-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; height: 64px; border-bottom: 1px solid var(--border);
+      background: var(--bg); position: sticky; top: 0; z-index: 10;
+    }
+    .nav-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1rem; text-decoration: none; color: var(--text); }
+    .nav-logo-icon { font-size: 1.4rem; }
+    .nav-link { font-size: 0.875rem; color: var(--text-dim); text-decoration: none; transition: color 0.15s; }
+    .nav-link:hover { color: var(--text); }
+    .page-wrap { flex: 1; max-width: 760px; width: 100%; margin: 0 auto; padding: 56px 24px 80px; }
+    .page-header { margin-bottom: 48px; }
+    .page-title { font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+    .page-meta { font-size: 0.875rem; color: var(--text-dim); }
+    .doc h2 {
+      font-size: 1.05rem; font-weight: 700; margin: 40px 0 12px;
+      padding-bottom: 10px; border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    .doc h2:first-child { margin-top: 0; }
+    .doc p { font-size: 0.93rem; color: var(--text-dim); line-height: 1.75; margin-bottom: 14px; }
+    .doc ul { margin: 0 0 14px 20px; }
+    .doc ul li { font-size: 0.93rem; color: var(--text-dim); line-height: 1.75; margin-bottom: 4px; }
+    .doc a { color: var(--accent-2); text-decoration: none; }
+    .doc a:hover { text-decoration: underline; }
+    .doc strong { color: var(--text); font-weight: 600; }
+    footer {
+      border-top: 1px solid var(--border); padding: 24px 40px;
+      font-size: 0.8rem; color: var(--text-dim);
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    }
+    footer a { color: var(--text-dim); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <nav class="site-nav">
+    <a href="/" class="nav-logo">
+      <span class="nav-logo-icon">🧠</span>
+      <span>MemCode</span>
+    </a>
+    <a href="/login" class="nav-link">Sign in</a>
+  </nav>
+
+  <main class="page-wrap">
+    <div class="page-header">
+      <h1 class="page-title">Privacy Policy</h1>
+      <p class="page-meta">Effective date: May 10, 2026 &nbsp;·&nbsp; Last updated: May 10, 2026</p>
+    </div>
+
+    <div class="doc">
+      <h2>1. Who We Are</h2>
+      <p>MemCode ("we", "us", "our") is a developer tool that lets you sync coding memory and notes across machines via a CLI and a cloud dashboard. We operate the service at <a href="https://www.memcode.pro">www.memcode.pro</a>.</p>
+
+      <h2>2. What Data We Collect</h2>
+      <p>We collect only what is necessary to provide the service:</p>
+      <ul>
+        <li><strong>Account information</strong> — your email address, and optionally your name and a hashed password. If you sign in with Google or GitHub we receive your email and a provider-specific user ID; we do not receive or store your social account password.</li>
+        <li><strong>Memory content</strong> — the notes and snippets you sync using the CLI. This content is stored encrypted at rest in our database.</li>
+        <li><strong>Billing information</strong> — if you subscribe to MemCode Pro, payment is processed by <a href="https://stripe.com">Stripe</a>. We store only your Stripe customer ID and subscription status; we never see or store your full card number.</li>
+        <li><strong>Usage metadata</strong> — CLI version, IP address, and user-agent string recorded when you authenticate, used only for security purposes (e.g. session management).</li>
+      </ul>
+
+      <h2>3. How We Use Your Data</h2>
+      <ul>
+        <li>To authenticate you and provide access to your account.</li>
+        <li>To sync, store, and retrieve your memory content on your behalf.</li>
+        <li>To process subscription payments via Stripe.</li>
+        <li>To send transactional emails (e.g. magic sign-in links) via Resend. We do not send marketing email without your explicit consent.</li>
+        <li>To detect and prevent abuse or unauthorized access.</li>
+      </ul>
+
+      <h2>4. Data Sharing</h2>
+      <p>We do not sell, rent, or trade your personal data. We share data only with the following sub-processors required to operate the service:</p>
+      <ul>
+        <li><strong>Neon</strong> (database hosting) — stores your account and memory content.</li>
+        <li><strong>Vercel</strong> (hosting) — serves the application and processes API requests.</li>
+        <li><strong>Stripe</strong> (payments) — handles subscription billing.</li>
+        <li><strong>Resend</strong> (email) — delivers transactional emails.</li>
+        <li><strong>Google / GitHub</strong> (OAuth, optional) — used only during sign-in to verify your identity.</li>
+      </ul>
+
+      <h2>5. Data Retention</h2>
+      <p>Your data is retained for as long as your account exists. When you delete your account from the dashboard, all your personal data and memory content is permanently deleted from our database. Stripe may retain billing records independently per their own retention policies.</p>
+
+      <h2>6. Security</h2>
+      <p>Passwords are hashed using bcrypt and never stored in plaintext. Database connections use TLS. JWTs are short-lived and signed with a secret key. We take reasonable technical measures to protect your data, but no system is 100% secure — please use a strong, unique password and keep your CLI token private.</p>
+
+      <h2>7. Your Rights</h2>
+      <p>You may at any time:</p>
+      <ul>
+        <li><strong>Access</strong> your data by signing in to the dashboard.</li>
+        <li><strong>Update</strong> your name or password in Profile settings.</li>
+        <li><strong>Delete</strong> your account and all associated data via the Danger Zone in Profile settings.</li>
+        <li><strong>Request a copy</strong> of your data by emailing us at <a href="mailto:privacy@memcode.pro">privacy@memcode.pro</a>.</li>
+      </ul>
+
+      <h2>8. Cookies &amp; Tracking</h2>
+      <p>We do not use advertising cookies or third-party trackers. Authentication state is stored in <code>localStorage</code> in your browser, not in cookies. We do not use analytics services that track you across sites.</p>
+
+      <h2>9. Children's Privacy</h2>
+      <p>MemCode is not directed at children under 13. We do not knowingly collect personal data from children. If you believe a child has provided us data, please contact us and we will delete it promptly.</p>
+
+      <h2>10. Changes to This Policy</h2>
+      <p>We may update this policy as the service evolves. When we make material changes we will update the "Last updated" date at the top. Continued use of MemCode after changes constitutes acceptance of the updated policy.</p>
+
+      <h2>11. Contact</h2>
+      <p>Questions or concerns? Email us at <a href="mailto:privacy@memcode.pro">privacy@memcode.pro</a>.</p>
+    </div>
+  </main>
+
+  <footer>
+    <span>© 2026 MemCode. All rights reserved.</span>
+    <span>
+      <a href="/privacy">Privacy Policy</a>
+    </span>
+  </footer>
+</body>
+</html>
