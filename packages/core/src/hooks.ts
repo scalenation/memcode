@@ -27,6 +27,7 @@ const HOOK_SCRIPTS: Record<HookName, string> = {
     '',
     MEMCODE_MARKER,
     'memory checkpoint --trigger post-commit 2>/dev/null || true',
+    'memory sync push 2>/dev/null || true',
   ].join('\n'),
 
   'post-checkout': [

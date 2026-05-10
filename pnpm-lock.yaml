@@ -30,8 +30,8 @@ importers:
         specifier: ^1.0.5
         version: 1.0.5
       '@memcode/core':
-        specifier: ^1.0.7
-        version: 1.0.7
+        specifier: ^1.0.8
+        version: 1.0.8
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -537,6 +537,10 @@ packages:
 
   '@memcode/core@1.0.7':
     resolution: {integrity: sha512-315+cyjRO3bhtLLSecQYrJUmmOSqernx+fOx+6vkpheOhkLZE7nMrMIXRLocb12LPNEFqUTdOZMLxGfiLalDIQ==}
+    engines: {node: '>=22.15.0'}
+
+  '@memcode/core@1.0.8':
+    resolution: {integrity: sha512-+h5VJpEEbLwMWrzh6YMi/4BafkRQD8d23ozWPkni/gEfoyr7iT47hBU4qPLJVBWlyh5qiBFQLrdZdpaCiETqrw==}
     engines: {node: '>=22.15.0'}
 
   '@neondatabase/serverless@1.1.0':
@@ -2218,9 +2222,11 @@ snapshots:
 
   '@memcode/cloud-client@1.0.5':
     dependencies:
-      '@memcode/core': 1.0.7
+      '@memcode/core': 1.0.8
 
   '@memcode/core@1.0.7': {}
+
+  '@memcode/core@1.0.8': {}
 
   '@neondatabase/serverless@1.1.0': {}
 
