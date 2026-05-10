@@ -70,15 +70,18 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'workspaceId and payload are required' });
       }
 
-      // Verify workspace ownership
+      // Verify or auto-register workspace (backward compat with old CLI versions that don't pre-register)
       const ws = await pool.query(
         'SELECT user_id FROM workspaces WHERE id = $1',
         [workspaceId],
       );
       if ((ws.rowCount ?? 0) === 0) {
-        return reply.status(404).send({ error: 'Workspace not found — register it first with /v1/sync/workspace' });
-      }
-      if (ws.rows[0].user_id !== user.sub) {
+        // Workspace not yet registered — create it on the fly
+        await pool.query(
+          'INSERT INTO workspaces (id, user_id) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+          [workspaceId, user.sub],
+        );
+      } else if (ws.rows[0].user_id !== user.sub) {
         return reply.status(403).send({ error: 'Access denied' });
       }
 
