@@ -53,7 +53,8 @@ export interface HookInstallResult {
 /**
  * Install MemCode git hooks into `<projectPath>/.git/hooks`.
  *
- * - Existing hooks that already contain the marker are skipped.
+ * - Existing hooks that already contain the marker have the block replaced
+ *   (upgrade in place — ensures stale hooks always get the latest commands).
  * - Existing hooks without the marker have the MemCode block appended.
  * - Missing hooks are created fresh with a `#!/bin/sh` shebang.
  */
@@ -76,11 +77,14 @@ export function installGitHooks(projectPath: string): HookInstallResult {
       if (existsSync(hookPath)) {
         const existing = readFileSync(hookPath, 'utf-8');
         if (existing.includes(MEMCODE_MARKER)) {
-          skipped.push(hookName);
-          continue;
+          // Replace the existing MemCode block so stale hooks are upgraded
+          const blockStart = existing.indexOf('\n' + MEMCODE_MARKER);
+          const before = blockStart >= 0 ? existing.slice(0, blockStart) : existing;
+          writeFileSync(hookPath, before + HOOK_SCRIPTS[hookName] + '\n', 'utf-8');
+        } else {
+          // Append to existing hook
+          writeFileSync(hookPath, existing + HOOK_SCRIPTS[hookName] + '\n', 'utf-8');
         }
-        // Append to existing hook
-        writeFileSync(hookPath, existing + HOOK_SCRIPTS[hookName] + '\n', 'utf-8');
       } else {
         // Create fresh hook
         writeFileSync(
