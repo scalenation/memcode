@@ -124,6 +124,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS ip TEXT`,
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS user_agent TEXT`,
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS label TEXT`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS meta JSONB`,
     ];
     for (const sql of migrations) {
       try {

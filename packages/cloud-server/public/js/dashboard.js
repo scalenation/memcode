@@ -42,7 +42,7 @@ function navigateTo(sectionId) {
   if (sectionId === 'workspaces' && !document.getElementById('ws-list').dataset.loaded) {
     loadWorkspaces();
   }
-  if (sectionId === 'history' && !document.getElementById('hist-list').dataset.loaded) {
+  if (sectionId === 'history') {
     loadHistory();
   }
 }
@@ -777,6 +777,13 @@ function renderHistory(workspaces) {
                 <span class="hist-cp-time">${timeAgo(cp.createdAt)}</span>
                 ${cp.label ? `<span class="hist-cp-label">${esc(cp.label)}</span>` : ''}
               </div>
+              ${cp.meta && cp.meta.length > 0 ? `<div class="hist-cp-summaries">${cp.meta.map(m => {
+                const parts = [];
+                if (m.trigger) parts.push(`<span class="hist-meta-tag hist-meta-trigger">${esc(m.trigger)}</span>`);
+                if (m.branch) parts.push(`<span class="hist-meta-tag">${esc(m.branch)}</span>`);
+                if (m.git_sha) parts.push(`<code class="hist-meta-sha">${esc(m.git_sha)}</code>`);
+                return `<div class="hist-meta-row">${parts.join('')}${m.summary ? `<span class="hist-meta-summary">${esc(m.summary)}</span>` : ''}</div>`;
+              }).join('')}</div>` : ''}
               <div class="hist-cp-details">${detailParts.join('')}</div>
               <div class="hist-cp-restore">
                 <code>${esc(restoreCmd)}</code>

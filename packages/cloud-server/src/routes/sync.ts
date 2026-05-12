@@ -8,6 +8,14 @@ interface PushBody {
   workspaceId: string;
   payload: string; // base64 AES-256-GCM encrypted blob
   label?: string;  // optional human-readable label (e.g. "12 checkpoints, 3 decisions")
+  meta?: Array<{   // unencrypted checkpoint summaries for dashboard display
+    id: string;
+    trigger: string | null;
+    branch: string | null;
+    git_sha: string | null;
+    summary: string | null;
+    created_at: number;
+  }>;
 }
 
 interface RegisterWorkspaceBody {
@@ -64,7 +72,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: [authenticate, requireActiveSubscription] },
     async (request: FastifyRequest<{ Body: PushBody }>, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
-      const { workspaceId, payload, label } = request.body;
+      const { workspaceId, payload, label, meta } = request.body;
 
       if (!workspaceId || !payload) {
         return reply.status(400).send({ error: 'workspaceId and payload are required' });
@@ -89,8 +97,8 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       const ip = request.ip ?? null;
       const userAgent = (request.headers['user-agent'] as string) ?? null;
       const result = await pool.query(
-        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-        [workspaceId, cursor, payload, ip, userAgent, label ?? null],
+        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [workspaceId, cursor, payload, ip, userAgent, label ?? null, meta ? JSON.stringify(meta) : null],
       );
 
       const blobId = (result.rows[0] as { id: string }).id;
@@ -232,7 +240,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         (workspaces.rows as Array<{ id: string; name: string | null; machine_name: string | null; created_at: string }>)
           .map(async (ws) => {
             const blobs = await pool.query(
-              `SELECT id, cursor, created_at, ip, user_agent, label
+              `SELECT id, cursor, created_at, ip, user_agent, label, meta
                FROM sync_blobs
                WHERE workspace_id = $1
                ORDER BY cursor DESC
@@ -247,6 +255,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
               checkpoints: (blobs.rows as Array<{
                 id: string; cursor: string; created_at: string;
                 ip: string | null; user_agent: string | null; label: string | null;
+                meta: unknown;
               }>).map(b => ({
                 id: b.id,
                 cursor: b.cursor,
@@ -254,6 +263,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
                 ip: b.ip,
                 userAgent: b.user_agent,
                 label: b.label,
+                meta: b.meta ?? null,
               })),
             };
           }),

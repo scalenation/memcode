@@ -159,6 +159,13 @@
     .hist-cp-copy { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 0.72rem; color: var(--text-dim); cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; flex-shrink: 0; }
     .hist-cp-copy:hover { color: var(--text); border-color: var(--text-dim); }
     .hist-cp-copy.copied { color: #34d399; border-color: #34d399; }
+    /* Checkpoint summaries from meta */
+    .hist-cp-summaries { margin: 6px 0 4px; display: flex; flex-direction: column; gap: 4px; }
+    .hist-meta-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .hist-meta-tag { font-size: 0.7rem; font-weight: 600; background: rgba(99,102,241,0.12); color: #818cf8; border-radius: 4px; padding: 1px 6px; }
+    .hist-meta-trigger { background: rgba(52,211,153,0.1); color: #34d399; }
+    .hist-meta-sha { font-family: monospace; font-size: 0.7rem; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+    .hist-meta-summary { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
 </head>

@@ -82,6 +82,17 @@ export async function pushSync(
 
   const encrypted = encryptPayload(payload, config.encryptionKey);
 
+  // Build unencrypted metadata for dashboard display.
+  // Summaries are not secrets (they're like git commit messages).
+  const meta = checkpoints.map(cp => ({
+    id: cp.id,
+    trigger: cp.trigger,
+    branch: cp.branch ?? null,
+    git_sha: cp.git_sha ? cp.git_sha.slice(0, 12) : null,
+    summary: cp.summary_short,
+    created_at: cp.created_at,
+  }));
+
   // HTTP POST to cloud API
   const response = await fetch(`${config.endpoint}/v1/sync/push`, {
     method: 'POST',
@@ -89,7 +100,7 @@ export async function pushSync(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${config.apiToken}`,
     },
-    body: JSON.stringify({ workspaceId: config.workspaceId, payload: encrypted }),
+    body: JSON.stringify({ workspaceId: config.workspaceId, payload: encrypted, meta }),
   });
 
   if (!response.ok) {
