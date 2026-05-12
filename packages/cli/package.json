@@ -1,6 +1,6 @@
 {
   "name": "@memcode/cli",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "description": "CLI for MemCode Project Memory Assistant",
   "keywords": [
     "memory",
@@ -40,7 +40,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@memcode/cloud-client": "^1.0.5",
+    "@memcode/cloud-client": "^1.0.6",
     "@memcode/core": "^1.0.9",
     "commander": "^12.1.0",
     "picocolors": "^1.1.0"
