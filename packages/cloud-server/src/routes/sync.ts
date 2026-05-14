@@ -346,11 +346,19 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         (workspaces.rows as Array<{ id: string; name: string | null; machine_name: string | null; created_at: string }>)
           .map(async (ws) => {
             const blobs = await pool.query(
-              `SELECT id, cursor, created_at, ip, user_agent, label, meta
+              `SELECT id, cursor, created_at, ip, user_agent, label,
+                      CASE
+                        WHEN meta IS NULL OR jsonb_typeof(meta) <> 'array' THEN NULL
+                        ELSE (
+                          SELECT jsonb_agg(item ORDER BY ord)
+                          FROM jsonb_array_elements(meta) WITH ORDINALITY AS entries(item, ord)
+                          WHERE ord <= 6
+                        )
+                      END AS meta
                FROM sync_blobs
                WHERE workspace_id = $1
                ORDER BY cursor DESC
-               LIMIT 50`,
+               LIMIT 20`,
               [ws.id],
             );
             return {
