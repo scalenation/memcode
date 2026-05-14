@@ -12,7 +12,9 @@ dist/
 
 # MemCode local memory files
 .memory/memory.db
+.memory/memory.db-*
 .memory/events.jsonl
+.memory/sync-daemon.json
 
 # OS
 .DS_Store

@@ -64,7 +64,7 @@ export const initCommand = new Command('init')
 
     // 4. Update .gitignore
     const gitignorePath = join(projectPath, '.gitignore');
-    const entries = '\n# MemCode local memory files\n.memory/memory.db\n.memory/events.jsonl\n';
+    const entries = '\n# MemCode local memory files\n.memory/memory.db\n.memory/events.jsonl\n.memory/sync-daemon.json\n';
     if (existsSync(gitignorePath)) {
       const content = readFileSync(gitignorePath, 'utf-8');
       if (!content.includes('.memory/memory.db')) {
@@ -103,5 +103,6 @@ export const initCommand = new Command('init')
       console.log(`  Tip: run ${pc.cyan('memory init --hooks')} to enable automatic checkpointing.`);
     }
     console.log(`  Next: ${pc.cyan('memory checkpoint --note "Initial setup"')}`);
+    console.log(`  Cloud: ${pc.cyan('memory sync auth')} then ${pc.cyan('memory sync start')} for background sync.`);
     console.log(`  Then: ${pc.cyan('memory copilot setup')} to inject context into every VS Code Copilot chat automatically.`);
   });

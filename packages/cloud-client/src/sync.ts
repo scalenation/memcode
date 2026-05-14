@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Checkpoint, Decision, Task, SyncState } from '@memcode/core';
+import type { Checkpoint, Decision, Message, Session, Task, SyncState } from '@memcode/core';
 import { transaction } from '@memcode/core';
 import { encryptPayload, decryptPayload } from './client';
 import type { CloudConfig, SyncPayload } from './client';
@@ -7,6 +7,8 @@ import type { CloudConfig, SyncPayload } from './client';
 export interface PushResult {
   cursor: string;
   uploadedAt: number;
+  sessionsCount: number;
+  messagesCount: number;
   checkpointsCount: number;
   decisionsCount: number;
   tasksCount: number;
@@ -15,6 +17,8 @@ export interface PushResult {
 export interface PullResult {
   cursor: string;
   merged: {
+    sessions: number;
+    messages: number;
     checkpoints: number;
     decisions: number;
     tasks: number;
@@ -52,6 +56,22 @@ export async function pushSync(
 
   // Collect the complete merged workspace snapshot. The latest cloud blob is
   // intentionally self-contained so any machine can restore from it directly.
+  const sessions = db
+    .prepare(
+      'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at',
+    )
+    .all(config.workspaceId) as unknown as Session[];
+
+  const messages = db
+    .prepare(
+      `SELECT m.*
+       FROM messages m
+       INNER JOIN sessions s ON s.id = m.session_id
+       WHERE s.workspace_id = ?
+       ORDER BY m.created_at`,
+    )
+    .all(config.workspaceId) as unknown as Message[];
+
   const checkpoints = db
     .prepare(
       'SELECT * FROM checkpoints WHERE workspace_id = ? ORDER BY created_at',
@@ -75,6 +95,8 @@ export async function pushSync(
 
   const payload: SyncPayload = {
     workspaceId: config.workspaceId,
+    sessions,
+    messages,
     checkpoints,
     decisions,
     tasks,
@@ -123,6 +145,8 @@ export async function pushSync(
   return {
     cursor: serverCursor,
     uploadedAt: now,
+    sessionsCount: sessions.length,
+    messagesCount: messages.length,
     checkpointsCount: checkpoints.length,
     decisionsCount: decisions.length,
     tasksCount: tasks.length,
@@ -169,7 +193,7 @@ export async function pullSync(
 
   // Nothing new from server — still success, just nothing to merge
   if (!blob) {
-    return { cursor: newCursor, merged: { checkpoints: 0, decisions: 0, tasks: 0 } };
+    return { cursor: newCursor, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
   }
 
   const data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
@@ -230,9 +254,47 @@ function mergePayload(
   db: DatabaseSync,
   data: SyncPayload,
 ): PullResult['merged'] {
-  const merged = { checkpoints: 0, decisions: 0, tasks: 0 };
+  const merged = { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 };
 
   transaction(db, () => {
+    for (const session of data.sessions ?? []) {
+      const existing = db
+        .prepare('SELECT ended_at FROM sessions WHERE id = ?')
+        .get(session.id) as unknown as { ended_at: number | null } | undefined;
+      if (!existing) {
+        db.prepare(`
+          INSERT INTO sessions
+            (id, workspace_id, editor, agent, started_at, ended_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          session.id, session.workspace_id, session.editor ?? null, session.agent ?? null,
+          session.started_at, session.ended_at ?? null,
+        );
+        merged.sessions++;
+      } else if ((session.ended_at ?? 0) > (existing.ended_at ?? 0)) {
+        db.prepare('UPDATE sessions SET ended_at = ? WHERE id = ?')
+          .run(session.ended_at ?? null, session.id);
+        merged.sessions++;
+      }
+    }
+
+    for (const message of data.messages ?? []) {
+      const exists = db
+        .prepare('SELECT id FROM messages WHERE id = ?')
+        .get(message.id);
+      if (!exists) {
+        db.prepare(`
+          INSERT INTO messages
+            (id, session_id, role, content, token_count, created_at)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          message.id, message.session_id, message.role, message.content,
+          message.token_count ?? null, message.created_at,
+        );
+        merged.messages++;
+      }
+    }
+
     for (const cp of data.checkpoints) {
       const exists = db
         .prepare('SELECT id FROM checkpoints WHERE id = ?')

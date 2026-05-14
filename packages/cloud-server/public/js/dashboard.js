@@ -503,15 +503,36 @@ async function loadWorkspaces() {
 function renderWorkspaces(workspaces) {
   const list = document.getElementById('ws-list');
   list.innerHTML = '';
+
+  const grouped = new Map();
   for (const ws of workspaces) {
+    const projectName = ws.name || 'Unnamed project';
+    if (!grouped.has(projectName)) grouped.set(projectName, []);
+    grouped.get(projectName).push(ws);
+  }
+
+  for (const [projectName, projectWorkspaces] of grouped.entries()) {
+    const group = document.createElement('div');
+    group.className = 'ws-project';
+    const totalBlobs = projectWorkspaces.reduce((sum, ws) => sum + ws.blobCount, 0);
+    const latestSync = projectWorkspaces
+      .map(ws => ws.lastSyncedAt)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+    group.innerHTML = `
+      <div class="ws-project-name">${esc(projectName)}</div>
+      <div class="ws-project-meta">${projectWorkspaces.length} device${projectWorkspaces.length !== 1 ? 's' : ''} &nbsp;·&nbsp; ${totalBlobs} sync snapshot${totalBlobs !== 1 ? 's' : ''}${latestSync ? ` &nbsp;·&nbsp; latest ${timeAgo(latestSync)}` : ''}</div>
+    `;
+
+    for (const ws of projectWorkspaces) {
     const div = document.createElement('div');
     div.className = 'ws-row';
     const lastSync = ws.lastSyncedAt ? timeAgo(ws.lastSyncedAt) : 'Never';
-    const projectName = ws.name || 'Unnamed project';
     const machineName = ws.machineName || 'Unknown device';
     div.innerHTML = `
       <div class="ws-info">
-        <div class="ws-title">${esc(projectName)} <span style="color:var(--text-dim);font-weight:500">/ ${esc(machineName)}</span></div>
+        <div class="ws-title">${esc(machineName)}</div>
         <div class="ws-id">${esc(ws.id)}</div>
         <div class="ws-meta">Last sync: ${lastSync} &nbsp;·&nbsp; ${ws.blobCount} blob${ws.blobCount !== 1 ? 's' : ''} &nbsp;·&nbsp; ${fmtBytes(ws.storageBytes)}</div>
         <div class="ws-del-confirm" id="wsc-${esc(ws.id)}" hidden>
@@ -522,7 +543,10 @@ function renderWorkspaces(workspaces) {
       </div>
       <button class="btn btn-danger btn-sm" id="ws-del-btn-${esc(ws.id)}" data-action="ws-delete" data-ws="${esc(ws.id)}">Delete</button>
     `;
-    list.appendChild(div);
+      group.appendChild(div);
+    }
+
+    list.appendChild(group);
   }
 }
 

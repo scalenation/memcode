@@ -3,9 +3,10 @@ import { createInterface } from 'node:readline';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { homedir, hostname } from 'node:os';
+import { spawn } from 'node:child_process';
 import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
-import { findProjectRoot, resolveProject } from '../util';
+import { findProjectRoot, getMemoryDir, resolveProject } from '../util';
 
 const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
@@ -13,6 +14,13 @@ const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const CLI_VERSION: string = (require('../../package.json') as { version: string }).version;
 const CLI_UA = `MemCode CLI/${CLI_VERSION}`;
+
+interface DaemonState {
+  pid: number;
+  projectPath: string;
+  intervalSeconds: number;
+  startedAt: string;
+}
 
 /**
  * Detect the current IDE or terminal environment.
@@ -109,18 +117,23 @@ async function registerWorkspace(
   }).catch(() => undefined);
 }
 
-async function runAutoSync(path?: string): Promise<void> {
+async function runAutoSync(
+  path?: string,
+  options: { quiet?: boolean; exitOnError?: boolean } = {},
+): Promise<boolean> {
+  const { quiet = false, exitOnError = true } = options;
   const auth = readAuthConfig();
   if (!auth) {
-    console.log(noAuthMsg());
-    process.exit(1);
+    if (!quiet) console.log(noAuthMsg());
+    if (exitOnError) process.exit(1);
+    return false;
   }
 
   const projectPath = path ?? findProjectRoot();
   const { db, workspace } = resolveProject(projectPath);
   const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
 
-  console.log(pc.bold('Syncing memory with cloud…'));
+  if (!quiet) console.log(pc.bold('Syncing memory with cloud…'));
   try {
     await registerWorkspace(auth, workspace.id, projectPath);
     const result = await pushSync(db, {
@@ -129,11 +142,45 @@ async function runAutoSync(path?: string): Promise<void> {
       encryptionKey,
       workspaceId: workspace.id,
     });
-    console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
-    console.log(pc.dim(`  cursor: ${result.cursor}`));
+    if (!quiet) {
+      console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.sessionsCount))} sessions,`, `${pc.cyan(String(result.messagesCount))} messages,`, `${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+      console.log(pc.dim(`  cursor: ${result.cursor}`));
+    }
+    return true;
   } catch (err) {
-    console.error(pc.red('Sync failed:'), (err as Error).message);
-    process.exit(1);
+    if (!quiet) console.error(pc.red('Sync failed:'), (err as Error).message);
+    if (exitOnError) process.exit(1);
+    return false;
+  }
+}
+
+function daemonStatePath(projectPath: string): string {
+  return join(getMemoryDir(projectPath), 'sync-daemon.json');
+}
+
+function readDaemonState(projectPath: string): DaemonState | null {
+  const statePath = daemonStatePath(projectPath);
+  if (!existsSync(statePath)) return null;
+  try {
+    return JSON.parse(readFileSync(statePath, 'utf-8')) as DaemonState;
+  } catch {
+    return null;
+  }
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearDaemonState(projectPath: string): void {
+  const statePath = daemonStatePath(projectPath);
+  if (existsSync(statePath)) {
+    try { unlinkSync(statePath); } catch { /* best effort */ }
   }
 }
 
@@ -228,6 +275,7 @@ syncCommand
       console.log('');
       console.log('Next steps:');
       console.log(`  ${pc.cyan('memory sync')}  — merge latest cloud memory and upload this workspace`);
+      console.log(`  ${pc.cyan('memory sync start')}  — keep this workspace synced in the background`);
       console.log(`  ${pc.cyan('memory init --hooks')}  — enable automatic checkpointing and sync`);
     } catch (err) {
       console.error(pc.red('Error:'), (err as Error).message);
@@ -263,7 +311,7 @@ syncCommand
         encryptionKey,
         workspaceId: workspace.id,
       });
-      console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+      console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.sessionsCount))} sessions,`, `${pc.cyan(String(result.messagesCount))} messages,`, `${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
       console.log(pc.dim(`  cursor: ${result.cursor}`));
     } catch (err) {
       console.error(pc.red('Push failed:'), (err as Error).message);
@@ -297,16 +345,110 @@ syncCommand
         workspaceId: workspace.id,
       });
 
-      if (result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
+      if (result.merged.sessions === 0 && result.merged.messages === 0 && result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
         console.log(pc.green('✓'), 'Already up to date.');
       } else {
-        console.log(pc.green('✓'), `Merged ${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
+        console.log(pc.green('✓'), `Merged ${pc.cyan(String(result.merged.sessions))} sessions,`, `${pc.cyan(String(result.merged.messages))} messages,`, `${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
       }
       console.log(pc.dim(`  cursor: ${result.cursor}`));
     } catch (err) {
       console.error(pc.red('Pull failed:'), (err as Error).message);
       process.exit(1);
     }
+  });
+
+// ─── background sync ───────────────────────────────────────────────────────
+
+syncCommand
+  .command('start')
+  .description('Start automatic background sync for this project')
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .option('--interval <seconds>', 'Sync interval in seconds', '120')
+  .action(async (options: { path?: string; interval: string }) => {
+    const auth = readAuthConfig();
+    if (!auth) {
+      console.log(noAuthMsg());
+      process.exit(1);
+    }
+
+    const projectPath = options.path ?? findProjectRoot();
+    const intervalSeconds = Math.max(30, Number.parseInt(options.interval, 10) || 120);
+    const existing = readDaemonState(projectPath);
+
+    if (existing && isProcessRunning(existing.pid)) {
+      console.log(pc.green('✓'), `Background sync already running (${existing.pid}).`);
+      console.log(pc.dim(`  interval: ${existing.intervalSeconds}s`));
+      return;
+    }
+
+    clearDaemonState(projectPath);
+    const child = spawn(
+      process.execPath,
+      [process.argv[1], 'sync', 'daemon', '--path', projectPath, '--interval', String(intervalSeconds)],
+      {
+        cwd: projectPath,
+        detached: true,
+        stdio: 'ignore',
+        env: process.env,
+      },
+    );
+    child.unref();
+
+    const state: DaemonState = {
+      pid: child.pid ?? 0,
+      projectPath,
+      intervalSeconds,
+      startedAt: new Date().toISOString(),
+    };
+    writeFileSync(daemonStatePath(projectPath), JSON.stringify(state, null, 2) + '\n', 'utf-8');
+
+    console.log(pc.green('✓'), `Background sync started (${state.pid}).`);
+    console.log(pc.dim(`  interval: ${intervalSeconds}s`));
+  });
+
+syncCommand
+  .command('stop')
+  .description('Stop automatic background sync for this project')
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action((options: { path?: string }) => {
+    const projectPath = options.path ?? findProjectRoot();
+    const state = readDaemonState(projectPath);
+    if (!state) {
+      console.log(pc.yellow('~'), 'Background sync is not running.');
+      return;
+    }
+
+    if (state.pid && isProcessRunning(state.pid)) {
+      try { process.kill(state.pid, 'SIGTERM'); } catch { /* best effort */ }
+    }
+    clearDaemonState(projectPath);
+    console.log(pc.green('✓'), 'Background sync stopped.');
+  });
+
+syncCommand
+  .command('daemon')
+  .description('Internal background sync loop')
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .option('--interval <seconds>', 'Sync interval in seconds', '120')
+  .action(async (options: { path?: string; interval: string }) => {
+    const projectPath = options.path ?? findProjectRoot();
+    const intervalSeconds = Math.max(30, Number.parseInt(options.interval, 10) || 120);
+
+    const tick = async () => {
+      await runAutoSync(projectPath, { quiet: true, exitOnError: false });
+    };
+
+    process.on('SIGTERM', () => {
+      clearDaemonState(projectPath);
+      process.exit(0);
+    });
+    process.on('SIGINT', () => {
+      clearDaemonState(projectPath);
+      process.exit(0);
+    });
+
+    await tick();
+    setInterval(tick, intervalSeconds * 1000);
   });
 
 // ─── restore ────────────────────────────────────────────────────────────────
@@ -337,10 +479,10 @@ syncCommand
         blobId,
       });
 
-      if (result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
+      if (result.merged.sessions === 0 && result.merged.messages === 0 && result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
         console.log(pc.yellow('~'), 'Nothing new to restore — this checkpoint matches your current state.');
       } else {
-        console.log(pc.green('✓'), `Restored: ${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
+        console.log(pc.green('✓'), `Restored: ${pc.cyan(String(result.merged.sessions))} sessions,`, `${pc.cyan(String(result.merged.messages))} messages,`, `${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
       }
       console.log(pc.dim(`  blob: ${blobId}`));
     } catch (err) {
@@ -373,7 +515,7 @@ syncCommand
 
       if (res.status === 404) {
         console.log(pc.yellow('~'), 'This workspace has not been synced yet.');
-        console.log(`  Run ${pc.cyan('memory sync push')} to start.`);
+        console.log(`  Run ${pc.cyan('memory sync')} to start.`);
         return;
       }
 
@@ -401,6 +543,13 @@ syncCommand
       console.log(`  Last synced:  ${pc.cyan(when)}`);
       console.log(`  Total pushes: ${pc.cyan(String(data.totalPushes))}`);
       console.log(`  Endpoint:     ${pc.dim(auth.endpoint)}`);
+      const daemon = readDaemonState(projectPath);
+      if (daemon && isProcessRunning(daemon.pid)) {
+        console.log(`  Background:   ${pc.green('running')} (${daemon.pid}, every ${daemon.intervalSeconds}s)`);
+      } else {
+        if (daemon) clearDaemonState(projectPath);
+        console.log(`  Background:   ${pc.dim('stopped')}`);
+      }
     } catch (err) {
       console.error(pc.red('Error:'), (err as Error).message);
     }

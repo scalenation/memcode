@@ -1,5 +1,5 @@
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
-import type { Checkpoint, Decision, Task } from '@memcode/core';
+import type { Checkpoint, Decision, Message, Session, Task } from '@memcode/core';
 
 export interface CloudConfig {
   endpoint: string;
@@ -13,6 +13,8 @@ export interface CloudConfig {
 
 export interface SyncPayload {
   workspaceId: string;
+  sessions: Session[];
+  messages: Message[];
   checkpoints: Checkpoint[];
   decisions: Decision[];
   tasks: Task[];
