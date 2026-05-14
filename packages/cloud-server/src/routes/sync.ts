@@ -8,11 +8,13 @@ interface PushBody {
   workspaceId: string;
   payload: string; // base64 AES-256-GCM encrypted blob
   label?: string;  // optional human-readable label (e.g. "12 checkpoints, 3 decisions")
-  meta?: Array<{   // unencrypted checkpoint summaries for dashboard display
+  meta?: Array<{   // unencrypted dashboard timeline summaries
+    type?: 'checkpoint' | 'chat';
     id: string;
-    trigger: string | null;
-    branch: string | null;
-    git_sha: string | null;
+    role?: 'user' | 'assistant' | 'system';
+    trigger?: string | null;
+    branch?: string | null;
+    git_sha?: string | null;
     summary: string | null;
     created_at: number;
   }>;
@@ -69,7 +71,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.post<{ Body: PushBody }>(
     '/v1/sync/push',
-    { preHandler: [authenticate, requireActiveSubscription] },
+    { preHandler: [authenticate, requireActiveSubscription], bodyLimit: 25 * 1024 * 1024 },
     async (request: FastifyRequest<{ Body: PushBody }>, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
       const { workspaceId, payload, label, meta } = request.body;
@@ -224,7 +226,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get(
     '/v1/sync/history',
-    { preHandler: [authenticate] },
+    { preHandler: [authenticate, requireActiveSubscription] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
 

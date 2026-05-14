@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import Stripe from 'stripe';
 import { pool } from '../db/client';
 import { authenticate } from '../middleware/authenticate';
+import { requireActiveSubscription } from '../middleware/require-active-subscription';
 import type { TokenPayload } from '../middleware/authenticate';
 import { config } from '../config';
 
@@ -104,7 +105,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.get(
     '/v1/user/workspaces',
-    { preHandler: authenticate },
+    { preHandler: [authenticate, requireActiveSubscription] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
 
@@ -151,7 +152,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
    */
   fastify.delete<{ Params: { workspaceId: string } }>(
     '/v1/user/workspaces/:workspaceId',
-    { preHandler: authenticate },
+    { preHandler: [authenticate, requireActiveSubscription] },
     async (request: FastifyRequest<{ Params: { workspaceId: string } }>, reply: FastifyReply) => {
       const user = (request as FastifyRequest<{ Params: { workspaceId: string } }> & { user: TokenPayload }).user;
       const { workspaceId } = request.params;

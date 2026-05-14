@@ -23,6 +23,10 @@ async function authFetch(path, opts = {}) {
   });
 }
 
+function proRequiredMessage() {
+  return 'MemCode Pro is required to access synced dashboard history and autosync data.';
+}
+
 // ── Sign out ──────────────────────────────────────────────────────────────────
 function signOut() { localStorage.removeItem('mc_token'); window.location.replace('/login'); }
 document.getElementById('signout-btn')?.addEventListener('click', signOut);
@@ -465,6 +469,7 @@ async function loadWorkspaces() {
   try {
     const res = await authFetch('/v1/user/workspaces');
     const body = await res.json();
+    if (res.status === 402) throw new Error(proRequiredMessage());
     if (!res.ok) throw new Error(body.error ?? 'Failed to load workspaces');
     loading.hidden = true;
 
@@ -736,6 +741,7 @@ async function loadHistory() {
   try {
     const res  = await authFetch('/v1/sync/history');
     const body = await res.json();
+    if (res.status === 402) throw new Error(proRequiredMessage());
     if (!res.ok) throw new Error(body.error ?? 'Failed to load history');
 
     historyData = body.workspaces ?? [];
@@ -806,6 +812,7 @@ function renderHistory(workspaces) {
               </div>
               ${cp.meta && cp.meta.length > 0 ? `<div class="hist-cp-summaries">${cp.meta.map(m => {
                 const parts = [];
+                if (m.type === 'chat') parts.push(`<span class="hist-meta-tag hist-meta-chat">${esc(m.role || 'chat')}</span>`);
                 if (m.trigger) parts.push(`<span class="hist-meta-tag hist-meta-trigger">${esc(m.trigger)}</span>`);
                 if (m.branch) parts.push(`<span class="hist-meta-tag">${esc(m.branch)}</span>`);
                 if (m.git_sha) parts.push(`<code class="hist-meta-sha">${esc(m.git_sha)}</code>`);

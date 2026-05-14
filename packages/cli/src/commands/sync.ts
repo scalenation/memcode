@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
 import { findProjectRoot, getMemoryDir, resolveProject } from '../util';
+import { importChatHistory } from '../chat-import';
 
 const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
@@ -135,6 +136,7 @@ async function runAutoSync(
 
   if (!quiet) console.log(pc.bold('Syncing memory with cloud…'));
   try {
+    const imported = importChatHistory(db, workspace.id, projectPath);
     await registerWorkspace(auth, workspace.id, projectPath);
     const result = await pushSync(db, {
       endpoint: auth.endpoint,
@@ -144,6 +146,9 @@ async function runAutoSync(
     });
     if (!quiet) {
       console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.sessionsCount))} sessions,`, `${pc.cyan(String(result.messagesCount))} messages,`, `${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+      if (imported.sessions > 0 || imported.messages > 0) {
+        console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
+      }
       console.log(pc.dim(`  cursor: ${result.cursor}`));
     }
     return true;
@@ -303,6 +308,7 @@ syncCommand
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
       // Register workspace with name and machine name (best-effort, non-fatal)
+      const imported = importChatHistory(db, workspace.id, projectPath);
       await registerWorkspace(auth, workspace.id, projectPath);
 
       const result = await pushSync(db, {
@@ -312,6 +318,9 @@ syncCommand
         workspaceId: workspace.id,
       });
       console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.sessionsCount))} sessions,`, `${pc.cyan(String(result.messagesCount))} messages,`, `${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+      if (imported.sessions > 0 || imported.messages > 0) {
+        console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
+      }
       console.log(pc.dim(`  cursor: ${result.cursor}`));
     } catch (err) {
       console.error(pc.red('Push failed:'), (err as Error).message);
@@ -374,6 +383,9 @@ syncCommand
     const projectPath = options.path ?? findProjectRoot();
     const intervalSeconds = Math.max(30, Number.parseInt(options.interval, 10) || 120);
     const existing = readDaemonState(projectPath);
+
+    const initialSync = await runAutoSync(projectPath, { exitOnError: false });
+    if (!initialSync) process.exit(1);
 
     if (existing && isProcessRunning(existing.pid)) {
       console.log(pc.green('✓'), `Background sync already running (${existing.pid}).`);

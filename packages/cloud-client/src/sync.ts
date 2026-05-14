@@ -28,8 +28,8 @@ export interface PullResult {
 /**
  * Push workspace summaries and metadata to the cloud API.
  *
- * All data is encrypted client-side before transmission.
- * Only summaries and structured metadata are uploaded — no raw message transcripts.
+ * All data is encrypted client-side before transmission. Structured metadata is
+ * uploaded alongside the encrypted blob so the dashboard can render history.
  *
  * NOTE: This is a stub implementation. Wire up `config.endpoint` to the
  * live API gateway when the cloud backend is available.
@@ -106,16 +106,26 @@ export async function pushSync(
 
   const encrypted = encryptPayload(payload, config.encryptionKey);
 
-  // Build unencrypted metadata for dashboard display.
-  // Summaries are not secrets (they're like git commit messages).
-  const meta = checkpoints.map(cp => ({
-    id: cp.id,
-    trigger: cp.trigger,
-    branch: cp.branch ?? null,
-    git_sha: cp.git_sha ? cp.git_sha.slice(0, 12) : null,
-    summary: cp.summary_short,
-    created_at: cp.created_at,
-  }));
+  // Build dashboard metadata. The encrypted blob remains the source of truth;
+  // this metadata powers searchable history in the web dashboard.
+  const meta = [
+    ...checkpoints.map(cp => ({
+      type: 'checkpoint',
+      id: cp.id,
+      trigger: cp.trigger,
+      branch: cp.branch ?? null,
+      git_sha: cp.git_sha ? cp.git_sha.slice(0, 12) : null,
+      summary: cp.summary_short,
+      created_at: cp.created_at,
+    })),
+    ...messages.map(message => ({
+      type: 'chat',
+      id: message.id,
+      role: message.role,
+      summary: message.content,
+      created_at: message.created_at,
+    })),
+  ].sort((a, b) => b.created_at - a.created_at);
 
   // HTTP POST to cloud API
   const response = await fetch(`${config.endpoint}/v1/sync/push`, {
