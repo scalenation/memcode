@@ -36,9 +36,6 @@ export async function pushSync(
 ): Promise<PushResult> {
   assertEnabled(config);
 
-  const syncState = getSyncState(db, config.workspaceId);
-  const since = syncState?.last_synced_at ?? 0;
-
   // Ensure the workspace is registered on the server before pushing
   await fetch(`${config.endpoint}/v1/sync/workspace`, {
     method: 'POST',
@@ -49,24 +46,29 @@ export async function pushSync(
     body: JSON.stringify({ workspaceId: config.workspaceId }),
   });
 
-  // Collect items modified since last sync
+  // Pull and merge the latest cloud snapshot first. This keeps two machines
+  // from overwriting each other's newest memory when either one pushes.
+  await pullSync(db, config);
+
+  // Collect the complete merged workspace snapshot. The latest cloud blob is
+  // intentionally self-contained so any machine can restore from it directly.
   const checkpoints = db
     .prepare(
-      'SELECT * FROM checkpoints WHERE workspace_id = ? AND created_at > ? ORDER BY created_at',
+      'SELECT * FROM checkpoints WHERE workspace_id = ? ORDER BY created_at',
     )
-    .all(config.workspaceId, since) as unknown as Checkpoint[];
+    .all(config.workspaceId) as unknown as Checkpoint[];
 
   const decisions = db
     .prepare(
-      'SELECT * FROM decisions WHERE workspace_id = ? AND updated_at > ? ORDER BY created_at',
+      'SELECT * FROM decisions WHERE workspace_id = ? ORDER BY created_at',
     )
-    .all(config.workspaceId, since) as unknown as Decision[];
+    .all(config.workspaceId) as unknown as Decision[];
 
   const tasks = db
     .prepare(
-      'SELECT * FROM tasks WHERE workspace_id = ? AND updated_at > ? ORDER BY created_at',
+      'SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at',
     )
-    .all(config.workspaceId, since) as unknown as Task[];
+    .all(config.workspaceId) as unknown as Task[];
 
   const now = Date.now();
   const cursor = String(now);
@@ -144,7 +146,7 @@ export async function pullSync(
 
   const pullUrl = config.blobId
     ? `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&blobId=${encodeURIComponent(config.blobId)}`
-    : `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&cursor=${encodeURIComponent(cursor)}`;
+    : `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&cursor=0`;
 
   const response = await fetch(
     pullUrl,
@@ -172,6 +174,62 @@ export async function pullSync(
 
   const data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
 
+  const merged = mergePayload(db, data);
+
+  upsertSyncState(db, config.workspaceId, {
+    enabled: 1,
+    last_cursor: newCursor,
+    last_synced_at: Date.now(),
+    provider: 'memcode',
+  });
+
+  return { cursor: newCursor, merged };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function assertEnabled(config: CloudConfig): void {
+  if (!config.endpoint || !config.apiToken || !config.encryptionKey) {
+    throw new Error(
+      'Cloud sync is not configured. Set endpoint, apiToken, and encryptionKey in your MemCode config.',
+    );
+  }
+}
+
+function getSyncState(db: DatabaseSync, workspaceId: string): SyncState | undefined {
+  return db
+    .prepare('SELECT * FROM sync_state WHERE workspace_id = ?')
+    .get(workspaceId) as unknown as SyncState | undefined;
+}
+
+function upsertSyncState(
+  db: DatabaseSync,
+  workspaceId: string,
+  state: Omit<SyncState, 'workspace_id'>,
+): void {
+  db.prepare(`
+    INSERT INTO sync_state (workspace_id, enabled, last_cursor, last_synced_at, provider)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(workspace_id) DO UPDATE SET
+      enabled        = excluded.enabled,
+      last_cursor    = excluded.last_cursor,
+      last_synced_at = excluded.last_synced_at,
+      provider       = excluded.provider
+  `).run(
+    workspaceId,
+    state.enabled,
+    state.last_cursor ?? null,
+    state.last_synced_at ?? null,
+    state.provider ?? null,
+  );
+}
+
+function mergePayload(
+  db: DatabaseSync,
+  data: SyncPayload,
+): PullResult['merged'] {
   const merged = { checkpoints: 0, decisions: 0, tasks: 0 };
 
   transaction(db, () => {
@@ -232,54 +290,7 @@ export async function pullSync(
         merged.tasks++;
       }
     }
+  });
 
-    upsertSyncState(db, config.workspaceId, {
-      enabled: 1,
-      last_cursor: newCursor,
-      last_synced_at: Date.now(),
-      provider: 'memcode',
-    });
-});
-
-  return { cursor: newCursor, merged };
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function assertEnabled(config: CloudConfig): void {
-  if (!config.endpoint || !config.apiToken || !config.encryptionKey) {
-    throw new Error(
-      'Cloud sync is not configured. Set endpoint, apiToken, and encryptionKey in your MemCode config.',
-    );
-  }
-}
-
-function getSyncState(db: DatabaseSync, workspaceId: string): SyncState | undefined {
-  return db
-    .prepare('SELECT * FROM sync_state WHERE workspace_id = ?')
-    .get(workspaceId) as unknown as SyncState | undefined;
-}
-
-function upsertSyncState(
-  db: DatabaseSync,
-  workspaceId: string,
-  state: Omit<SyncState, 'workspace_id'>,
-): void {
-  db.prepare(`
-    INSERT INTO sync_state (workspace_id, enabled, last_cursor, last_synced_at, provider)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(workspace_id) DO UPDATE SET
-      enabled        = excluded.enabled,
-      last_cursor    = excluded.last_cursor,
-      last_synced_at = excluded.last_synced_at,
-      provider       = excluded.provider
-  `).run(
-    workspaceId,
-    state.enabled,
-    state.last_cursor ?? null,
-    state.last_synced_at ?? null,
-    state.provider ?? null,
-  );
+  return merged;
 }
