@@ -1,6 +1,50 @@
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import type { Checkpoint, Decision, Message, Session, Task } from '@memcode/core';
 
+export interface ProjectBrainMilestone {
+  id: string;
+  title: string;
+  detail?: string;
+  trigger?: string | null;
+  branch?: string | null;
+  gitSha?: string | null;
+  createdAt: number;
+}
+
+export interface ProjectBrainDecision {
+  id: string;
+  title: string;
+  rationale: string;
+  impact?: string;
+  status: string;
+  updatedAt: number;
+}
+
+export interface ProjectBrainTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  priority?: string;
+  updatedAt: number;
+}
+
+export interface ProjectBrain {
+  workspaceId: string;
+  generatedAt: number;
+  summary: string;
+  milestones: ProjectBrainMilestone[];
+  decisions: ProjectBrainDecision[];
+  tasks: ProjectBrainTask[];
+  stats: {
+    checkpointCount: number;
+    decisionCount: number;
+    taskCount: number;
+    openTaskCount: number;
+    completedTaskCount: number;
+  };
+}
+
 export interface CloudConfig {
   endpoint: string;
   workspaceId: string;
@@ -13,8 +57,8 @@ export interface CloudConfig {
 
 export interface SyncPayload {
   workspaceId: string;
-  sessions: Session[];
-  messages: Message[];
+  sessions?: Session[];
+  messages?: Message[];
   checkpoints: Checkpoint[];
   decisions: Decision[];
   tasks: Task[];

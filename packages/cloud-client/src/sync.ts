@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Checkpoint, Decision, Message, Session, Task, SyncState } from '@memcode/core';
+import type { Checkpoint, Decision, Task, SyncState } from '@memcode/core';
 import { transaction } from '@memcode/core';
 import { encryptPayload, decryptPayload } from './client';
-import type { CloudConfig, SyncPayload } from './client';
+import type { CloudConfig, ProjectBrain, SyncPayload } from './client';
 
 const DIRECT_PUSH_LIMIT_BYTES = 750_000;
 const PUSH_CHUNK_SIZE = 550_000;
@@ -16,6 +16,7 @@ export interface PushResult {
   checkpointsCount: number;
   decisionsCount: number;
   tasksCount: number;
+  brainMilestonesCount: number;
 }
 
 export interface PullResult {
@@ -61,22 +62,6 @@ export async function pushSync(
 
   // Collect the complete merged workspace snapshot. The latest cloud blob is
   // intentionally self-contained so any machine can restore from it directly.
-  const sessions = db
-    .prepare(
-      'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at',
-    )
-    .all(config.workspaceId) as unknown as Session[];
-
-  const messages = db
-    .prepare(
-      `SELECT m.*
-       FROM messages m
-       INNER JOIN sessions s ON s.id = m.session_id
-       WHERE s.workspace_id = ?
-       ORDER BY m.created_at`,
-    )
-    .all(config.workspaceId) as unknown as Message[];
-
   const checkpoints = db
     .prepare(
       'SELECT * FROM checkpoints WHERE workspace_id = ? ORDER BY created_at',
@@ -100,8 +85,6 @@ export async function pushSync(
 
   const payload: SyncPayload = {
     workspaceId: config.workspaceId,
-    sessions,
-    messages,
     checkpoints,
     decisions,
     tasks,
@@ -110,6 +93,7 @@ export async function pushSync(
   };
 
   const encrypted = encryptPayload(payload, config.encryptionKey);
+  const brain = buildProjectBrain(config.workspaceId, checkpoints, decisions, tasks, now);
 
   // Build dashboard metadata. The encrypted blob remains the source of truth;
   // this metadata powers searchable history in the web dashboard.
@@ -123,16 +107,18 @@ export async function pushSync(
       summary: cp.summary_short,
       created_at: cp.created_at,
     })),
-    ...messages.map(message => ({
-      type: 'chat',
-      id: message.id,
-      role: message.role,
-      summary: message.content,
-      created_at: message.created_at,
+    ...brain.milestones.map(milestone => ({
+      type: 'milestone',
+      id: milestone.id,
+      trigger: milestone.trigger ?? null,
+      branch: milestone.branch ?? null,
+      git_sha: milestone.gitSha ?? null,
+      summary: milestone.title,
+      created_at: milestone.createdAt,
     })),
   ].sort((a, b) => b.created_at - a.created_at);
 
-  const { cursor: serverCursor } = await pushEncryptedSnapshot(config, encrypted, meta);
+  const { cursor: serverCursor } = await pushEncryptedSnapshot(config, encrypted, meta, brain);
 
   // Update local sync state
   upsertSyncState(db, config.workspaceId, {
@@ -145,11 +131,12 @@ export async function pushSync(
   return {
     cursor: serverCursor,
     uploadedAt: now,
-    sessionsCount: sessions.length,
-    messagesCount: messages.length,
+    sessionsCount: 0,
+    messagesCount: 0,
     checkpointsCount: checkpoints.length,
     decisionsCount: decisions.length,
     tasksCount: tasks.length,
+    brainMilestonesCount: brain.milestones.length,
   };
 }
 
@@ -248,8 +235,9 @@ async function pushEncryptedSnapshot(
   config: CloudConfig,
   encrypted: string,
   meta: unknown[],
+  brain: ProjectBrain,
 ): Promise<{ cursor: string; blobId?: string }> {
-  const body = JSON.stringify({ workspaceId: config.workspaceId, payload: encrypted, meta });
+  const body = JSON.stringify({ workspaceId: config.workspaceId, payload: encrypted, meta, brain });
   if (Buffer.byteLength(body, 'utf-8') <= DIRECT_PUSH_LIMIT_BYTES) {
     return postJson<{ cursor: string; blobId?: string }>(config, '/v1/sync/push', body, 'Cloud sync push failed');
   }
@@ -261,7 +249,7 @@ async function pushEncryptedSnapshot(
   return postJson<{ cursor: string; blobId?: string }>(
     config,
     '/v1/sync/push-finalize',
-    JSON.stringify({ workspaceId: config.workspaceId, uploadId }),
+    JSON.stringify({ workspaceId: config.workspaceId, uploadId, brain }),
     'Cloud sync finalize failed',
   );
 }
@@ -312,6 +300,88 @@ async function postJson<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+function buildProjectBrain(
+  workspaceId: string,
+  checkpoints: Checkpoint[],
+  decisions: Decision[],
+  tasks: Task[],
+  generatedAt: number,
+): ProjectBrain {
+  const recentCheckpoints = [...checkpoints]
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 12);
+  const recentDecisions = [...decisions]
+    .sort((a, b) => b.updated_at - a.updated_at)
+    .slice(0, 12);
+  const recentTasks = [...tasks]
+    .sort((a, b) => b.updated_at - a.updated_at)
+    .slice(0, 20);
+  const openTasks = recentTasks.filter(task => task.status !== 'done' && task.status !== 'cancelled');
+  const completedTasks = tasks.filter(task => task.status === 'done');
+
+  const summaryParts = [
+    recentCheckpoints[0]?.summary_short || 'No checkpoints recorded yet.',
+  ];
+  if (recentDecisions.length > 0) {
+    summaryParts.push(`Recent decisions: ${recentDecisions.slice(0, 3).map(decision => decision.title).join('; ')}.`);
+  }
+  if (openTasks.length > 0) {
+    summaryParts.push(`Current focus: ${openTasks.slice(0, 4).map(task => task.title).join('; ')}.`);
+  }
+
+  return {
+    workspaceId,
+    generatedAt,
+    summary: summaryParts.filter(Boolean).join(' '),
+    milestones: recentCheckpoints.map(checkpoint => ({
+      id: checkpoint.id,
+      title: checkpoint.summary_short,
+      detail: compactCheckpointDetail(checkpoint.summary_long, checkpoint.summary_short),
+      trigger: checkpoint.trigger,
+      branch: checkpoint.branch ?? null,
+      gitSha: checkpoint.git_sha ?? null,
+      createdAt: checkpoint.created_at,
+    })),
+    decisions: recentDecisions.map(decision => ({
+      id: decision.id,
+      title: decision.title,
+      rationale: decision.rationale,
+      impact: decision.impact,
+      status: decision.status,
+      updatedAt: decision.updated_at,
+    })),
+    tasks: recentTasks.map(task => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      updatedAt: task.updated_at,
+    })),
+    stats: {
+      checkpointCount: checkpoints.length,
+      decisionCount: decisions.length,
+      taskCount: tasks.length,
+      openTaskCount: openTasks.length,
+      completedTaskCount: completedTasks.length,
+    },
+  };
+}
+
+function compactCheckpointDetail(summaryLong: string, summaryShort: string): string {
+  const lines = summaryLong
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0)
+    .filter(line => !/^(trigger:|branch:|commit:|changed files|stats:)/i.test(line))
+    .filter(line => !/^[madrcu?]\s+/i.test(line));
+
+  const compact = lines.join(' ').replace(/^message:\s*/i, '').trim();
+  if (!compact) return summaryShort;
+  if (/files changed|\s\|\s|packages\//i.test(compact)) return summaryShort;
+  return compact.length <= 280 ? compact : `${compact.slice(0, 277)}...`;
 }
 
 function getSyncState(db: DatabaseSync, workspaceId: string): SyncState | undefined {

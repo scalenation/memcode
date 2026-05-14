@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS sync_blobs (
   workspace_id      TEXT        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   cursor            TEXT        NOT NULL,
   payload_encrypted TEXT        NOT NULL,  -- base64 AES-256-GCM, client-side encrypted
+  brain             JSONB,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

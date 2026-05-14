@@ -1,7 +1,9 @@
 {
-  "version": 1,
-  "workspaceId": "a9403583b2637d3a",
+  "version": 2,
+  "workspaceId": "32c234da849679ee",
   "cloudSync": {
     "enabled": false
-  }
+  },
+  "workspaceStrategy": "git-origin",
+  "projectKey": "git:github.com/scalenation/memcode"
 }

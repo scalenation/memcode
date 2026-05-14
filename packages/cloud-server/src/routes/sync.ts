@@ -9,15 +9,15 @@ interface PushBody {
   payload: string; // base64 AES-256-GCM encrypted blob
   label?: string;  // optional human-readable label (e.g. "12 checkpoints, 3 decisions")
   meta?: Array<{   // unencrypted dashboard timeline summaries
-    type?: 'checkpoint' | 'chat';
+    type?: 'checkpoint' | 'milestone';
     id: string;
-    role?: 'user' | 'assistant' | 'system';
     trigger?: string | null;
     branch?: string | null;
     git_sha?: string | null;
     summary: string | null;
     created_at: number;
   }>;
+  brain?: unknown;
 }
 
 interface PushChunkBody {
@@ -33,6 +33,7 @@ interface PushFinalizeBody {
   workspaceId: string;
   uploadId: string;
   label?: string;
+  brain?: unknown;
 }
 
 interface RegisterWorkspaceBody {
@@ -89,7 +90,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: [authenticate, requireActiveSubscription], bodyLimit: 25 * 1024 * 1024 },
     async (request: FastifyRequest<{ Body: PushBody }>, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
-      const { workspaceId, payload, label, meta } = request.body;
+      const { workspaceId, payload, label, meta, brain } = request.body;
 
       if (!workspaceId || !payload) {
         return reply.status(400).send({ error: 'workspaceId and payload are required' });
@@ -114,8 +115,8 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       const ip = request.ip ?? null;
       const userAgent = (request.headers['user-agent'] as string) ?? null;
       const result = await pool.query(
-        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [workspaceId, cursor, payload, ip, userAgent, label ?? null, meta ? JSON.stringify(meta) : null],
+        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta, brain) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+        [workspaceId, cursor, payload, ip, userAgent, label ?? null, meta ? JSON.stringify(meta) : null, brain ? JSON.stringify(brain) : null],
       );
 
       const blobId = (result.rows[0] as { id: string }).id;
@@ -160,7 +161,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: [authenticate, requireActiveSubscription], bodyLimit: 256 * 1024 },
     async (request: FastifyRequest<{ Body: PushFinalizeBody }>, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
-      const { workspaceId, uploadId, label } = request.body;
+      const { workspaceId, uploadId, label, brain } = request.body;
       if (!workspaceId || !uploadId) {
         return reply.status(400).send({ error: 'workspaceId and uploadId are required' });
       }
@@ -185,8 +186,8 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       const userAgent = (request.headers['user-agent'] as string) ?? null;
 
       const result = await pool.query(
-        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [workspaceId, cursor, payload, ip, userAgent, label ?? null, metaJson ?? null],
+        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta, brain) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+        [workspaceId, cursor, payload, ip, userAgent, label ?? null, metaJson ?? null, brain ? JSON.stringify(brain) : null],
       );
 
       await pool.query('DELETE FROM sync_upload_chunks WHERE upload_id = $1 AND workspace_id = $2', [uploadId, workspaceId]);

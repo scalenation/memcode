@@ -12,6 +12,7 @@ import { syncRoutes } from './routes/sync';
 import { billingRoutes } from './routes/billing';
 import { oauthRoutes } from './routes/oauth';
 import { userRoutes } from './routes/user';
+import { brainRoutes } from './routes/brain';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const fastify = Fastify({
@@ -92,6 +93,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await fastify.register(billingRoutes);
   await fastify.register(oauthRoutes);
   await fastify.register(userRoutes);
+  await fastify.register(brainRoutes);
 
   // Run incremental schema migrations on every cold start (all statements are idempotent)
   fastify.addHook('onReady', async () => {
@@ -125,6 +127,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS user_agent TEXT`,
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS label TEXT`,
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS meta JSONB`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS brain JSONB`,
     ];
     for (const sql of migrations) {
       try {

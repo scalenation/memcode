@@ -145,7 +145,7 @@ async function runAutoSync(
       workspaceId: workspace.id,
     });
     if (!quiet) {
-      console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.sessionsCount))} sessions,`, `${pc.cyan(String(result.messagesCount))} messages,`, `${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+      console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
       if (imported.sessions > 0 || imported.messages > 0) {
         console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
       }
@@ -317,7 +317,7 @@ syncCommand
         encryptionKey,
         workspaceId: workspace.id,
       });
-      console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.sessionsCount))} sessions,`, `${pc.cyan(String(result.messagesCount))} messages,`, `${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+      console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
       if (imported.sessions > 0 || imported.messages > 0) {
         console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
       }
