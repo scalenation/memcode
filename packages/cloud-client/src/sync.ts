@@ -1,8 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Checkpoint, Decision, Message, Session, Task, SyncState } from '@memcode/core';
 import { transaction } from '@memcode/core';
 import { encryptPayload, decryptPayload } from './client';
 import type { CloudConfig, SyncPayload } from './client';
+
+const DIRECT_PUSH_LIMIT_BYTES = 750_000;
+const PUSH_CHUNK_SIZE = 550_000;
 
 export interface PushResult {
   cursor: string;
@@ -128,22 +132,7 @@ export async function pushSync(
     })),
   ].sort((a, b) => b.created_at - a.created_at);
 
-  // HTTP POST to cloud API
-  const response = await fetch(`${config.endpoint}/v1/sync/push`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiToken}`,
-    },
-    body: JSON.stringify({ workspaceId: config.workspaceId, payload: encrypted, meta }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Cloud sync push failed: ${response.status} ${body}`);
-  }
-
-  const { cursor: serverCursor } = (await response.json()) as { cursor: string };
+  const { cursor: serverCursor } = await pushEncryptedSnapshot(config, encrypted, meta);
 
   // Update local sync state
   upsertSyncState(db, config.workspaceId, {
@@ -253,6 +242,76 @@ function buildPullUrl(config: CloudConfig, beforeCursor?: string): string {
   else if (beforeCursor) params.set('beforeCursor', beforeCursor);
   else params.set('cursor', '0');
   return `${config.endpoint}/v1/sync/pull?${params.toString()}`;
+}
+
+async function pushEncryptedSnapshot(
+  config: CloudConfig,
+  encrypted: string,
+  meta: unknown[],
+): Promise<{ cursor: string; blobId?: string }> {
+  const body = JSON.stringify({ workspaceId: config.workspaceId, payload: encrypted, meta });
+  if (Buffer.byteLength(body, 'utf-8') <= DIRECT_PUSH_LIMIT_BYTES) {
+    return postJson<{ cursor: string; blobId?: string }>(config, '/v1/sync/push', body, 'Cloud sync push failed');
+  }
+
+  const uploadId = randomUUID();
+  await uploadChunks(config, uploadId, 'payload', encrypted);
+  await uploadChunks(config, uploadId, 'meta', JSON.stringify(meta));
+
+  return postJson<{ cursor: string; blobId?: string }>(
+    config,
+    '/v1/sync/push-finalize',
+    JSON.stringify({ workspaceId: config.workspaceId, uploadId }),
+    'Cloud sync finalize failed',
+  );
+}
+
+async function uploadChunks(
+  config: CloudConfig,
+  uploadId: string,
+  kind: 'payload' | 'meta',
+  data: string,
+): Promise<void> {
+  const totalChunks = Math.max(1, Math.ceil(data.length / PUSH_CHUNK_SIZE));
+  for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+    const chunk = data.slice(chunkIndex * PUSH_CHUNK_SIZE, (chunkIndex + 1) * PUSH_CHUNK_SIZE);
+    await postJson(
+      config,
+      '/v1/sync/push-chunk',
+      JSON.stringify({
+        workspaceId: config.workspaceId,
+        uploadId,
+        kind,
+        chunkIndex,
+        totalChunks,
+        data: chunk,
+      }),
+      `Cloud sync ${kind} chunk ${chunkIndex + 1}/${totalChunks} failed`,
+    );
+  }
+}
+
+async function postJson<T>(
+  config: CloudConfig,
+  path: string,
+  body: string,
+  errorPrefix: string,
+): Promise<T> {
+  const response = await fetch(`${config.endpoint}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiToken}`,
+    },
+    body,
+  });
+
+  if (!response.ok) {
+    const responseBody = await response.text();
+    throw new Error(`${errorPrefix}: ${response.status} ${responseBody}`);
+  }
+
+  return response.json() as Promise<T>;
 }
 
 function getSyncState(db: DatabaseSync, workspaceId: string): SyncState | undefined {

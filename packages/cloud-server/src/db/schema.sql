@@ -50,3 +50,16 @@ CREATE TABLE IF NOT EXISTS sync_blobs (
 );
 
 CREATE INDEX IF NOT EXISTS sync_blobs_workspace_cursor_idx ON sync_blobs(workspace_id, cursor);
+
+CREATE TABLE IF NOT EXISTS sync_upload_chunks (
+  upload_id    TEXT        NOT NULL,
+  workspace_id  TEXT        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  kind          TEXT        NOT NULL CHECK (kind IN ('payload', 'meta')),
+  chunk_index   INTEGER     NOT NULL,
+  total_chunks  INTEGER     NOT NULL,
+  data          TEXT        NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (upload_id, kind, chunk_index)
+);
+
+CREATE INDEX IF NOT EXISTS sync_upload_chunks_workspace_idx ON sync_upload_chunks(workspace_id, created_at);

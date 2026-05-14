@@ -20,6 +20,21 @@ interface PushBody {
   }>;
 }
 
+interface PushChunkBody {
+  workspaceId: string;
+  uploadId: string;
+  kind: 'payload' | 'meta';
+  chunkIndex: number;
+  totalChunks: number;
+  data: string;
+}
+
+interface PushFinalizeBody {
+  workspaceId: string;
+  uploadId: string;
+  label?: string;
+}
+
 interface RegisterWorkspaceBody {
   workspaceId: string;
   name?: string;
@@ -102,6 +117,79 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
         [workspaceId, cursor, payload, ip, userAgent, label ?? null, meta ? JSON.stringify(meta) : null],
       );
+
+      const blobId = (result.rows[0] as { id: string }).id;
+      return reply.status(200).send({ cursor, blobId });
+    },
+  );
+
+  fastify.post<{ Body: PushChunkBody }>(
+    '/v1/sync/push-chunk',
+    { preHandler: [authenticate, requireActiveSubscription], bodyLimit: 1024 * 1024 },
+    async (request: FastifyRequest<{ Body: PushChunkBody }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+      const { workspaceId, uploadId, kind, chunkIndex, totalChunks, data } = request.body;
+
+      if (!workspaceId || !uploadId || !kind || typeof data !== 'string') {
+        return reply.status(400).send({ error: 'workspaceId, uploadId, kind, and data are required' });
+      }
+      if (!['payload', 'meta'].includes(kind) || !Number.isInteger(chunkIndex) || !Number.isInteger(totalChunks) || chunkIndex < 0 || totalChunks < 1 || chunkIndex >= totalChunks) {
+        return reply.status(400).send({ error: 'Invalid chunk metadata' });
+      }
+
+      const workspaceOk = await ensureWorkspaceOwned(workspaceId, user.sub);
+      if (!workspaceOk.ok) return reply.status(workspaceOk.status).send({ error: workspaceOk.error });
+      await ensureUploadChunksTable();
+
+      await pool.query(
+        `INSERT INTO sync_upload_chunks (upload_id, workspace_id, kind, chunk_index, total_chunks, data)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (upload_id, kind, chunk_index) DO UPDATE SET
+           data = EXCLUDED.data,
+           total_chunks = EXCLUDED.total_chunks,
+           created_at = NOW()`,
+        [uploadId, workspaceId, kind, chunkIndex, totalChunks, data],
+      );
+
+      return reply.status(200).send({ ok: true });
+    },
+  );
+
+  fastify.post<{ Body: PushFinalizeBody }>(
+    '/v1/sync/push-finalize',
+    { preHandler: [authenticate, requireActiveSubscription], bodyLimit: 256 * 1024 },
+    async (request: FastifyRequest<{ Body: PushFinalizeBody }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+      const { workspaceId, uploadId, label } = request.body;
+      if (!workspaceId || !uploadId) {
+        return reply.status(400).send({ error: 'workspaceId and uploadId are required' });
+      }
+
+      const workspaceOk = await ensureWorkspaceOwned(workspaceId, user.sub);
+      if (!workspaceOk.ok) return reply.status(workspaceOk.status).send({ error: workspaceOk.error });
+      await ensureUploadChunksTable();
+
+      const chunks = await pool.query(
+        `SELECT kind, chunk_index, total_chunks, data
+         FROM sync_upload_chunks
+         WHERE upload_id = $1 AND workspace_id = $2
+         ORDER BY kind, chunk_index`,
+        [uploadId, workspaceId],
+      );
+
+      const payload = assembleChunks(chunks.rows, 'payload');
+      if (!payload) return reply.status(400).send({ error: 'Incomplete payload chunks' });
+      const metaJson = assembleChunks(chunks.rows, 'meta');
+      const cursor = String(Date.now());
+      const ip = request.ip ?? null;
+      const userAgent = (request.headers['user-agent'] as string) ?? null;
+
+      const result = await pool.query(
+        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [workspaceId, cursor, payload, ip, userAgent, label ?? null, metaJson ?? null],
+      );
+
+      await pool.query('DELETE FROM sync_upload_chunks WHERE upload_id = $1 AND workspace_id = $2', [uploadId, workspaceId]);
 
       const blobId = (result.rows[0] as { id: string }).id;
       return reply.status(200).send({ cursor, blobId });
@@ -289,4 +377,61 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.send({ workspaces: result });
     },
   );
+}
+
+type ChunkRow = {
+  kind: string;
+  chunk_index: number;
+  total_chunks: number;
+  data: string;
+};
+
+async function ensureWorkspaceOwned(
+  workspaceId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const ws = await pool.query('SELECT user_id FROM workspaces WHERE id = $1', [workspaceId]);
+  if ((ws.rowCount ?? 0) === 0) {
+    await pool.query(
+      'INSERT INTO workspaces (id, user_id) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING',
+      [workspaceId, userId],
+    );
+    return { ok: true };
+  }
+  if (ws.rows[0].user_id !== userId) {
+    return { ok: false, status: 403, error: 'Access denied' };
+  }
+  return { ok: true };
+}
+
+function assembleChunks(rows: unknown[], kind: 'payload' | 'meta'): string | null {
+  const chunks = (rows as ChunkRow[])
+    .filter(row => row.kind === kind)
+    .sort((a, b) => a.chunk_index - b.chunk_index);
+  if (chunks.length === 0) return null;
+  const total = chunks[0].total_chunks;
+  if (!Number.isInteger(total) || total < 1 || chunks.length !== total) return null;
+  for (let index = 0; index < total; index++) {
+    if (chunks[index]?.chunk_index !== index || chunks[index]?.total_chunks !== total) return null;
+  }
+  return chunks.map(chunk => chunk.data).join('');
+}
+
+let uploadChunksTableReady = false;
+async function ensureUploadChunksTable(): Promise<void> {
+  if (uploadChunksTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS sync_upload_chunks (
+      upload_id    TEXT        NOT NULL,
+      workspace_id  TEXT        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      kind          TEXT        NOT NULL CHECK (kind IN ('payload', 'meta')),
+      chunk_index   INTEGER     NOT NULL,
+      total_chunks  INTEGER     NOT NULL,
+      data          TEXT        NOT NULL,
+      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (upload_id, kind, chunk_index)
+    )
+  `);
+  await pool.query('CREATE INDEX IF NOT EXISTS sync_upload_chunks_workspace_idx ON sync_upload_chunks(workspace_id, created_at)');
+  uploadChunksTableReady = true;
 }
