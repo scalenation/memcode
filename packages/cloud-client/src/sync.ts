@@ -16,6 +16,7 @@ export interface PushResult {
 
 export interface PullResult {
   cursor: string;
+  skippedBlobs?: number;
   merged: {
     sessions: number;
     messages: number;
@@ -178,46 +179,60 @@ export async function pullSync(
   const syncState = getSyncState(db, config.workspaceId);
   const cursor = syncState?.last_cursor ?? '0';
 
-  const pullUrl = config.blobId
-    ? `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&blobId=${encodeURIComponent(config.blobId)}`
-    : `${config.endpoint}/v1/sync/pull?workspaceId=${encodeURIComponent(config.workspaceId)}&cursor=0`;
+  let beforeCursor: string | undefined;
+  let skippedBlobs = 0;
 
-  const response = await fetch(
-    pullUrl,
-    {
-      headers: {
-        Authorization: `Bearer ${config.apiToken}`,
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const pullUrl = buildPullUrl(config, beforeCursor);
+    const response = await fetch(
+      pullUrl,
+      {
+        headers: {
+          Authorization: `Bearer ${config.apiToken}`,
+        },
       },
-    },
-  );
+    );
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Cloud sync pull failed: ${response.status} ${body}`);
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Cloud sync pull failed: ${response.status} ${body}`);
+    }
+
+    const { blob, cursor: newCursor } = (await response.json()) as {
+      blob: { id?: string; cursor: string; payload: string } | null;
+      cursor: string;
+    };
+
+    // Nothing new from server — still success, just nothing to merge
+    if (!blob) {
+      return { cursor: newCursor, skippedBlobs, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
+    }
+
+    let data: SyncPayload;
+    try {
+      data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
+    } catch (err) {
+      if (config.blobId) {
+        throw new Error(`Cloud sync restore failed: checkpoint ${config.blobId} could not be decrypted with this workspace key. Run memory sync auth with the original passphrase for workspace ${config.workspaceId}.`);
+      }
+      skippedBlobs++;
+      beforeCursor = blob.cursor;
+      continue;
+    }
+
+    const merged = mergePayload(db, data);
+
+    upsertSyncState(db, config.workspaceId, {
+      enabled: 1,
+      last_cursor: newCursor,
+      last_synced_at: Date.now(),
+      provider: 'memcode',
+    });
+
+    return { cursor: newCursor, skippedBlobs, merged };
   }
 
-  const { blob, cursor: newCursor } = (await response.json()) as {
-    blob: { cursor: string; payload: string } | null;
-    cursor: string;
-  };
-
-  // Nothing new from server — still success, just nothing to merge
-  if (!blob) {
-    return { cursor: newCursor, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
-  }
-
-  const data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
-
-  const merged = mergePayload(db, data);
-
-  upsertSyncState(db, config.workspaceId, {
-    enabled: 1,
-    last_cursor: newCursor,
-    last_synced_at: Date.now(),
-    provider: 'memcode',
-  });
-
-  return { cursor: newCursor, merged };
+  return { cursor, skippedBlobs, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
 }
 
 // ---------------------------------------------------------------------------
@@ -230,6 +245,14 @@ function assertEnabled(config: CloudConfig): void {
       'Cloud sync is not configured. Set endpoint, apiToken, and encryptionKey in your MemCode config.',
     );
   }
+}
+
+function buildPullUrl(config: CloudConfig, beforeCursor?: string): string {
+  const params = new URLSearchParams({ workspaceId: config.workspaceId });
+  if (config.blobId) params.set('blobId', config.blobId);
+  else if (beforeCursor) params.set('beforeCursor', beforeCursor);
+  else params.set('cursor', '0');
+  return `${config.endpoint}/v1/sync/pull?${params.toString()}`;
 }
 
 function getSyncState(db: DatabaseSync, workspaceId: string): SyncState | undefined {

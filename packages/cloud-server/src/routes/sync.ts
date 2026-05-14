@@ -109,7 +109,8 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
   );
 
   /**
-   * GET /v1/sync/pull?workspaceId=...&cursor=...
+  * GET /v1/sync/pull?workspaceId=...&cursor=...
+  * GET /v1/sync/pull?workspaceId=...&beforeCursor=...
    * GET /v1/sync/pull?workspaceId=...&blobId=...  ← point-in-time restore
    * Returns the most recent blob pushed after the given cursor, or a specific blob by ID.
    * cursor defaults to '0' (return latest blob regardless of age).
@@ -119,7 +120,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: [authenticate, requireActiveSubscription] },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const user = (request as FastifyRequest & { user: TokenPayload }).user;
-      const { workspaceId, cursor = '0', blobId } = request.query as Record<string, string>;
+      const { workspaceId, cursor = '0', beforeCursor, blobId } = request.query as Record<string, string>;
 
       if (!workspaceId) {
         return reply.status(400).send({ error: 'workspaceId query param is required' });
@@ -149,6 +150,20 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         );
         if (result.rowCount === 0) {
           return reply.status(404).send({ error: 'Checkpoint not found' });
+        }
+      } else if (beforeCursor) {
+        // Return the newest blob older than beforeCursor. This lets clients skip
+        // a latest blob that was encrypted with a different local key.
+        result = await pool.query(
+          `SELECT id, cursor, payload_encrypted
+           FROM sync_blobs
+           WHERE workspace_id = $1 AND cursor < $2
+           ORDER BY cursor DESC
+           LIMIT 1`,
+          [workspaceId, beforeCursor],
+        );
+        if (result.rowCount === 0) {
+          return reply.send({ blob: null, cursor });
         }
       } else {
         // Return the latest blob pushed after the cursor

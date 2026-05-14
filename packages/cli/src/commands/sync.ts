@@ -359,6 +359,9 @@ syncCommand
       } else {
         console.log(pc.green('✓'), `Merged ${pc.cyan(String(result.merged.sessions))} sessions,`, `${pc.cyan(String(result.merged.messages))} messages,`, `${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
       }
+      if (result.skippedBlobs) {
+        console.log(pc.yellow('!'), `Skipped ${result.skippedBlobs} cloud snapshot${result.skippedBlobs === 1 ? '' : 's'} that could not be decrypted with this workspace key.`);
+      }
       console.log(pc.dim(`  cursor: ${result.cursor}`));
     } catch (err) {
       console.error(pc.red('Pull failed:'), (err as Error).message);

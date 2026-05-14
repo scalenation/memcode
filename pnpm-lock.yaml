@@ -27,8 +27,8 @@ importers:
   packages/cli:
     dependencies:
       '@memcode/cloud-client':
-        specifier: ^1.0.9
-        version: 1.0.9
+        specifier: ^1.0.10
+        version: 1.0.10
       '@memcode/core':
         specifier: ^1.0.10
         version: 1.0.10
@@ -531,8 +531,8 @@ packages:
     resolution: {integrity: sha512-9I2Zn6+NJLfaGoz9jN3lpwDgAYvfGeNYdbAIjJOqzs4Tpc+VU3Jqq4IofSUBKajiDS8k9fZIg18/z13mpk1bsA==}
     engines: {node: '>=8'}
 
-  '@memcode/cloud-client@1.0.9':
-    resolution: {integrity: sha512-ezJs1Ex7svAgtGE4MVrXYTCc3bYwijLNWOQq41LVXIw3yJl+Oe2ZHnAhlW6KToljwSZ1tEKRCrCf6yFn7QcFKA==}
+  '@memcode/cloud-client@1.0.10':
+    resolution: {integrity: sha512-wokcKYf8WL9xmbIWRwtz5tuwCP+LYlZfy/zDdaS3eX61iwakKNPcFeZFj3WgWcG7f4ddKfrW+R3gDSA+cG+6xg==}
     engines: {node: '>=22.15.0'}
 
   '@memcode/core@1.0.10':
@@ -2216,7 +2216,7 @@ snapshots:
 
   '@lukeed/ms@2.0.2': {}
 
-  '@memcode/cloud-client@1.0.9':
+  '@memcode/cloud-client@1.0.10':
     dependencies:
       '@memcode/core': 1.0.10
 
