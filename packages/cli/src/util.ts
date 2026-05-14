@@ -1,8 +1,18 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { openDb, getOrCreateWorkspace } from '@memcode/core';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Workspace } from '@memcode/core';
+
+interface MemoryConfig {
+  version?: number;
+  workspaceId?: string;
+  workspaceStrategy?: 'git-origin' | 'manual';
+  projectKey?: string;
+  cloudSync?: { enabled?: boolean };
+}
 
 /**
  * Walk up the directory tree from `startDir` until we find a `.memory`
@@ -63,38 +73,52 @@ export function resolveProject(cwd?: string): {
 } {
   const projectPath = findProjectRoot(cwd ?? process.cwd());
   const db = openProjectDb(projectPath);
-  let workspace = getOrCreateWorkspace(db, projectPath);
+  const workspace = reconcileWorkspaceIdentity(db, projectPath, getOrCreateWorkspace(db, projectPath));
 
-  // Reconcile with the workspace ID stored in config.json (which is committed
-  // to git and therefore portable across machines).
+  return { projectPath, db, workspace };
+}
+
+export function reconcileWorkspaceIdentity(
+  db: DatabaseSync,
+  projectPath: string,
+  workspace: Workspace,
+): Workspace {
   const configPath = join(getMemoryDir(projectPath), 'config.json');
+  const existingConfig = readMemoryConfig(configPath);
+  const gitProjectKey = detectGitProjectKey(projectPath);
+  const canonicalId = gitProjectKey
+    ? stableWorkspaceId(gitProjectKey)
+    : existingConfig.workspaceId ?? workspace.id;
+
   try {
-    if (existsSync(configPath)) {
-      const cfg = JSON.parse(readFileSync(configPath, 'utf-8')) as { workspaceId?: string };
-      const cloudId = cfg.workspaceId;
-      if (cloudId && cloudId !== workspace.id) {
-        // Rename the workspace ID in-place.  FK enforcement must be off
-        // because SQLite does not support ON UPDATE CASCADE.
-        db.exec('PRAGMA foreign_keys = OFF');
-        db.exec('BEGIN');
-        db.prepare('UPDATE workspaces    SET id           = ? WHERE id           = ?').run(cloudId, workspace.id);
-        db.prepare('UPDATE checkpoints   SET workspace_id = ? WHERE workspace_id = ?').run(cloudId, workspace.id);
-        db.prepare('UPDATE decisions     SET workspace_id = ? WHERE workspace_id = ?').run(cloudId, workspace.id);
-        db.prepare('UPDATE tasks         SET workspace_id = ? WHERE workspace_id = ?').run(cloudId, workspace.id);
-        db.prepare('UPDATE sessions      SET workspace_id = ? WHERE workspace_id = ?').run(cloudId, workspace.id);
-        db.prepare('UPDATE sync_state    SET workspace_id = ? WHERE workspace_id = ?').run(cloudId, workspace.id);
-        db.exec('COMMIT');
-        db.exec('PRAGMA foreign_keys = ON');
-        workspace = { ...workspace, id: cloudId };
-      }
+    if (canonicalId !== workspace.id) {
+      db.exec('PRAGMA foreign_keys = OFF');
+      db.exec('BEGIN');
+      db.prepare('UPDATE workspaces    SET id           = ? WHERE id           = ?').run(canonicalId, workspace.id);
+      db.prepare('UPDATE checkpoints   SET workspace_id = ? WHERE workspace_id = ?').run(canonicalId, workspace.id);
+      db.prepare('UPDATE decisions     SET workspace_id = ? WHERE workspace_id = ?').run(canonicalId, workspace.id);
+      db.prepare('UPDATE tasks         SET workspace_id = ? WHERE workspace_id = ?').run(canonicalId, workspace.id);
+      db.prepare('UPDATE sessions      SET workspace_id = ? WHERE workspace_id = ?').run(canonicalId, workspace.id);
+      db.prepare('UPDATE sync_state    SET workspace_id = ? WHERE workspace_id = ?').run(canonicalId, workspace.id);
+      db.exec('COMMIT');
+      db.exec('PRAGMA foreign_keys = ON');
+      workspace = { ...workspace, id: canonicalId };
     }
+
+    writeMemoryConfig(configPath, {
+      ...existingConfig,
+      version: 2,
+      workspaceId: canonicalId,
+      workspaceStrategy: gitProjectKey ? 'git-origin' : existingConfig.workspaceStrategy ?? 'manual',
+      projectKey: gitProjectKey ?? existingConfig.projectKey,
+      cloudSync: existingConfig.cloudSync ?? { enabled: false },
+    });
   } catch {
-    // Migration failed — roll back and continue with local ID
     try { db.exec('ROLLBACK'); } catch { /* empty */ }
     db.exec('PRAGMA foreign_keys = ON');
   }
 
-  return { projectPath, db, workspace };
+  return workspace;
 }
 
 /**
@@ -113,4 +137,46 @@ export function fmtDate(ts: number): string {
 export function truncate(str: string, max: number): string {
   if (!str) return '';
   return str.length <= max ? str : str.slice(0, max - 1) + '…';
+}
+
+function readMemoryConfig(configPath: string): MemoryConfig {
+  try {
+    if (!existsSync(configPath)) return {};
+    return JSON.parse(readFileSync(configPath, 'utf-8')) as MemoryConfig;
+  } catch {
+    return {};
+  }
+}
+
+function writeMemoryConfig(configPath: string, config: MemoryConfig): void {
+  writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+}
+
+function detectGitProjectKey(projectPath: string): string | null {
+  const remote = gitCommand(projectPath, ['config', '--get', 'remote.origin.url']);
+  if (!remote) return null;
+  const normalizedRemote = normalizeGitRemote(remote);
+  return normalizedRemote ? `git:${normalizedRemote}` : null;
+}
+
+function gitCommand(projectPath: string, args: string[]): string | null {
+  try {
+    return execFileSync('git', ['-C', projectPath, ...args], { encoding: 'utf-8' }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGitRemote(remote: string): string {
+  return remote
+    .trim()
+    .replace(/^[a-z]+:\/\//i, '')
+    .replace(/^[^@]+@/, '')
+    .replace(':', '/')
+    .replace(/\.git$/i, '')
+    .toLowerCase();
+}
+
+function stableWorkspaceId(input: string): string {
+  return createHash('sha256').update(input).digest('hex').slice(0, 16);
 }

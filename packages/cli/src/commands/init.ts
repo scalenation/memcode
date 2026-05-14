@@ -12,7 +12,7 @@ import {
   getOrCreateWorkspace,
   installGitHooks,
 } from '@memcode/core';
-import { findProjectRoot, getDbPath, getMemoryDir } from '../util';
+import { findProjectRoot, getDbPath, getMemoryDir, reconcileWorkspaceIdentity } from '../util';
 import pc from 'picocolors';
 
 export const initCommand = new Command('init')
@@ -39,7 +39,7 @@ export const initCommand = new Command('init')
     // 2. Initialise SQLite database (runs migrations)
     const isNewDb = !existsSync(dbPath);
     const db = openDb(dbPath);
-    const workspace = getOrCreateWorkspace(db, projectPath);
+    const workspace = reconcileWorkspaceIdentity(db, projectPath, getOrCreateWorkspace(db, projectPath));
 
     if (isNewDb) {
       console.log(
@@ -54,8 +54,9 @@ export const initCommand = new Command('init')
     const configPath = join(memoryDir, 'config.json');
     if (!existsSync(configPath)) {
       const config = {
-        version: 1,
+        version: 2,
         workspaceId: workspace.id,
+        workspaceStrategy: 'manual',
         cloudSync: { enabled: false },
       };
       writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
