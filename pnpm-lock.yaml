@@ -27,11 +27,11 @@ importers:
   packages/cli:
     dependencies:
       '@memcode/cloud-client':
-        specifier: ^1.0.5
-        version: 1.0.5
-      '@memcode/core':
         specifier: ^1.0.8
         version: 1.0.8
+      '@memcode/core':
+        specifier: ^1.0.10
+        version: 1.0.10
       commander:
         specifier: ^12.1.0
         version: 12.1.0
@@ -52,8 +52,8 @@ importers:
   packages/cloud-client:
     dependencies:
       '@memcode/core':
-        specifier: ^1.0.7
-        version: 1.0.7
+        specifier: ^1.0.10
+        version: 1.0.10
     devDependencies:
       '@types/node':
         specifier: ^22.15.0
@@ -531,16 +531,12 @@ packages:
     resolution: {integrity: sha512-9I2Zn6+NJLfaGoz9jN3lpwDgAYvfGeNYdbAIjJOqzs4Tpc+VU3Jqq4IofSUBKajiDS8k9fZIg18/z13mpk1bsA==}
     engines: {node: '>=8'}
 
-  '@memcode/cloud-client@1.0.5':
-    resolution: {integrity: sha512-6yFKHLP2fDCsRcjf2QfaZ/8SC3pNHIvxrmr+EJaMD4RemD+c2a0rIzfJSNtJNgan9By2/QY1cTCK0vNvmWAbBA==}
+  '@memcode/cloud-client@1.0.8':
+    resolution: {integrity: sha512-khdpL0f8mLZwcqzaEs/L5+AuNL++SxWo5bW6vSTBVRp7fIK6eujgJa8x+gChghBw1DBV2BXgfURqJkKoPw6Ayw==}
     engines: {node: '>=22.15.0'}
 
-  '@memcode/core@1.0.7':
-    resolution: {integrity: sha512-315+cyjRO3bhtLLSecQYrJUmmOSqernx+fOx+6vkpheOhkLZE7nMrMIXRLocb12LPNEFqUTdOZMLxGfiLalDIQ==}
-    engines: {node: '>=22.15.0'}
-
-  '@memcode/core@1.0.8':
-    resolution: {integrity: sha512-+h5VJpEEbLwMWrzh6YMi/4BafkRQD8d23ozWPkni/gEfoyr7iT47hBU4qPLJVBWlyh5qiBFQLrdZdpaCiETqrw==}
+  '@memcode/core@1.0.10':
+    resolution: {integrity: sha512-nOuQWeNT28d0aCPOmS6DU8eb6DypTrm7IsgCBgdsWRVqDd2wPMFRENLBtcqvLPYg9rafIQfVUy4UEuNZH9Mxvw==}
     engines: {node: '>=22.15.0'}
 
   '@neondatabase/serverless@1.1.0':
@@ -2220,13 +2216,11 @@ snapshots:
 
   '@lukeed/ms@2.0.2': {}
 
-  '@memcode/cloud-client@1.0.5':
+  '@memcode/cloud-client@1.0.8':
     dependencies:
-      '@memcode/core': 1.0.8
+      '@memcode/core': 1.0.10
 
-  '@memcode/core@1.0.7': {}
-
-  '@memcode/core@1.0.8': {}
+  '@memcode/core@1.0.10': {}
 
   '@neondatabase/serverless@1.1.0': {}
 
