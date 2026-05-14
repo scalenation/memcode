@@ -9,7 +9,7 @@
   "crons": [
     {
       "path": "/v1/admin/brain/compact",
-      "schedule": "0 * * * *"
+      "schedule": "0 3 * * *"
     }
   ],
   "rewrites": [
