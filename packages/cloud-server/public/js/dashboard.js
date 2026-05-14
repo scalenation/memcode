@@ -507,8 +507,11 @@ function renderWorkspaces(workspaces) {
     const div = document.createElement('div');
     div.className = 'ws-row';
     const lastSync = ws.lastSyncedAt ? timeAgo(ws.lastSyncedAt) : 'Never';
+    const projectName = ws.name || 'Unnamed project';
+    const machineName = ws.machineName || 'Unknown device';
     div.innerHTML = `
       <div class="ws-info">
+        <div class="ws-title">${esc(projectName)} <span style="color:var(--text-dim);font-weight:500">/ ${esc(machineName)}</span></div>
         <div class="ws-id">${esc(ws.id)}</div>
         <div class="ws-meta">Last sync: ${lastSync} &nbsp;·&nbsp; ${ws.blobCount} blob${ws.blobCount !== 1 ? 's' : ''} &nbsp;·&nbsp; ${fmtBytes(ws.storageBytes)}</div>
         <div class="ws-del-confirm" id="wsc-${esc(ws.id)}" hidden>
@@ -745,13 +748,13 @@ function renderHistory(workspaces) {
   list.innerHTML = '';
   updateHistCount(workspaces.length);
 
-  for (const ws of workspaces) {
+  workspaces.forEach((ws, index) => {
     const cpCount = ws.checkpoints ? ws.checkpoints.length : 0;
     const lastCp  = ws.checkpoints && ws.checkpoints[0];
     const wsName  = ws.name || ws.id.slice(0, 12) + '…';
 
     const card = document.createElement('div');
-    card.className = 'hist-ws';
+    card.className = index === 0 ? 'hist-ws open' : 'hist-ws';
     card.dataset.wsId = ws.id;
 
     const metaParts = [];
@@ -805,7 +808,7 @@ function renderHistory(workspaces) {
           <div class="hist-ws-name">${esc(wsName)}</div>
           <div class="hist-ws-meta">${metaParts.join('')}</div>
         </div>
-        <span class="hist-ws-badge">${cpCount} checkpoint${cpCount !== 1 ? 's' : ''}</span>
+        <span class="hist-ws-badge">${cpCount} snapshot${cpCount !== 1 ? 's' : ''}</span>
         <svg class="hist-ws-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
       </div>
       <div class="hist-checkpoints">${checkpointsHtml}</div>`;
@@ -828,7 +831,7 @@ function renderHistory(workspaces) {
     });
 
     list.appendChild(card);
-  }
+  });
 }
 
 function updateHistCount(total) {
@@ -845,7 +848,7 @@ document.getElementById('hist-search')?.addEventListener('input', (e) => {
     const wsId   = card.dataset.wsId ?? '';
     const wsName = card.querySelector('.hist-ws-name')?.textContent?.toLowerCase() ?? '';
     const machine = card.querySelector('.hist-ws-meta')?.textContent?.toLowerCase() ?? '';
-    const cpTexts = Array.from(card.querySelectorAll('.hist-cp-restore code')).map(c => c.textContent.toLowerCase()).join(' ');
+    const cpTexts = Array.from(card.querySelectorAll('.hist-cp')).map(c => c.textContent.toLowerCase()).join(' ');
     const matches = !q || wsName.includes(q) || wsId.includes(q) || machine.includes(q) || cpTexts.includes(q);
     card.classList.toggle('hidden', !matches);
     if (matches) visible++;

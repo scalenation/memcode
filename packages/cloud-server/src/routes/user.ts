@@ -111,6 +111,8 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       const result = await pool.query(
         `SELECT
            w.id,
+           w.name,
+           w.machine_name,
            w.created_at,
            COUNT(b.id)::int AS blob_count,
            MAX(b.created_at) AS last_synced_at,
@@ -118,15 +120,17 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
          FROM workspaces w
          LEFT JOIN sync_blobs b ON b.workspace_id = w.id
          WHERE w.user_id = $1
-         GROUP BY w.id, w.created_at
+         GROUP BY w.id, w.name, w.machine_name, w.created_at
          ORDER BY w.created_at DESC`,
         [user.sub],
       );
 
-      type WsRow = { id: string; created_at: string; blob_count: number; last_synced_at: string | null; storage_bytes: string };
+      type WsRow = { id: string; name: string | null; machine_name: string | null; created_at: string; blob_count: number; last_synced_at: string | null; storage_bytes: string };
       const rows = result.rows as WsRow[];
       const workspaces = rows.map(r => ({
         id: r.id,
+        name: r.name,
+        machineName: r.machine_name,
         createdAt: r.created_at,
         lastSyncedAt: r.last_synced_at,
         blobCount: r.blob_count,

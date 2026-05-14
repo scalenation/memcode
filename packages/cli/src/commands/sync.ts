@@ -83,7 +83,59 @@ function writeAuthConfig(cfg: AuthConfig): void {
 
 export const syncCommand = new Command('sync').description(
   'Sync project memory with the cloud (Pro feature — memcode.pro/pricing)',
-);
+)
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action(async (options: { path?: string }) => {
+    await runAutoSync(options.path);
+  });
+
+async function registerWorkspace(
+  auth: AuthConfig,
+  workspaceId: string,
+  projectPath: string,
+): Promise<void> {
+  await fetch(`${auth.endpoint.replace(/\/$/, '')}/v1/sync/workspace`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${auth.apiToken}`,
+      'User-Agent': CLI_UA,
+    },
+    body: JSON.stringify({
+      workspaceId,
+      name: basename(projectPath),
+      machineName: detectEnvironment(),
+    }),
+  }).catch(() => undefined);
+}
+
+async function runAutoSync(path?: string): Promise<void> {
+  const auth = readAuthConfig();
+  if (!auth) {
+    console.log(noAuthMsg());
+    process.exit(1);
+  }
+
+  const projectPath = path ?? findProjectRoot();
+  const { db, workspace } = resolveProject(projectPath);
+  const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
+
+  console.log(pc.bold('Syncing memory with cloud…'));
+  try {
+    await registerWorkspace(auth, workspace.id, projectPath);
+    const result = await pushSync(db, {
+      endpoint: auth.endpoint,
+      apiToken: auth.apiToken,
+      encryptionKey,
+      workspaceId: workspace.id,
+    });
+    console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks`);
+    console.log(pc.dim(`  cursor: ${result.cursor}`));
+  } catch (err) {
+    console.error(pc.red('Sync failed:'), (err as Error).message);
+    process.exit(1);
+  }
+}
 
 // ─── auth ───────────────────────────────────────────────────────────────────
 
@@ -175,8 +227,8 @@ syncCommand
       console.log(pc.green('✓'), `Credentials saved to ${pc.dim(AUTH_CONFIG_PATH)}`);
       console.log('');
       console.log('Next steps:');
-      console.log(`  ${pc.cyan('memory sync push')}  — push this workspace to the cloud`);
-      console.log(`  ${pc.cyan('memory sync pull')}  — pull on another machine`);
+      console.log(`  ${pc.cyan('memory sync')}  — merge latest cloud memory and upload this workspace`);
+      console.log(`  ${pc.cyan('memory init --hooks')}  — enable automatic checkpointing and sync`);
     } catch (err) {
       console.error(pc.red('Error:'), (err as Error).message);
       process.exit(1);
@@ -203,19 +255,7 @@ syncCommand
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
       // Register workspace with name and machine name (best-effort, non-fatal)
-      await fetch(`${auth.endpoint.replace(/\/$/, '')}/v1/sync/workspace`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${auth.apiToken}`,
-          'User-Agent': CLI_UA,
-        },
-        body: JSON.stringify({
-          workspaceId: workspace.id,
-          name: basename(projectPath),
-          machineName: detectEnvironment(),
-        }),
-      }).catch(() => undefined);
+      await registerWorkspace(auth, workspace.id, projectPath);
 
       const result = await pushSync(db, {
         endpoint: auth.endpoint,

@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 const MEMCODE_MARKER = '# [memcode]';
 
-type HookName = 'pre-commit' | 'post-commit' | 'post-checkout';
+type HookName = 'pre-commit' | 'post-commit' | 'post-checkout' | 'post-merge';
 
 /**
  * Minimal hook scripts appended to existing hooks (or written fresh).
@@ -27,7 +27,7 @@ const HOOK_SCRIPTS: Record<HookName, string> = {
     '',
     MEMCODE_MARKER,
     'memory checkpoint --trigger post-commit 2>/dev/null || true',
-    'memory sync push 2>/dev/null || true',
+    'memory sync 2>/dev/null || true',
   ].join('\n'),
 
   'post-checkout': [
@@ -36,7 +36,15 @@ const HOOK_SCRIPTS: Record<HookName, string> = {
     '# Only fire on branch switch (not file checkout)',
     'if [ "$3" = "1" ]; then',
     '  memory checkpoint --trigger branch-switch 2>/dev/null || true',
+    '  memory sync pull 2>/dev/null || true',
     'fi',
+  ].join('\n'),
+
+  'post-merge': [
+    '',
+    MEMCODE_MARKER,
+    'memory checkpoint --trigger post-merge 2>/dev/null || true',
+    'memory sync 2>/dev/null || true',
   ].join('\n'),
 };
 
