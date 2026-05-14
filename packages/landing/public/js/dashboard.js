@@ -14,6 +14,7 @@ let addCardElements = null;
 
 // ── App state ─────────────────────────────────────────────────────────────────
 let profileData = null; // { email, name, subscription }
+let historyData = [];
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
@@ -728,8 +729,6 @@ function timeAgo(iso) {
 }
 
 // ── Session History ───────────────────────────────────────────────────────────
-let historyData = [];
-
 async function loadHistory() {
   const loading = document.getElementById('hist-loading');
   const empty   = document.getElementById('hist-empty');
