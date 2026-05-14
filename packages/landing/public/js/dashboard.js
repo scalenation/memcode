@@ -15,6 +15,7 @@ let addCardElements = null;
 // ── App state ─────────────────────────────────────────────────────────────────
 let profileData = null; // { email, name, subscription }
 let historyData = [];
+let brainWorkspaceData = [];
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
@@ -49,6 +50,9 @@ function navigateTo(sectionId) {
   }
   if (sectionId === 'history') {
     loadHistory();
+  }
+  if (sectionId === 'brain') {
+    loadBrain();
   }
 }
 
@@ -475,6 +479,7 @@ async function loadWorkspaces() {
     loading.hidden = true;
 
     const { workspaces, totalStorageBytes, totalBlobCount } = body;
+    brainWorkspaceData = workspaces;
 
     // Stats
     document.getElementById('ws-count-stat').textContent = workspaces.length;
@@ -503,6 +508,197 @@ async function loadWorkspaces() {
       document.getElementById('ws-loading').hidden = true;
     }
     showNotice(err.message ?? 'Failed to load workspaces.', 'error');
+  }
+}
+
+async function ensureBrainWorkspaces(force = false) {
+  if (!force && brainWorkspaceData.length > 0) {
+    populateBrainWorkspaceSelect(brainWorkspaceData);
+    return brainWorkspaceData;
+  }
+
+  const res = await authFetch('/v1/user/workspaces');
+  const body = await res.json();
+  if (res.status === 402) throw new Error(proRequiredMessage());
+  if (!res.ok) throw new Error(body.error ?? 'Failed to load workspaces');
+  brainWorkspaceData = body.workspaces ?? [];
+  populateBrainWorkspaceSelect(brainWorkspaceData);
+  return brainWorkspaceData;
+}
+
+function populateBrainWorkspaceSelect(workspaces) {
+  const select = document.getElementById('brain-workspace');
+  if (!select) return;
+  const currentValue = select.value;
+  select.innerHTML = '';
+
+  if (workspaces.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No synced workspaces';
+    select.appendChild(option);
+    select.disabled = true;
+    return;
+  }
+
+  select.disabled = false;
+  for (const ws of workspaces) {
+    const option = document.createElement('option');
+    option.value = ws.id;
+    const labelParts = [ws.name || ws.id.slice(0, 12)];
+    if (ws.machineName) labelParts.push(ws.machineName);
+    option.textContent = labelParts.join(' · ');
+    select.appendChild(option);
+  }
+
+  const nextValue = workspaces.some(ws => ws.id === currentValue) ? currentValue : workspaces[0].id;
+  select.value = nextValue;
+}
+
+async function loadBrain() {
+  const loading = document.getElementById('brain-summary-loading');
+  const content = document.getElementById('brain-summary-content');
+  loading.hidden = false;
+  content.hidden = true;
+
+  try {
+    const workspaces = await ensureBrainWorkspaces();
+    if (workspaces.length === 0) {
+      renderBrainEmpty('Sync a workspace first to build a project brain.');
+      return;
+    }
+
+    const workspaceId = document.getElementById('brain-workspace').value || workspaces[0].id;
+    const res = await authFetch(`/v1/brain/workspaces/${encodeURIComponent(workspaceId)}`);
+    const body = await res.json();
+    if (res.status === 402) throw new Error(proRequiredMessage());
+    if (res.status === 404) {
+      renderBrainEmpty('This workspace has no compact brain yet. Run a fresh sync from the CLI.');
+      return;
+    }
+    if (!res.ok) throw new Error(body.error ?? 'Failed to load project brain');
+
+    renderBrain(body, workspaces.find(ws => ws.id === workspaceId) ?? null);
+  } catch (err) {
+    renderBrainEmpty(err.message ?? 'Failed to load project brain.');
+    showNotice(err.message ?? 'Failed to load project brain.', 'error');
+  }
+}
+
+function renderBrainEmpty(message) {
+  document.getElementById('brain-summary-loading').hidden = true;
+  document.getElementById('brain-summary-content').hidden = false;
+  document.getElementById('brain-summary').textContent = message;
+  document.getElementById('brain-stats').innerHTML = '';
+  document.getElementById('brain-milestones').innerHTML = '';
+  document.getElementById('brain-decisions-tasks').innerHTML = '';
+}
+
+function renderBrain(payload, workspace) {
+  const brain = payload.brain;
+  document.getElementById('brain-summary-loading').hidden = true;
+  document.getElementById('brain-summary-content').hidden = false;
+  document.getElementById('brain-summary').textContent = brain.summary;
+
+  const stats = [
+    { title: 'Workspace', meta: workspace?.name || payload.workspaceId, detail: workspace?.machineName ? `Latest source: ${workspace.machineName}` : payload.workspaceId },
+    { title: 'Last compacted snapshot', meta: timeAgo(payload.updatedAt), detail: `${brain.stats.checkpointCount} checkpoints · ${brain.stats.decisionCount} decisions · ${brain.stats.taskCount} tasks` },
+    { title: 'Open work', meta: `${brain.stats.openTaskCount} open tasks`, detail: `${brain.stats.completedTaskCount} completed tasks` },
+  ];
+  document.getElementById('brain-stats').innerHTML = stats.map(renderBrainItem).join('');
+
+  const milestones = brain.milestones.slice(0, 8);
+  document.getElementById('brain-milestones').innerHTML = milestones.length > 0
+    ? milestones.map(item => renderBrainItem({
+      title: item.title,
+      meta: [item.trigger, item.branch, item.createdAt ? fmtDate(item.createdAt) : null].filter(Boolean).join(' · '),
+      detail: item.detail || 'No detail recorded.',
+    })).join('')
+    : '<div class="brain-item"><div class="brain-item-detail">No milestones recorded yet.</div></div>';
+
+  const combined = [
+    ...brain.decisions.slice(0, 4).map(item => ({
+      title: `Decision: ${item.title}`,
+      meta: [item.status, item.updatedAt ? fmtDate(item.updatedAt) : null].filter(Boolean).join(' · '),
+      detail: item.rationale,
+    })),
+    ...brain.tasks.slice(0, 4).map(item => ({
+      title: `Task: ${item.title}`,
+      meta: [item.status, item.priority, item.updatedAt ? fmtDate(item.updatedAt) : null].filter(Boolean).join(' · '),
+      detail: item.description || 'No description recorded.',
+    })),
+  ];
+  document.getElementById('brain-decisions-tasks').innerHTML = combined.length > 0
+    ? combined.map(renderBrainItem).join('')
+    : '<div class="brain-item"><div class="brain-item-detail">No decisions or tasks recorded yet.</div></div>';
+}
+
+function renderBrainItem(item) {
+  return `
+    <div class="brain-item">
+      <div class="brain-item-title">${esc(item.title)}</div>
+      ${item.meta ? `<div class="brain-item-meta">${esc(item.meta)}</div>` : ''}
+      ${item.detail ? `<div class="brain-item-detail">${esc(item.detail)}</div>` : ''}
+    </div>`;
+}
+
+async function askBrain() {
+  const workspaceId = document.getElementById('brain-workspace').value;
+  const question = document.getElementById('brain-ask-input').value.trim();
+  if (!workspaceId) {
+    showNotice('Select a workspace first.', 'error');
+    return;
+  }
+  if (!question) {
+    showNotice('Enter a question for the project brain.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('brain-ask-btn');
+  btn.disabled = true;
+  btn.textContent = 'Asking…';
+
+  try {
+    const res = await authFetch(`/v1/brain/workspaces/${encodeURIComponent(workspaceId)}/ask?q=${encodeURIComponent(question)}`);
+    const body = await res.json();
+    if (res.status === 402) throw new Error(proRequiredMessage());
+    if (!res.ok) throw new Error(body.error ?? 'Failed to query project brain');
+    document.getElementById('brain-answer-empty').hidden = true;
+    document.getElementById('brain-answer-content').hidden = false;
+    document.getElementById('brain-answer').textContent = body.answer;
+    document.getElementById('brain-evidence').innerHTML = (body.evidence ?? []).map(item => `
+      <span class="brain-evidence-chip">${esc(item.kind)}: ${esc(item.title)}</span>
+    `).join('');
+  } catch (err) {
+    showNotice(err.message ?? 'Failed to query project brain.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ask';
+  }
+}
+
+async function generateBrainReport(type) {
+  const workspaceId = document.getElementById('brain-workspace').value;
+  if (!workspaceId) {
+    showNotice('Select a workspace first.', 'error');
+    return;
+  }
+
+  const buttons = Array.from(document.querySelectorAll('[data-brain-report]'));
+  buttons.forEach(btn => { btn.disabled = true; });
+
+  try {
+    const res = await authFetch(`/v1/brain/workspaces/${encodeURIComponent(workspaceId)}/report?type=${encodeURIComponent(type)}`);
+    const body = await res.json();
+    if (res.status === 402) throw new Error(proRequiredMessage());
+    if (!res.ok) throw new Error(body.error ?? 'Failed to generate report');
+    document.getElementById('brain-report-empty').hidden = true;
+    document.getElementById('brain-report').hidden = false;
+    document.getElementById('brain-report').textContent = body.markdown;
+  } catch (err) {
+    showNotice(err.message ?? 'Failed to generate report.', 'error');
+  } finally {
+    buttons.forEach(btn => { btn.disabled = false; });
   }
 }
 
@@ -884,4 +1080,25 @@ document.getElementById('hist-search')?.addEventListener('input', (e) => {
     if (matches) visible++;
   });
   updateHistCount(visible);
+});
+
+document.getElementById('brain-workspace')?.addEventListener('change', () => {
+  loadBrain();
+});
+
+document.getElementById('brain-ask-btn')?.addEventListener('click', () => {
+  askBrain();
+});
+
+document.getElementById('brain-ask-input')?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    askBrain();
+  }
+});
+
+document.querySelectorAll('[data-brain-report]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    generateBrainReport(btn.dataset.brainReport);
+  });
 });

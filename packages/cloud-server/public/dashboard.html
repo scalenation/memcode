@@ -174,6 +174,24 @@
     .hist-meta-chat { background: rgba(251,191,36,0.1); color: #fbbf24; }
     .hist-meta-sha { font-family: monospace; font-size: 0.7rem; color: var(--text-dim); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
     .hist-meta-summary { font-size: 0.8rem; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; }
+    .brain-toolbar { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .brain-select-wrap, .brain-ask-wrap { flex: 1; min-width: 220px; }
+    .brain-select, .brain-ask-input { width: 100%; padding: 10px 12px; font-size: 0.9rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); outline: none; }
+    .brain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+    .brain-summary { font-size: 0.92rem; color: var(--text); line-height: 1.55; }
+    .brain-list { display: flex; flex-direction: column; gap: 10px; }
+    .brain-item { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+    .brain-item-title { font-size: 0.88rem; font-weight: 650; margin-bottom: 5px; }
+    .brain-item-meta { font-size: 0.74rem; color: var(--text-dim); margin-bottom: 5px; }
+    .brain-item-detail { font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; }
+    .brain-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    .brain-report { font-family: var(--mono); font-size: 0.79rem; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; color: var(--text-dim); line-height: 1.55; max-height: 420px; overflow: auto; }
+    .brain-answer { font-size: 0.84rem; line-height: 1.6; color: var(--text); margin-bottom: 12px; }
+    .brain-evidence { display: flex; flex-wrap: wrap; gap: 8px; }
+    .brain-evidence-chip { font-size: 0.72rem; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; color: var(--text-dim); background: var(--bg); }
+    @media (max-width: 820px) {
+      .brain-grid { grid-template-columns: 1fr; }
+    }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
 </head>
@@ -200,6 +218,10 @@
     <button class="nav-item" data-section="history">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       History
+    </button>
+    <button class="nav-item" data-section="brain">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3.5a3.5 3.5 0 0 0-3.5 3.5v1A2.5 2.5 0 0 0 3 10.5v1A2.5 2.5 0 0 0 5.5 14v1A3.5 3.5 0 0 0 9 18.5h.5A2.5 2.5 0 0 0 12 21a2.5 2.5 0 0 0 2.5-2.5h.5a3.5 3.5 0 0 0 3.5-3.5v-1A2.5 2.5 0 0 0 21 11.5v-1A2.5 2.5 0 0 0 18.5 8v-1A3.5 3.5 0 0 0 15 3.5h-.5A2.5 2.5 0 0 0 12 1a2.5 2.5 0 0 0-2.5 2.5H9Z"/></svg>
+      Brain
     </button>
     <button class="nav-item" data-section="profile">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -402,6 +424,70 @@
       </div>
 
       <div id="hist-list"></div>
+    </section>
+
+    <section id="section-brain" class="section">
+      <h1 class="section-title">Project Brain</h1>
+
+      <div class="brain-toolbar">
+        <div class="brain-select-wrap">
+          <select id="brain-workspace" class="brain-select"></select>
+        </div>
+        <div class="brain-ask-wrap">
+          <input id="brain-ask-input" class="brain-ask-input" type="search" placeholder="Ask this project brain a question…" autocomplete="off" />
+        </div>
+        <button class="btn btn-primary" id="brain-ask-btn">Ask</button>
+      </div>
+
+      <div class="brain-grid">
+        <div class="card">
+          <p class="card-title">Summary</p>
+          <div id="brain-summary-loading">
+            <div class="skeleton" style="height:18px;width:100%;margin-bottom:10px"></div>
+            <div class="skeleton" style="height:18px;width:85%;margin-bottom:10px"></div>
+            <div class="skeleton" style="height:18px;width:72%"></div>
+          </div>
+          <div id="brain-summary-content" hidden>
+            <div id="brain-summary" class="brain-summary"></div>
+            <div class="brain-actions">
+              <button class="btn btn-secondary btn-sm" data-brain-report="status">Generate status</button>
+              <button class="btn btn-secondary btn-sm" data-brain-report="slides">Generate slides</button>
+              <button class="btn btn-secondary btn-sm" data-brain-report="business-plan">Generate business plan</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <p class="card-title">Current State</p>
+          <div id="brain-stats" class="brain-list"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Answer</p>
+        <div id="brain-answer-empty" style="font-size:0.84rem;color:var(--text-dim)">Ask a question about the project to see grounded context from the compact brain.</div>
+        <div id="brain-answer-content" hidden>
+          <div id="brain-answer" class="brain-answer"></div>
+          <div id="brain-evidence" class="brain-evidence"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Report</p>
+        <div id="brain-report-empty" style="font-size:0.84rem;color:var(--text-dim)">Generate a status brief, slide outline, or business plan from the current project brain.</div>
+        <pre id="brain-report" class="brain-report" hidden></pre>
+      </div>
+
+      <div class="brain-grid">
+        <div class="card">
+          <p class="card-title">Milestones</p>
+          <div id="brain-milestones" class="brain-list"></div>
+        </div>
+        <div class="card">
+          <p class="card-title">Decisions &amp; Tasks</p>
+          <div id="brain-decisions-tasks" class="brain-list"></div>
+        </div>
+      </div>
     </section>
 
     <!-- Billing -->
