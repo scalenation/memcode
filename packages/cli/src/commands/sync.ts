@@ -15,6 +15,32 @@ const CLI_VERSION: string = (require('../../package.json') as { version: string 
 const CLI_UA = `MemCode CLI/${CLI_VERSION}`;
 
 /**
+ * Detect the current IDE or terminal environment.
+ * Returns a human-readable string like "VS Code", "Cursor", "JetBrains", or the hostname.
+ */
+function detectEnvironment(): string {
+  const env = process.env;
+  // VS Code (all flavours: stable, insiders, Cursor, Windsurf, etc.)
+  if (env.TERM_PROGRAM === 'vscode' || env.VSCODE_PID || env.VSCODE_IPC_HOOK) {
+    if (env.CURSOR_TRACE_ID || env.CURSOR_SESSION_ID || (env.TERM_PROGRAM_VERSION ?? '').toLowerCase().includes('cursor')) return 'Cursor';
+    return 'VS Code';
+  }
+  // JetBrains IDEs expose a env var prefixed with JETBRAINS_
+  if (Object.keys(env).some(k => k.startsWith('JETBRAINS_'))) return 'JetBrains';
+  // Neovim / Vim
+  if (env.NVIM || env.NVIM_LISTEN_ADDRESS) return 'Neovim';
+  if (env.VIM) return 'Vim';
+  // Terminal apps
+  if (env.TERM_PROGRAM === 'iTerm.app') return 'iTerm2';
+  if (env.TERM_PROGRAM === 'Terminal.app') return 'Terminal';
+  if (env.TERM_PROGRAM === 'Hyper') return 'Hyper';
+  if (env.TERM_PROGRAM === 'WezTerm') return 'WezTerm';
+  if (env.TERM_PROGRAM === 'ghostty') return 'Ghostty';
+  // Fall back to hostname
+  return hostname();
+}
+
+/**
  * Prompt the user for a single line of input.
  * When `muted` is true the typed characters are not echoed (for passwords).
  */
@@ -187,7 +213,7 @@ syncCommand
         body: JSON.stringify({
           workspaceId: workspace.id,
           name: basename(projectPath),
-          machineName: hostname(),
+          machineName: detectEnvironment(),
         }),
       }).catch(() => undefined);
 

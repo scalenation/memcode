@@ -1,6 +1,6 @@
 {
   "name": "@memcode/cli",
-  "version": "1.0.24",
+  "version": "1.0.25",
   "description": "CLI for MemCode Project Memory Assistant",
   "keywords": [
     "memory",
