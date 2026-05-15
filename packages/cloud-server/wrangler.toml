@@ -1,0 +1,23 @@
+name = "memcode-cloud-server"
+main = "src/worker.js"
+compatibility_date = "2026-05-15"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+[vars]
+APP_URL = "https://www.memcode.pro"
+SYNC_PAYLOAD_STORAGE = "r2"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "memcode"
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "SYNC_BLOBS"
+bucket_name = "memcode-sync-blobs"
