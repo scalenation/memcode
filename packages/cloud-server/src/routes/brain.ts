@@ -328,7 +328,7 @@ async function listProjectGroups(userId: string): Promise<ProjectGroup[]> {
     })
     .sort((a, b) => {
       if (a.hasBrain !== b.hasBrain) return a.hasBrain ? -1 : 1;
-      return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '');
+      return new Date(b.updatedAt ?? 0).getTime() - new Date(a.updatedAt ?? 0).getTime();
     });
 }
 

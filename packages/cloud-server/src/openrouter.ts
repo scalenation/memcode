@@ -20,7 +20,7 @@ export const OPENROUTER_MODELS: OpenRouterModelOption[] = [
   { id: 'anthropic/claude-3.5-haiku', label: 'Claude 3.5 Haiku', provider: 'Anthropic', free: false },
   { id: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash', provider: 'Google', free: false },
   { id: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini', provider: 'OpenAI', free: false },
-].sort((left, right) => Number(right.free) - Number(left.free) || left.label.localeCompare(right.label));
+];
 
 export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS[0].id;
 
