@@ -11,6 +11,7 @@
     "migrate": "tsx src/db/migrate.ts",
     "backfill:sync-payload-size": "tsx src/db/backfill-sync-payload-size.ts",
     "audit:sync-payload-storage": "tsx src/db/audit-sync-payload-storage.ts",
+    "export:cloudflare-migration": "tsx src/db/export-cloudflare-migration.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
