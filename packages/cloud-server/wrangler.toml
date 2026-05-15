@@ -17,7 +17,7 @@ SYNC_PAYLOAD_STORAGE = "r2"
 [[d1_databases]]
 binding = "DB"
 database_name = "memcode"
-database_id = "639384db-204e-4474-9a63-d140750e8277"
+database_id = "12fd03b0-5434-4a59-a0d5-d6d6d3b64094"
 
 [[r2_buckets]]
 binding = "SYNC_BLOBS"
