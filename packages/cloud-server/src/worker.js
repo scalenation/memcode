@@ -37,6 +37,17 @@ import {
   updateStripeSubscription,
   verifyStripeWebhook,
 } from './cloudflare/stripe.js';
+import {
+  handleGithubCallback,
+  handleGithubStart,
+  handleGoogleCallback,
+  handleGoogleStart,
+  handleLogin,
+  handleMagicLink,
+  handleMagicLinkVerify,
+  handleRegister,
+  handleSetPassword,
+} from './cloudflare/web-auth.js';
 
 function json(body, init = {}) {
   return new Response(JSON.stringify(body), {
@@ -74,6 +85,43 @@ export default {
           runtime: 'cloudflare-worker',
           appUrl: env.APP_URL ?? null,
         });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/auth/register') {
+        return handleRegister(request, env, db, readJson, json);
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/auth/login') {
+        return handleLogin(request, env, db, readJson, json);
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/auth/set-password') {
+        const user = await authenticateRequest(request, env, db);
+        return handleSetPassword(request, env, db, readJson, json, user);
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/auth/magic-link') {
+        return handleMagicLink(request, env, db, readJson, json);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/auth/magic-link/verify') {
+        return handleMagicLinkVerify(request, env, db);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/auth/google') {
+        return handleGoogleStart(request, env);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/auth/google/callback') {
+        return handleGoogleCallback(request, env, db);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/auth/github') {
+        return handleGithubStart(request, env);
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/auth/github/callback') {
+        return handleGithubCallback(request, env, db);
       }
 
       if (request.method === 'GET' && url.pathname === '/v1/auth/me') {
