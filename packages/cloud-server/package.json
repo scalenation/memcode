@@ -12,6 +12,12 @@
     "backfill:sync-payload-size": "tsx src/db/backfill-sync-payload-size.ts",
     "audit:sync-payload-storage": "tsx src/db/audit-sync-payload-storage.ts",
     "export:cloudflare-migration": "tsx src/db/export-cloudflare-migration.ts",
+    "cf:dev": "wrangler dev --local",
+    "cf:check": "wrangler deploy --dry-run",
+    "cf:deploy": "wrangler deploy",
+    "cf:d1:apply:local": "wrangler d1 execute DB --local --file src/db/schema.d1.sql",
+    "cf:d1:apply:remote": "wrangler d1 execute DB --remote --file src/db/schema.d1.sql",
+    "cf:whoami": "wrangler whoami",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
@@ -29,11 +35,13 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260515.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "wrangler": "^4.92.0"
   },
   "engines": {
     "node": ">=22.15.0"

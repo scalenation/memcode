@@ -1,4 +1,4 @@
-import { jwtVerify } from 'jose';
+import { SignJWT, jwtVerify } from 'jose';
 
 export class HttpError extends Error {
   constructor(status, body) {
@@ -52,6 +52,18 @@ export async function authenticateRequest(request, env, db) {
   }
 
   return user;
+}
+
+export async function signToken(payload, env) {
+  const claims = { email: payload.email };
+  if (payload.sid) claims.sid = payload.sid;
+
+  return new SignJWT(claims)
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(payload.sub)
+    .setIssuedAt()
+    .setExpirationTime('30d')
+    .sign(new TextEncoder().encode(env.JWT_SECRET));
 }
 
 export async function requireActiveSubscription(userId, db) {
