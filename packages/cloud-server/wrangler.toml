@@ -1,6 +1,7 @@
 name = "memcode-cloud-server"
 main = "src/worker.js"
 compatibility_date = "2026-05-15"
+account_id = "ac4c8308ee25757eed7edbf8b47467e4"
 
 [assets]
 directory = "./public"
