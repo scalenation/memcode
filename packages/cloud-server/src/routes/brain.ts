@@ -3,6 +3,11 @@ import { pool } from '../db/client';
 import { authenticate } from '../middleware/authenticate';
 import { requireActiveSubscription } from '../middleware/require-active-subscription';
 import type { TokenPayload } from '../middleware/authenticate';
+import {
+  DEFAULT_OPENROUTER_MODEL,
+  decryptSecret,
+  completeWithOpenRouter,
+} from '../openrouter';
 
 type BrainMilestone = {
   id: string;
@@ -66,7 +71,70 @@ type BrainRow = {
   meta: BrainMetaEntry[];
 };
 
+type ProjectGroup = {
+  projectId: string;
+  projectName: string;
+  workspaceIds: string[];
+  machineNames: string[];
+  workspaceCount: number;
+  hasBrain: boolean;
+  updatedAt: string | null;
+  summary: string | null;
+};
+
 export async function brainRoutes(fastify: FastifyInstance): Promise<void> {
+  fastify.get(
+    '/v1/brain/projects',
+    { preHandler: [authenticate, requireActiveSubscription] },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const user = (request as FastifyRequest & { user: TokenPayload }).user;
+      const projects = await listProjectGroups(user.sub);
+      return reply.send({ projects });
+    },
+  );
+
+  fastify.get<{ Params: { projectId: string } }>(
+    '/v1/brain/projects/:projectId',
+    { preHandler: [authenticate, requireActiveSubscription] },
+    async (request: FastifyRequest<{ Params: { projectId: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Params: { projectId: string } }> & { user: TokenPayload }).user;
+      const row = await latestProjectBrainRow(user.sub, request.params.projectId);
+      if (!row) return reply.status(404).send({ error: 'Project brain not found' });
+      return reply.send(row);
+    },
+  );
+
+  fastify.get<{ Params: { projectId: string }; Querystring: { q?: string } }>(
+    '/v1/brain/projects/:projectId/ask',
+    { preHandler: [authenticate, requireActiveSubscription] },
+    async (request: FastifyRequest<{ Params: { projectId: string }; Querystring: { q?: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Params: { projectId: string }; Querystring: { q?: string } }> & { user: TokenPayload }).user;
+      const row = await latestProjectBrainRow(user.sub, request.params.projectId);
+      if (!row) return reply.status(404).send({ error: 'Project brain not found' });
+      const q = request.query.q?.trim();
+      if (!q) return reply.status(400).send({ error: 'q query param is required' });
+      return reply.send(await generateBrainAnswer(user.sub, row.brain, q, row.projectName));
+    },
+  );
+
+  fastify.get<{ Params: { projectId: string }; Querystring: { type?: string } }>(
+    '/v1/brain/projects/:projectId/report',
+    { preHandler: [authenticate, requireActiveSubscription] },
+    async (request: FastifyRequest<{ Params: { projectId: string }; Querystring: { type?: string } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Params: { projectId: string }; Querystring: { type?: string } }> & { user: TokenPayload }).user;
+      const row = await latestProjectBrainRow(user.sub, request.params.projectId);
+      if (!row) return reply.status(404).send({ error: 'Project brain not found' });
+      const type = request.query.type ?? 'status';
+      return reply.send({
+        projectId: row.projectId,
+        projectName: row.projectName,
+        type,
+        generatedAt: new Date().toISOString(),
+        markdown: await generateBrainReport(user.sub, row.brain, type, row.projectName),
+      });
+    },
+  );
+
   fastify.get<{ Params: { workspaceId: string } }>(
     '/v1/brain/workspaces/:workspaceId',
     { preHandler: [authenticate, requireActiveSubscription] },
@@ -87,7 +155,7 @@ export async function brainRoutes(fastify: FastifyInstance): Promise<void> {
       if (!row) return reply.status(404).send({ error: 'Project brain not found' });
       const q = request.query.q?.trim();
       if (!q) return reply.status(400).send({ error: 'q query param is required' });
-      const answer = answerFromBrain(row.brain, q);
+      const answer = await generateBrainAnswer(user.sub, row.brain, q, row.workspaceId);
       return reply.send(answer);
     },
   );
@@ -100,7 +168,7 @@ export async function brainRoutes(fastify: FastifyInstance): Promise<void> {
       const row = await latestBrainRow(user.sub, request.params.workspaceId);
       if (!row) return reply.status(404).send({ error: 'Project brain not found' });
       const type = request.query.type ?? 'status';
-      const markdown = renderReport(row.brain, type);
+      const markdown = await generateBrainReport(user.sub, row.brain, type, row.workspaceId);
       return reply.send({ workspaceId: row.workspaceId, type, generatedAt: new Date().toISOString(), markdown });
     },
   );
@@ -227,6 +295,108 @@ async function latestBrainRow(userId: string, workspaceId: string): Promise<Brai
   };
 }
 
+async function listProjectGroups(userId: string): Promise<ProjectGroup[]> {
+  const workspaces = await listUserWorkspaces(userId);
+  if (workspaces.length === 0) return [];
+
+  const brainRows = await latestBrainRowsForWorkspaceIds(workspaces.map(workspace => workspace.id));
+  const brainByWorkspaceId = new Map(brainRows.map(row => [row.workspaceId, row]));
+  const grouped = new Map<string, typeof workspaces>();
+
+  for (const workspace of workspaces) {
+    const projectId = makeProjectId(workspace.name, workspace.id);
+    if (!grouped.has(projectId)) grouped.set(projectId, []);
+    grouped.get(projectId)?.push(workspace);
+  }
+
+  return [...grouped.entries()]
+    .map(([projectId, projectWorkspaces]) => {
+      const rows = projectWorkspaces
+        .map(workspace => brainByWorkspaceId.get(workspace.id))
+        .filter(Boolean) as BrainRow[];
+      const aggregated = rows.length > 0 ? aggregateBrainRows(projectId, projectNameFor(projectWorkspaces), rows) : null;
+      return {
+        projectId,
+        projectName: projectNameFor(projectWorkspaces),
+        workspaceIds: projectWorkspaces.map(workspace => workspace.id),
+        machineNames: uniqueStrings(projectWorkspaces.map(workspace => workspace.machine_name ?? 'Unknown device')),
+        workspaceCount: projectWorkspaces.length,
+        hasBrain: rows.length > 0,
+        updatedAt: aggregated?.updatedAt ?? null,
+        summary: aggregated?.brain.summary ?? null,
+      };
+    })
+    .sort((a, b) => {
+      if (a.hasBrain !== b.hasBrain) return a.hasBrain ? -1 : 1;
+      return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '');
+    });
+}
+
+async function latestProjectBrainRow(
+  userId: string,
+  projectId: string,
+): Promise<{ projectId: string; projectName: string; workspaceIds: string[]; machineNames: string[]; workspaceCount: number; cursor: string; updatedAt: string; brain: ProjectBrain; meta: BrainMetaEntry[] } | null> {
+  const workspaces = await listUserWorkspaces(userId);
+  const projectWorkspaces = workspaces.filter(workspace => makeProjectId(workspace.name, workspace.id) === projectId);
+  if (projectWorkspaces.length === 0) return null;
+
+  const rows = await latestBrainRowsForWorkspaceIds(projectWorkspaces.map(workspace => workspace.id));
+  if (rows.length === 0) return null;
+
+  const aggregated = aggregateBrainRows(projectId, projectNameFor(projectWorkspaces), rows);
+  return {
+    projectId,
+    projectName: projectNameFor(projectWorkspaces),
+    workspaceIds: projectWorkspaces.map(workspace => workspace.id),
+    machineNames: uniqueStrings(projectWorkspaces.map(workspace => workspace.machine_name ?? 'Unknown device')),
+    workspaceCount: projectWorkspaces.length,
+    cursor: aggregated.cursor,
+    updatedAt: aggregated.updatedAt,
+    brain: aggregated.brain,
+    meta: aggregated.meta,
+  };
+}
+
+async function listUserWorkspaces(userId: string): Promise<Array<{ id: string; name: string | null; machine_name: string | null; created_at: string }>> {
+  const result = await pool.query(
+    `SELECT id, name, machine_name, created_at
+     FROM workspaces
+     WHERE user_id = $1
+     ORDER BY created_at DESC`,
+    [userId],
+  );
+  return result.rows as Array<{ id: string; name: string | null; machine_name: string | null; created_at: string }>;
+}
+
+function aggregateBrainRows(
+  projectId: string,
+  projectName: string,
+  rows: BrainRow[],
+): BrainRow {
+  if (rows.length === 1) {
+    return {
+      ...rows[0],
+      brain: {
+        ...rows[0].brain,
+        workspaceId: projectName,
+      },
+    };
+  }
+
+  const sorted = [...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const mergedBrain = compactBrain(mergeBrains(projectName || projectId, sorted.map(row => row.brain)));
+  return {
+    workspaceId: projectId,
+    cursor: sorted[0].cursor,
+    updatedAt: sorted[0].updatedAt,
+    brain: {
+      ...mergedBrain,
+      workspaceId: projectName,
+    },
+    meta: compactMeta(sorted.flatMap(row => row.meta), mergedBrain),
+  };
+}
+
 async function latestBrainRowsForWorkspaceIds(workspaceIds: string[]): Promise<BrainRow[]> {
   const result = await pool.query(
     `SELECT DISTINCT ON (b.workspace_id) b.workspace_id, b.cursor, b.created_at, b.brain, b.meta
@@ -298,6 +468,35 @@ function answerFromBrain(brain: ProjectBrain, question: string): { answer: strin
   };
 }
 
+async function generateBrainAnswer(
+  userId: string,
+  brain: ProjectBrain,
+  question: string,
+  projectName: string,
+): Promise<{ answer: string; evidence: Array<{ kind: string; title: string; snippet: string }> }> {
+  const fallback = answerFromBrain(brain, question);
+  const settings = await loadUserAiSettings(userId);
+  if (!settings.apiKey) return fallback;
+
+  try {
+    const answer = await completeWithOpenRouter({
+      apiKey: settings.apiKey,
+      model: settings.model,
+      systemPrompt: 'You answer questions about a software project using only the provided project brain context. Be concise, grounded, and explicit when the context is incomplete.',
+      userPrompt: [
+        `Project: ${projectName}`,
+        `Question: ${question}`,
+        '',
+        buildBrainContext(brain),
+      ].join('\n'),
+      temperature: 0.2,
+    });
+    return { ...fallback, answer };
+  } catch {
+    return fallback;
+  }
+}
+
 function renderReport(brain: ProjectBrain, type: string): string {
   if (type === 'slides') {
     return [
@@ -348,6 +547,36 @@ function renderReport(brain: ProjectBrain, type: string): string {
     '## Key Decisions',
     ...brain.decisions.slice(0, 6).map(item => `- ${item.title}`),
   ].join('\n');
+}
+
+async function generateBrainReport(
+  userId: string,
+  brain: ProjectBrain,
+  type: string,
+  projectName: string,
+): Promise<string> {
+  const fallback = renderReport(brain, type);
+  const settings = await loadUserAiSettings(userId);
+  if (!settings.apiKey) return fallback;
+
+  try {
+    return await completeWithOpenRouter({
+      apiKey: settings.apiKey,
+      model: settings.model,
+      systemPrompt: 'You generate practical markdown reports for engineering projects. Use only the provided project brain context. Do not invent progress, metrics, or roadmap items.',
+      userPrompt: [
+        `Project: ${projectName}`,
+        `Requested report type: ${type}`,
+        '',
+        'Return markdown only.',
+        '',
+        buildBrainContext(brain),
+      ].join('\n'),
+      temperature: 0.3,
+    });
+  } catch {
+    return fallback;
+  }
 }
 
 function compactBrain(brain: ProjectBrain): ProjectBrain {
@@ -512,6 +741,50 @@ function dedupeBy<T>(items: T[], keyFn: (item: T) => string): T[] {
 
 function normalizeKey(value: string): string {
   return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function makeProjectId(name: string | null | undefined, workspaceId: string): string {
+  return name && name.trim() ? `name:${normalizeKey(name)}` : `workspace:${workspaceId}`;
+}
+
+function projectNameFor(workspaces: Array<{ id: string; name: string | null }>): string {
+  return workspaces[0]?.name?.trim() || workspaces[0]?.id || 'Unnamed project';
+}
+
+async function loadUserAiSettings(userId: string): Promise<{ apiKey: string | null; model: string }> {
+  const result = await pool.query(
+    'SELECT openrouter_api_key_encrypted, openrouter_model FROM users WHERE id = $1',
+    [userId],
+  );
+  const row = result.rows[0] as { openrouter_api_key_encrypted: string | null; openrouter_model: string | null } | undefined;
+  if (!row?.openrouter_api_key_encrypted) {
+    return { apiKey: null, model: row?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL };
+  }
+
+  try {
+    return {
+      apiKey: decryptSecret(row.openrouter_api_key_encrypted),
+      model: row.openrouter_model ?? DEFAULT_OPENROUTER_MODEL,
+    };
+  } catch {
+    return { apiKey: null, model: row.openrouter_model ?? DEFAULT_OPENROUTER_MODEL };
+  }
+}
+
+function buildBrainContext(brain: ProjectBrain): string {
+  return [
+    `Summary: ${brain.summary}`,
+    `Stats: ${brain.stats.checkpointCount} checkpoints, ${brain.stats.decisionCount} decisions, ${brain.stats.taskCount} tasks, ${brain.stats.openTaskCount} open tasks.`,
+    '',
+    'Milestones:',
+    ...brain.milestones.slice(0, 8).map(item => `- ${item.title}${item.detail ? ` — ${item.detail}` : ''}`),
+    '',
+    'Decisions:',
+    ...brain.decisions.slice(0, 8).map(item => `- ${item.title}: ${item.rationale}`),
+    '',
+    'Tasks:',
+    ...brain.tasks.slice(0, 10).map(item => `- [${item.status}] ${item.title}${item.description ? `: ${item.description}` : ''}`),
+  ].join('\n');
 }
 
 function uniqueStrings(values: string[]): string[] {

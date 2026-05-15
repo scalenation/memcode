@@ -28,6 +28,8 @@ CREATE INDEX IF NOT EXISTS subscriptions_user_id_idx ON subscriptions(user_id);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub      TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_idx ON users(oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS openrouter_api_key_encrypted TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS openrouter_model TEXT;
 
 -- A workspace is identified by the local UUID from memory.db
 -- One user can have many workspaces (one per repo)

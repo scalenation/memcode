@@ -343,6 +343,24 @@
         </div>
         <div id="cli-pw-msg" class="form-msg"></div>
       </div>
+      <div class="card">
+        <p class="card-title">AI Settings</p>
+        <p style="font-size:0.83rem;color:var(--text-dim);margin:0 0 14px">Bring your own OpenRouter key for AI-generated Brain answers, status reports, slide outlines, and business plans. Free models are listed first.</p>
+        <div class="field">
+          <label for="ai-openrouter-key">OpenRouter API key</label>
+          <input type="password" id="ai-openrouter-key" placeholder="sk-or-v1-..." autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="ai-model-select">Model</label>
+          <select id="ai-model-select" class="brain-select"></select>
+        </div>
+        <div id="ai-settings-status" style="font-size:0.78rem;color:var(--text-dim);margin-top:-4px;margin-bottom:12px"></div>
+        <div class="form-actions">
+          <button class="btn btn-primary" id="ai-settings-save-btn">Save AI settings</button>
+          <button class="btn btn-secondary" id="ai-settings-clear-btn">Clear key</button>
+        </div>
+        <div id="ai-settings-msg" class="form-msg"></div>
+      </div>
       <div class="card danger-card">
         <p class="card-title">Danger Zone</p>
         <div class="info-row last">

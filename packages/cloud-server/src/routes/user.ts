@@ -6,6 +6,12 @@ import { authenticate } from '../middleware/authenticate';
 import { requireActiveSubscription } from '../middleware/require-active-subscription';
 import type { TokenPayload } from '../middleware/authenticate';
 import { config } from '../config';
+import {
+  DEFAULT_OPENROUTER_MODEL,
+  OPENROUTER_MODELS,
+  encryptSecret,
+  isSupportedOpenRouterModel,
+} from '../openrouter';
 
 const stripe = new Stripe(config.stripeSecretKey, { apiVersion: '2024-06-20' });
 
@@ -22,11 +28,23 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
 
       let userName: string | null = null;
       let hasPassword = false;
+      let hasOpenRouterKey = false;
+      let openRouterModel = DEFAULT_OPENROUTER_MODEL;
       try {
-        const userResult = await pool.query('SELECT name, password_hash FROM users WHERE id = $1', [user.sub]);
-        const userRow = (userResult.rows[0] as { name: string | null; password_hash: string } | undefined);
+        const userResult = await pool.query(
+          'SELECT name, password_hash, openrouter_api_key_encrypted, openrouter_model FROM users WHERE id = $1',
+          [user.sub],
+        );
+        const userRow = (userResult.rows[0] as {
+          name: string | null;
+          password_hash: string;
+          openrouter_api_key_encrypted: string | null;
+          openrouter_model: string | null;
+        } | undefined);
         userName = userRow?.name ?? null;
         hasPassword = !!userRow && userRow.password_hash !== '!LOCKED' && userRow.password_hash !== '!OAUTH';
+        hasOpenRouterKey = Boolean(userRow?.openrouter_api_key_encrypted);
+        openRouterModel = userRow?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL;
       } catch {
         // non-fatal
       }
@@ -54,7 +72,18 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
-      return reply.send({ userId: user.sub, email: user.email, name: userName, subscription, hasPassword });
+      return reply.send({
+        userId: user.sub,
+        email: user.email,
+        name: userName,
+        subscription,
+        hasPassword,
+        aiSettings: {
+          hasOpenRouterKey,
+          openRouterModel,
+          availableModels: OPENROUTER_MODELS,
+        },
+      });
     },
   );
 
@@ -94,6 +123,51 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       }
 
       return reply.send({ ok: true });
+    },
+  );
+
+  fastify.put<{ Body: { openRouterApiKey?: string; openRouterModel?: string; clearOpenRouterKey?: boolean } }>(
+    '/v1/user/ai-settings',
+    { preHandler: authenticate },
+    async (request: FastifyRequest<{ Body: { openRouterApiKey?: string; openRouterModel?: string; clearOpenRouterKey?: boolean } }>, reply: FastifyReply) => {
+      const user = (request as FastifyRequest<{ Body: { openRouterApiKey?: string; openRouterModel?: string; clearOpenRouterKey?: boolean } }> & { user: TokenPayload }).user;
+      const openRouterApiKey = request.body.openRouterApiKey?.trim();
+      const openRouterModel = request.body.openRouterModel?.trim() || DEFAULT_OPENROUTER_MODEL;
+      const clearOpenRouterKey = Boolean(request.body.clearOpenRouterKey);
+
+      if (!isSupportedOpenRouterModel(openRouterModel)) {
+        return reply.status(400).send({ error: 'Unsupported OpenRouter model selection.' });
+      }
+
+      const encryptedKey = openRouterApiKey ? encryptSecret(openRouterApiKey) : null;
+      if (clearOpenRouterKey && !encryptedKey) {
+        await pool.query(
+          'UPDATE users SET openrouter_api_key_encrypted = NULL, openrouter_model = $1 WHERE id = $2',
+          [openRouterModel, user.sub],
+        );
+      } else {
+        await pool.query(
+          `UPDATE users
+           SET openrouter_api_key_encrypted = COALESCE($1, openrouter_api_key_encrypted),
+               openrouter_model = $2
+           WHERE id = $3`,
+          [encryptedKey, openRouterModel, user.sub],
+        );
+      }
+
+      const current = await pool.query(
+        'SELECT openrouter_api_key_encrypted, openrouter_model FROM users WHERE id = $1',
+        [user.sub],
+      );
+      const row = current.rows[0] as { openrouter_api_key_encrypted: string | null; openrouter_model: string | null } | undefined;
+      return reply.send({
+        ok: true,
+        aiSettings: {
+          hasOpenRouterKey: Boolean(row?.openrouter_api_key_encrypted),
+          openRouterModel: row?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL,
+          availableModels: OPENROUTER_MODELS,
+        },
+      });
     },
   );
 

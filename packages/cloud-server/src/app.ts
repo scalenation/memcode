@@ -102,6 +102,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_sub TEXT`,
       `CREATE UNIQUE INDEX IF NOT EXISTS users_oauth_idx ON users(oauth_provider, oauth_sub) WHERE oauth_provider IS NOT NULL`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS openrouter_api_key_encrypted TEXT`,
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS openrouter_model TEXT`,
       `CREATE TABLE IF NOT EXISTS sessions (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

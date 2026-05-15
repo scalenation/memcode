@@ -15,7 +15,8 @@ let addCardElements = null;
 // ── App state ─────────────────────────────────────────────────────────────────
 let profileData = null; // { email, name, subscription }
 let historyData = [];
-let brainWorkspaceData = [];
+let brainProjectData = [];
+let openRouterModels = [];
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
@@ -87,6 +88,9 @@ async function loadProfile() {
   // Profile fields
   document.getElementById('profile-name').value = name ?? '';
   document.getElementById('profile-email').value = email;
+  openRouterModels = profileData.aiSettings?.availableModels ?? [];
+  populateAiModelOptions(openRouterModels, profileData.aiSettings?.openRouterModel);
+  renderAiSettingsState(profileData.aiSettings ?? null);
 
   // Show "Set CLI Password" card for OAuth/checkout accounts that have no password yet
   if (profileData.hasPassword === false) {
@@ -110,6 +114,39 @@ async function loadProfile() {
 
   // Load workspace stats for overview (fire-and-forget)
   loadOverviewStats();
+}
+
+function populateAiModelOptions(models, selectedModel) {
+  const select = document.getElementById('ai-model-select');
+  if (!select) return;
+  select.innerHTML = '';
+
+  for (const model of models) {
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = `${model.free ? 'Free · ' : ''}${model.label} · ${model.provider}`;
+    select.appendChild(option);
+  }
+
+  if (selectedModel && models.some(model => model.id === selectedModel)) {
+    select.value = selectedModel;
+  } else if (models[0]) {
+    select.value = models[0].id;
+  }
+}
+
+function renderAiSettingsState(aiSettings) {
+  const status = document.getElementById('ai-settings-status');
+  const select = document.getElementById('ai-model-select');
+  if (!status || !select) return;
+
+  if (aiSettings?.openRouterModel && openRouterModels.some(model => model.id === aiSettings.openRouterModel)) {
+    select.value = aiSettings.openRouterModel;
+  }
+
+  status.textContent = aiSettings?.hasOpenRouterKey
+    ? 'OpenRouter key saved. Brain reports and answers will use your selected model when available.'
+    : 'No OpenRouter key saved yet. Brain outputs will fall back to built-in summaries until you add one.';
 }
 
 // ── Payment Methods ───────────────────────────────────────────────────────────
@@ -425,6 +462,68 @@ document.getElementById('cli-pw-save-btn')?.addEventListener('click', async () =
   }
 });
 
+document.getElementById('ai-settings-save-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('ai-settings-save-btn');
+  const msgEl = document.getElementById('ai-settings-msg');
+  const key = document.getElementById('ai-openrouter-key').value.trim();
+  const model = document.getElementById('ai-model-select').value;
+
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  setMsg(msgEl, '', null);
+
+  try {
+    const res = await authFetch('/v1/user/ai-settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        openRouterApiKey: key || undefined,
+        openRouterModel: model,
+      }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to save AI settings');
+    profileData.aiSettings = body.aiSettings;
+    openRouterModels = body.aiSettings?.availableModels ?? openRouterModels;
+    populateAiModelOptions(openRouterModels, body.aiSettings?.openRouterModel);
+    renderAiSettingsState(body.aiSettings);
+    document.getElementById('ai-openrouter-key').value = '';
+    setMsg(msgEl, 'AI settings saved.', 'success');
+  } catch (err) {
+    setMsg(msgEl, err.message ?? 'Failed to save AI settings.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save AI settings';
+  }
+});
+
+document.getElementById('ai-settings-clear-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('ai-settings-clear-btn');
+  const msgEl = document.getElementById('ai-settings-msg');
+  const model = document.getElementById('ai-model-select').value;
+
+  btn.disabled = true;
+  btn.textContent = 'Clearing…';
+  setMsg(msgEl, '', null);
+
+  try {
+    const res = await authFetch('/v1/user/ai-settings', {
+      method: 'PUT',
+      body: JSON.stringify({ clearOpenRouterKey: true, openRouterModel: model }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error ?? 'Failed to clear OpenRouter key');
+    profileData.aiSettings = body.aiSettings;
+    renderAiSettingsState(body.aiSettings);
+    document.getElementById('ai-openrouter-key').value = '';
+    setMsg(msgEl, 'OpenRouter key cleared.', 'success');
+  } catch (err) {
+    setMsg(msgEl, err.message ?? 'Failed to clear OpenRouter key.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Clear key';
+  }
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
@@ -479,7 +578,7 @@ async function loadWorkspaces() {
     loading.hidden = true;
 
     const { workspaces, totalStorageBytes, totalBlobCount } = body;
-    brainWorkspaceData = workspaces;
+    brainProjectData = [];
 
     // Stats
     document.getElementById('ws-count-stat').textContent = workspaces.length;
@@ -511,47 +610,50 @@ async function loadWorkspaces() {
   }
 }
 
-async function ensureBrainWorkspaces(force = false) {
-  if (!force && brainWorkspaceData.length > 0) {
-    populateBrainWorkspaceSelect(brainWorkspaceData);
-    return brainWorkspaceData;
+async function ensureBrainProjects(force = false) {
+  if (!force && brainProjectData.length > 0) {
+    populateBrainProjectSelect(brainProjectData);
+    return brainProjectData;
   }
 
-  const res = await authFetch('/v1/user/workspaces');
+  const res = await authFetch('/v1/brain/projects');
   const body = await res.json();
   if (res.status === 402) throw new Error(proRequiredMessage());
-  if (!res.ok) throw new Error(body.error ?? 'Failed to load workspaces');
-  brainWorkspaceData = body.workspaces ?? [];
-  populateBrainWorkspaceSelect(brainWorkspaceData);
-  return brainWorkspaceData;
+  if (!res.ok) throw new Error(body.error ?? 'Failed to load project brains');
+  brainProjectData = body.projects ?? [];
+  populateBrainProjectSelect(brainProjectData);
+  return brainProjectData;
 }
 
-function populateBrainWorkspaceSelect(workspaces) {
+function populateBrainProjectSelect(projects) {
   const select = document.getElementById('brain-workspace');
   if (!select) return;
   const currentValue = select.value;
   select.innerHTML = '';
 
-  if (workspaces.length === 0) {
+  if (projects.length === 0) {
     const option = document.createElement('option');
     option.value = '';
-    option.textContent = 'No synced workspaces';
+    option.textContent = 'No synced projects';
     select.appendChild(option);
     select.disabled = true;
     return;
   }
 
   select.disabled = false;
-  for (const ws of workspaces) {
+  for (const project of projects) {
     const option = document.createElement('option');
-    option.value = ws.id;
-    const labelParts = [ws.name || ws.id.slice(0, 12)];
-    if (ws.machineName) labelParts.push(ws.machineName);
+    option.value = project.projectId;
+    const labelParts = [project.projectName || 'Unnamed project'];
+    labelParts.push(`${project.workspaceCount} source${project.workspaceCount !== 1 ? 's' : ''}`);
+    if (!project.hasBrain) labelParts.push('No brain yet');
     option.textContent = labelParts.join(' · ');
+    option.disabled = !project.hasBrain;
     select.appendChild(option);
   }
 
-  const nextValue = workspaces.some(ws => ws.id === currentValue) ? currentValue : workspaces[0].id;
+  const firstAvailable = projects.find(project => project.hasBrain)?.projectId ?? projects[0].projectId;
+  const nextValue = projects.some(project => project.projectId === currentValue) ? currentValue : firstAvailable;
   select.value = nextValue;
 }
 
@@ -560,29 +662,40 @@ async function loadBrain() {
   const content = document.getElementById('brain-summary-content');
   loading.hidden = false;
   content.hidden = true;
+  resetBrainOutputs();
 
   try {
-    const workspaces = await ensureBrainWorkspaces();
-    if (workspaces.length === 0) {
-      renderBrainEmpty('Sync a workspace first to build a project brain.');
+    const projects = await ensureBrainProjects();
+    if (projects.length === 0) {
+      renderBrainEmpty('Sync a project first to build a project brain.');
       return;
     }
 
-    const workspaceId = document.getElementById('brain-workspace').value || workspaces[0].id;
-    const res = await authFetch(`/v1/brain/workspaces/${encodeURIComponent(workspaceId)}`);
+    const projectId = document.getElementById('brain-workspace').value || projects[0].projectId;
+    const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}`);
     const body = await res.json();
     if (res.status === 402) throw new Error(proRequiredMessage());
     if (res.status === 404) {
-      renderBrainEmpty('This workspace has no compact brain yet. Run a fresh sync from the CLI.');
+      renderBrainEmpty('This project has no compact brain yet. Run a fresh sync from the CLI.');
       return;
     }
     if (!res.ok) throw new Error(body.error ?? 'Failed to load project brain');
 
-    renderBrain(body, workspaces.find(ws => ws.id === workspaceId) ?? null);
+    renderBrain(body, projects.find(project => project.projectId === projectId) ?? null);
   } catch (err) {
     renderBrainEmpty(err.message ?? 'Failed to load project brain.');
     showNotice(err.message ?? 'Failed to load project brain.', 'error');
   }
+}
+
+function resetBrainOutputs() {
+  document.getElementById('brain-answer-empty').hidden = false;
+  document.getElementById('brain-answer-content').hidden = true;
+  document.getElementById('brain-answer').textContent = '';
+  document.getElementById('brain-evidence').innerHTML = '';
+  document.getElementById('brain-report-empty').hidden = false;
+  document.getElementById('brain-report').hidden = true;
+  document.getElementById('brain-report').textContent = '';
 }
 
 function renderBrainEmpty(message) {
@@ -594,14 +707,14 @@ function renderBrainEmpty(message) {
   document.getElementById('brain-decisions-tasks').innerHTML = '';
 }
 
-function renderBrain(payload, workspace) {
+function renderBrain(payload, project) {
   const brain = payload.brain;
   document.getElementById('brain-summary-loading').hidden = true;
   document.getElementById('brain-summary-content').hidden = false;
   document.getElementById('brain-summary').textContent = brain.summary;
 
   const stats = [
-    { title: 'Workspace', meta: workspace?.name || payload.workspaceId, detail: workspace?.machineName ? `Latest source: ${workspace.machineName}` : payload.workspaceId },
+    { title: 'Project', meta: payload.projectName || project?.projectName || brain.workspaceId, detail: `${payload.workspaceCount || project?.workspaceCount || 1} source${(payload.workspaceCount || project?.workspaceCount || 1) !== 1 ? 's' : ''} · ${(payload.machineNames || project?.machineNames || []).join(', ') || 'Unknown device'}` },
     { title: 'Last compacted snapshot', meta: timeAgo(payload.updatedAt), detail: `${brain.stats.checkpointCount} checkpoints · ${brain.stats.decisionCount} decisions · ${brain.stats.taskCount} tasks` },
     { title: 'Open work', meta: `${brain.stats.openTaskCount} open tasks`, detail: `${brain.stats.completedTaskCount} completed tasks` },
   ];
@@ -643,10 +756,10 @@ function renderBrainItem(item) {
 }
 
 async function askBrain() {
-  const workspaceId = document.getElementById('brain-workspace').value;
+  const projectId = document.getElementById('brain-workspace').value;
   const question = document.getElementById('brain-ask-input').value.trim();
-  if (!workspaceId) {
-    showNotice('Select a workspace first.', 'error');
+  if (!projectId) {
+    showNotice('Select a project first.', 'error');
     return;
   }
   if (!question) {
@@ -659,7 +772,7 @@ async function askBrain() {
   btn.textContent = 'Asking…';
 
   try {
-    const res = await authFetch(`/v1/brain/workspaces/${encodeURIComponent(workspaceId)}/ask?q=${encodeURIComponent(question)}`);
+    const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}/ask?q=${encodeURIComponent(question)}`);
     const body = await res.json();
     if (res.status === 402) throw new Error(proRequiredMessage());
     if (!res.ok) throw new Error(body.error ?? 'Failed to query project brain');
@@ -678,9 +791,9 @@ async function askBrain() {
 }
 
 async function generateBrainReport(type) {
-  const workspaceId = document.getElementById('brain-workspace').value;
-  if (!workspaceId) {
-    showNotice('Select a workspace first.', 'error');
+  const projectId = document.getElementById('brain-workspace').value;
+  if (!projectId) {
+    showNotice('Select a project first.', 'error');
     return;
   }
 
@@ -688,7 +801,7 @@ async function generateBrainReport(type) {
   buttons.forEach(btn => { btn.disabled = true; });
 
   try {
-    const res = await authFetch(`/v1/brain/workspaces/${encodeURIComponent(workspaceId)}/report?type=${encodeURIComponent(type)}`);
+    const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}/report?type=${encodeURIComponent(type)}`);
     const body = await res.json();
     if (res.status === 402) throw new Error(proRequiredMessage());
     if (!res.ok) throw new Error(body.error ?? 'Failed to generate report');
