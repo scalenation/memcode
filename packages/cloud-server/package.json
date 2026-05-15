@@ -9,6 +9,8 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
+    "backfill:sync-payload-size": "tsx src/db/backfill-sync-payload-size.ts",
+    "audit:sync-payload-storage": "tsx src/db/audit-sync-payload-storage.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
