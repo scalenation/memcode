@@ -9,6 +9,7 @@ function required(name: string): string {
 export const config = {
   port: parseInt(process.env.PORT ?? '3000', 10),
   host: process.env.HOST ?? '0.0.0.0',
+  syncPayloadStorage: process.env.SYNC_PAYLOAD_STORAGE ?? 'database',
   databaseUrl: required('DATABASE_URL'),
   jwtSecret: required('JWT_SECRET'),
   stripeSecretKey: required('STRIPE_SECRET_KEY'),

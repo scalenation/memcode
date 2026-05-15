@@ -47,7 +47,9 @@ CREATE TABLE IF NOT EXISTS sync_blobs (
   id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id      TEXT        NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   cursor            TEXT        NOT NULL,
-  payload_encrypted TEXT        NOT NULL,  -- base64 AES-256-GCM, client-side encrypted
+  payload_encrypted TEXT,                  -- base64 AES-256-GCM, client-side encrypted
+  payload_storage_key TEXT,
+  payload_size      BIGINT,
   brain             JSONB,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

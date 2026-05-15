@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
 import Stripe from 'stripe';
 import { pool } from '../db/client';
+import { syncBlobStorage } from '../blob-storage';
 import { authenticate } from '../middleware/authenticate';
 import { requireActiveSubscription } from '../middleware/require-active-subscription';
 import type { TokenPayload } from '../middleware/authenticate';
@@ -191,7 +192,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
            w.created_at,
            COUNT(b.id)::int AS blob_count,
            MAX(b.created_at) AS last_synced_at,
-           COALESCE(SUM(LENGTH(b.payload_encrypted)), 0)::bigint AS storage_bytes
+           COALESCE(SUM(COALESCE(b.payload_size, LENGTH(b.payload_encrypted))), 0)::bigint AS storage_bytes
          FROM workspaces w
          LEFT JOIN sync_blobs b ON b.workspace_id = w.id
          WHERE w.user_id = $1
@@ -235,6 +236,7 @@ export async function userRoutes(fastify: FastifyInstance): Promise<void> {
       if ((ws.rowCount ?? 0) === 0) return reply.status(404).send({ error: 'Workspace not found' });
       if ((ws.rows[0] as { user_id: string }).user_id !== user.sub) return reply.status(403).send({ error: 'Forbidden' });
 
+      await syncBlobStorage.deleteWorkspacePayloads(workspaceId);
       await pool.query('DELETE FROM workspaces WHERE id = $1', [workspaceId]);
       return reply.send({ ok: true });
     },

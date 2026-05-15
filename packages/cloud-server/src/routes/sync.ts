@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { randomUUID } from 'node:crypto';
 import { pool } from '../db/client';
+import { syncBlobStorage, type SyncBlobRecord } from '../blob-storage';
 import { authenticate } from '../middleware/authenticate';
 import { requireActiveSubscription } from '../middleware/require-active-subscription';
 import type { TokenPayload } from '../middleware/authenticate';
@@ -111,12 +113,34 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.status(403).send({ error: 'Access denied' });
       }
 
+      const generatedBlobId = randomUUID();
       const cursor = String(Date.now());
       const ip = request.ip ?? null;
       const userAgent = (request.headers['user-agent'] as string) ?? null;
+      const storedPayload = await syncBlobStorage.storePayload({
+        blobId: generatedBlobId,
+        workspaceId,
+        cursor,
+        payload,
+      });
       const result = await pool.query(
-        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta, brain) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-        [workspaceId, cursor, payload, ip, userAgent, label ?? null, meta ? JSON.stringify(meta) : null, brain ? JSON.stringify(brain) : null],
+        `INSERT INTO sync_blobs (
+           id, workspace_id, cursor, payload_encrypted, payload_storage_key, payload_size,
+           ip, user_agent, label, meta, brain
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+        [
+          generatedBlobId,
+          workspaceId,
+          cursor,
+          storedPayload.payloadEncrypted,
+          storedPayload.payloadStorageKey,
+          storedPayload.payloadSize,
+          ip,
+          userAgent,
+          label ?? null,
+          meta ? JSON.stringify(meta) : null,
+          brain ? JSON.stringify(brain) : null,
+        ],
       );
 
       const blobId = (result.rows[0] as { id: string }).id;
@@ -181,13 +205,35 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       const payload = assembleChunks(chunks.rows, 'payload');
       if (!payload) return reply.status(400).send({ error: 'Incomplete payload chunks' });
       const metaJson = assembleChunks(chunks.rows, 'meta');
+      const generatedBlobId = randomUUID();
       const cursor = String(Date.now());
       const ip = request.ip ?? null;
       const userAgent = (request.headers['user-agent'] as string) ?? null;
+      const storedPayload = await syncBlobStorage.storePayload({
+        blobId: generatedBlobId,
+        workspaceId,
+        cursor,
+        payload,
+      });
 
       const result = await pool.query(
-        'INSERT INTO sync_blobs (workspace_id, cursor, payload_encrypted, ip, user_agent, label, meta, brain) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-        [workspaceId, cursor, payload, ip, userAgent, label ?? null, metaJson ?? null, brain ? JSON.stringify(brain) : null],
+        `INSERT INTO sync_blobs (
+           id, workspace_id, cursor, payload_encrypted, payload_storage_key, payload_size,
+           ip, user_agent, label, meta, brain
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+        [
+          generatedBlobId,
+          workspaceId,
+          cursor,
+          storedPayload.payloadEncrypted,
+          storedPayload.payloadStorageKey,
+          storedPayload.payloadSize,
+          ip,
+          userAgent,
+          label ?? null,
+          metaJson ?? null,
+          brain ? JSON.stringify(brain) : null,
+        ],
       );
 
       await pool.query('DELETE FROM sync_upload_chunks WHERE upload_id = $1 AND workspace_id = $2', [uploadId, workspaceId]);
@@ -232,7 +278,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       if (blobId) {
         // Point-in-time restore: fetch a specific blob by ID
         result = await pool.query(
-          `SELECT id, cursor, payload_encrypted
+          `SELECT id, workspace_id, cursor, payload_encrypted, payload_storage_key, payload_size
            FROM sync_blobs
            WHERE workspace_id = $1 AND id = $2`,
           [workspaceId, blobId],
@@ -244,7 +290,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         // Return the newest blob older than beforeCursor. This lets clients skip
         // a latest blob that was encrypted with a different local key.
         result = await pool.query(
-          `SELECT id, cursor, payload_encrypted
+          `SELECT id, workspace_id, cursor, payload_encrypted, payload_storage_key, payload_size
            FROM sync_blobs
            WHERE workspace_id = $1 AND cursor < $2
            ORDER BY cursor DESC
@@ -257,7 +303,7 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
       } else {
         // Return the latest blob pushed after the cursor
         result = await pool.query(
-          `SELECT id, cursor, payload_encrypted
+          `SELECT id, workspace_id, cursor, payload_encrypted, payload_storage_key, payload_size
            FROM sync_blobs
            WHERE workspace_id = $1 AND cursor > $2
            ORDER BY cursor DESC
@@ -269,9 +315,13 @@ export async function syncRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
 
-      const row = result.rows[0] as { id: string; cursor: string; payload_encrypted: string };
+      const row = result.rows[0] as SyncBlobRecord;
+      const payload = await syncBlobStorage.loadPayload(row);
+      if (!payload) {
+        return reply.status(500).send({ error: 'Stored sync payload is unavailable' });
+      }
       return reply.send({
-        blob: { id: row.id, cursor: row.cursor, payload: row.payload_encrypted },
+        blob: { id: row.id, cursor: row.cursor, payload },
         cursor: row.cursor,
       });
     },

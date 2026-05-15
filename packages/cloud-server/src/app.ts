@@ -130,6 +130,9 @@ export async function buildApp(): Promise<FastifyInstance> {
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS label TEXT`,
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS meta JSONB`,
       `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS brain JSONB`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS payload_storage_key TEXT`,
+      `ALTER TABLE sync_blobs ADD COLUMN IF NOT EXISTS payload_size BIGINT`,
+      `ALTER TABLE sync_blobs ALTER COLUMN payload_encrypted DROP NOT NULL`,
     ];
     for (const sql of migrations) {
       try {
