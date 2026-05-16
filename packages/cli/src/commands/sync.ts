@@ -1,14 +1,12 @@
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { homedir, hostname } from 'node:os';
 import { spawn } from 'node:child_process';
 import pc from 'picocolors';
-import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
-import { findProjectRoot, getMemoryDir, resolveProject } from '../util';
-import { importChatHistory } from '../chat-import';
-import { hydrateProjectContext } from '../context-hydration';
+import type { DatabaseSync } from 'node:sqlite';
+import type { Workspace } from '@memcode/core';
 
 const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
@@ -81,8 +79,8 @@ interface AuthConfig {
 interface SyncContext {
   auth: AuthConfig;
   projectPath: string;
-  db: ReturnType<typeof resolveProject>['db'];
-  workspace: ReturnType<typeof resolveProject>['workspace'];
+  db: DatabaseSync;
+  workspace: Workspace;
   encryptionKey: string;
 }
 
@@ -139,11 +137,36 @@ function validateEmailOrExit(email: string): string {
   process.exit(1);
 }
 
-function createSyncContext(path?: string): SyncContext | null {
+function findProjectRoot(startDir: string = process.cwd()): string {
+  let dir = startDir;
+  while (true) {
+    if (existsSync(join(dir, '.memory')) || existsSync(join(dir, '.git'))) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return startDir;
+    }
+    dir = parent;
+  }
+}
+
+function getMemoryDir(projectPath: string): string {
+  return join(projectPath, '.memory');
+}
+
+async function resolveSyncProject(projectPath: string): Promise<{ db: DatabaseSync; workspace: Workspace }> {
+  const { resolveProject } = await import('../util');
+  const { db, workspace } = resolveProject(projectPath);
+  return { db, workspace };
+}
+
+async function createSyncContext(path?: string): Promise<SyncContext | null> {
   const auth = readAuthConfig();
   if (!auth) return null;
   const projectPath = path ?? findProjectRoot();
-  const { db, workspace } = resolveProject(projectPath);
+  const { db, workspace } = await resolveSyncProject(projectPath);
+  const { deriveKey } = await import('@memcode/cloud-client');
   return {
     auth,
     projectPath,
@@ -158,6 +181,7 @@ async function runPullPhase(
   options: { quiet?: boolean } = {},
 ): Promise<PullSyncResultSummary> {
   const { quiet = false } = options;
+  const { pullSync } = await import('@memcode/cloud-client');
   const result = await pullSync(ctx.db, {
     endpoint: ctx.auth.endpoint,
     apiToken: ctx.auth.apiToken,
@@ -185,6 +209,8 @@ async function runPushPhase(
   options: { quiet?: boolean } = {},
 ): Promise<{ result: PushSyncResultSummary; imported: { sessions: number; messages: number } }> {
   const { quiet = false } = options;
+  const { hydrateProjectContext } = await import('../context-hydration');
+  const { pushSync } = await import('@memcode/cloud-client');
   const imported = hydrateProjectContext(ctx.db, ctx.workspace.id, ctx.projectPath);
   await registerWorkspace(ctx.auth, ctx.workspace.id, ctx.projectPath);
   const result = await pushSync(ctx.db, {
@@ -238,7 +264,7 @@ async function runAutoSync(
   options: { quiet?: boolean; exitOnError?: boolean } = {},
 ): Promise<boolean> {
   const { quiet = false, exitOnError = true } = options;
-  const ctx = createSyncContext(path);
+  const ctx = await createSyncContext(path);
   if (!ctx) {
     if (!quiet) console.log(noAuthMsg());
     if (exitOnError) process.exit(1);
@@ -395,7 +421,7 @@ syncCommand
   .description('Push summaries and metadata to the cloud (E2E encrypted)')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (options: { path?: string }) => {
-    const ctx = createSyncContext(options.path);
+    const ctx = await createSyncContext(options.path);
     if (!ctx) {
       console.log(noAuthMsg());
       process.exit(1);
@@ -419,7 +445,7 @@ syncCommand
   .description('Pull latest memory from the cloud and merge into local DB')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (options: { path?: string }) => {
-    const ctx = createSyncContext(options.path);
+    const ctx = await createSyncContext(options.path);
     if (!ctx) {
       console.log(noAuthMsg());
       process.exit(1);
@@ -541,23 +567,20 @@ syncCommand
   .argument('<blob-id>', 'The checkpoint blob ID to restore (from `memory sync history` or the dashboard)')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (blobId: string, options: { path?: string }) => {
-    const auth = readAuthConfig();
-    if (!auth) {
+    const ctx = await createSyncContext(options.path);
+    if (!ctx) {
       console.log(noAuthMsg());
       process.exit(1);
     }
-
-    const projectPath = options.path ?? findProjectRoot();
-    const { db, workspace } = resolveProject(projectPath);
-    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
+    const { pullSync } = await import('@memcode/cloud-client');
 
     console.log(pc.bold(`Restoring checkpoint ${pc.cyan(blobId.slice(0, 8) + '…')}`));
     try {
-      const result = await pullSync(db, {
-        endpoint: auth.endpoint,
-        apiToken: auth.apiToken,
-        encryptionKey,
-        workspaceId: workspace.id,
+      const result = await pullSync(ctx.db, {
+        endpoint: ctx.auth.endpoint,
+        apiToken: ctx.auth.apiToken,
+        encryptionKey: ctx.encryptionKey,
+        workspaceId: ctx.workspace.id,
         blobId,
       });
 
@@ -570,6 +593,8 @@ syncCommand
     } catch (err) {
       console.error(pc.red('Restore failed:'), (err as Error).message);
       process.exit(1);
+    } finally {
+      ctx.db.close();
     }
   });
 
@@ -580,19 +605,16 @@ syncCommand
   .description('Show cloud sync status for this workspace')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (options: { path?: string }) => {
-    const auth = readAuthConfig();
-    if (!auth) {
+    const ctx = await createSyncContext(options.path);
+    if (!ctx) {
       console.log(noAuthMsg());
       return;
     }
 
-    const projectPath = options.path ?? findProjectRoot();
-    const { db, workspace } = resolveProject(projectPath);
-
     try {
       const res = await fetch(
-        `${auth.endpoint}/v1/sync/status?workspaceId=${encodeURIComponent(workspace.id)}`,
-        { headers: { Authorization: `Bearer ${auth.apiToken}`, 'User-Agent': CLI_UA } },
+        `${ctx.auth.endpoint}/v1/sync/status?workspaceId=${encodeURIComponent(ctx.workspace.id)}`,
+        { headers: { Authorization: `Bearer ${ctx.auth.apiToken}`, 'User-Agent': CLI_UA } },
       );
 
       if (res.status === 404) {
@@ -621,19 +643,21 @@ syncCommand
         ? new Date(data.lastSyncedAt).toLocaleString()
         : 'never';
       console.log(pc.bold('Cloud sync status'));
-      console.log(`  Workspace:    ${pc.cyan(workspace.id.slice(0, 8) + '…')}`);
+      console.log(`  Workspace:    ${pc.cyan(ctx.workspace.id.slice(0, 8) + '…')}`);
       console.log(`  Last synced:  ${pc.cyan(when)}`);
       console.log(`  Total pushes: ${pc.cyan(String(data.totalPushes))}`);
-      console.log(`  Endpoint:     ${pc.dim(auth.endpoint)}`);
-      const daemon = readDaemonState(projectPath);
+      console.log(`  Endpoint:     ${pc.dim(ctx.auth.endpoint)}`);
+      const daemon = readDaemonState(ctx.projectPath);
       if (daemon && isProcessRunning(daemon.pid)) {
         console.log(`  Background:   ${pc.green('running')} (${daemon.pid}, every ${daemon.intervalSeconds}s)`);
       } else {
-        if (daemon) clearDaemonState(projectPath);
+        if (daemon) clearDaemonState(ctx.projectPath);
         console.log(`  Background:   ${pc.dim('stopped')}`);
       }
     } catch (err) {
       console.error(pc.red('Error:'), (err as Error).message);
+    } finally {
+      ctx.db.close();
     }
   });
 

@@ -3,17 +3,6 @@ import { Command } from 'commander';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { initCommand } from './commands/init';
-import { checkpointCommand } from './commands/checkpoint';
-import { recallCommand } from './commands/recall';
-import { contextPackCommand } from './commands/context-pack';
-import { timelineCommand } from './commands/timeline';
-import { decisionCommand } from './commands/decision';
-import { taskCommand } from './commands/task';
-import { syncCommand } from './commands/sync';
-import { serviceCommand } from './commands/service';
-import { doctorCommand } from './commands/doctor';
-import { copilotCommand } from './commands/copilot';
 import { loadProPlugin } from './pro-loader';
 
 // Show welcome message on first ever run
@@ -32,6 +21,22 @@ const pkgVersion: string = (require('../package.json') as { version: string }).v
 
 const program = new Command();
 
+type CommandLoader = () => Promise<Command>;
+
+const COMMAND_LOADERS: Record<string, CommandLoader> = {
+  init: async () => (await import('./commands/init')).initCommand,
+  checkpoint: async () => (await import('./commands/checkpoint')).checkpointCommand,
+  recall: async () => (await import('./commands/recall')).recallCommand,
+  'context-pack': async () => (await import('./commands/context-pack')).contextPackCommand,
+  timeline: async () => (await import('./commands/timeline')).timelineCommand,
+  decision: async () => (await import('./commands/decision')).decisionCommand,
+  task: async () => (await import('./commands/task')).taskCommand,
+  sync: async () => (await import('./commands/sync')).syncCommand,
+  service: async () => (await import('./commands/service')).serviceCommand,
+  doctor: async () => (await import('./commands/doctor')).doctorCommand,
+  copilot: async () => (await import('./commands/copilot')).copilotCommand,
+};
+
 program
   .name('memory')
   .description('MemCode — local-first project memory for coding assistants')
@@ -44,18 +49,6 @@ program.hook('preAction', (_thisCommand, actionCommand) => {
   loadProPlugin(workspaceId);
 });
 
-program.addCommand(initCommand);
-program.addCommand(checkpointCommand);
-program.addCommand(recallCommand);
-program.addCommand(contextPackCommand);
-program.addCommand(timelineCommand);
-program.addCommand(decisionCommand);
-program.addCommand(taskCommand);
-program.addCommand(syncCommand);
-program.addCommand(serviceCommand);
-program.addCommand(doctorCommand);
-program.addCommand(copilotCommand);
-
 // Friendly error on unknown command
 program.on('command:*', () => {
   console.error(`Unknown command: ${program.args.join(' ')}`);
@@ -63,4 +56,27 @@ program.on('command:*', () => {
   process.exit(1);
 });
 
-program.parse(process.argv);
+async function registerCommands(): Promise<void> {
+  const requested = process.argv[2];
+  const loadAll = !requested || requested.startsWith('-') || requested === 'help';
+
+  if (loadAll) {
+    const commands = await Promise.all(Object.values(COMMAND_LOADERS).map((load) => load()));
+    for (const command of commands) {
+      program.addCommand(command);
+    }
+    return;
+  }
+
+  const loader = COMMAND_LOADERS[requested];
+  if (loader) {
+    program.addCommand(await loader());
+  }
+}
+
+async function main(): Promise<void> {
+  await registerCommands();
+  await program.parseAsync(process.argv);
+}
+
+void main();
