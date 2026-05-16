@@ -1,17 +1,11 @@
 {
   "name": "@memcode/cloud-server",
   "version": "1.0.0",
-  "description": "MemCode cloud sync API server — encrypted workspace memory sync",
+  "description": "MemCode Cloudflare Worker API and static assets",
   "private": true,
-  "main": "./dist/index.js",
+  "main": "./src/worker.js",
   "scripts": {
-    "build": "tsc && cp src/db/schema.sql dist/db/schema.sql && mkdir -p public/css public/js && cp ../../packages/landing/index.html public/ && cp ../../packages/landing/login.html public/ && cp ../../packages/landing/dashboard.html public/ && cp ../../packages/landing/privacy.html public/ && cp ../../packages/landing/public/css/style.css public/css/ && cp ../../packages/landing/public/js/app.js public/js/ && cp ../../packages/landing/public/js/login.js public/js/ && cp ../../packages/landing/public/js/dashboard.js public/js/",
-    "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
-    "migrate": "tsx src/db/migrate.ts",
-    "backfill:sync-payload-size": "tsx src/db/backfill-sync-payload-size.ts",
-    "audit:sync-payload-storage": "tsx src/db/audit-sync-payload-storage.ts",
-    "export:cloudflare-migration": "tsx src/db/export-cloudflare-migration.ts",
+    "build": "mkdir -p public/css public/js && cp ../../packages/landing/index.html public/ && cp ../../packages/landing/login.html public/ && cp ../../packages/landing/dashboard.html public/ && cp ../../packages/landing/privacy.html public/ && cp ../../packages/landing/public/css/style.css public/css/ && cp ../../packages/landing/public/js/app.js public/js/ && cp ../../packages/landing/public/js/login.js public/js/ && cp ../../packages/landing/public/js/dashboard.js public/js/",
     "cf:dev": "wrangler dev --local",
     "cf:check": "wrangler deploy --dry-run",
     "cf:deploy": "wrangler deploy",
@@ -20,29 +14,16 @@
     "cf:d1:apply:local": "wrangler d1 execute DB --local --file src/db/schema.d1.sql",
     "cf:d1:apply:remote": "wrangler d1 execute DB --remote --file src/db/schema.d1.sql",
     "cf:whoami": "wrangler whoami",
-    "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@fastify/cors": "^9.0.1",
-    "@fastify/static": "^7.0.4",
-    "@neondatabase/serverless": "^1.1.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.5",
-    "fastify": "^4.28.0",
     "jose": "^5.9.6",
     "resend": "^6.12.3",
-    "serverless-http": "^4.0.0",
-    "stripe": "^16.12.0",
-    "ws": "^8.20.0"
+    "stripe": "^16.12.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260515.1",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/node": "^22.15.0",
-    "@types/ws": "^8.18.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5.5.0",
     "wrangler": "^4.92.0"
   },
   "engines": {
