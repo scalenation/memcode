@@ -38,6 +38,10 @@ export async function handleLogin(request, env, db, readJson, json) {
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const password = typeof body.password === 'string' ? body.password : '';
 
+  if (!EMAIL_RE.test(email)) {
+    throw new HttpError(400, { error: 'Invalid email address' });
+  }
+
   const user = await db.first('SELECT id, password_hash FROM users WHERE email = ? LIMIT 1', [email]);
   if (!user) {
     throw new HttpError(404, { error: 'No account found with that email address.' });

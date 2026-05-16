@@ -152,6 +152,8 @@ memory --version
 
 ## Quick Start
 
+### Free/Local Setup
+
 ```bash
 # 1. Go to any project
 cd ~/projects/my-app
@@ -159,22 +161,46 @@ cd ~/projects/my-app
 # 2. Initialize memory (--hooks wires git commit + branch-switch automatically)
 memory init --hooks
 
-# 3. Create a checkpoint
+# 3. Wire MemCode into your assistant files once per project
+memory copilot setup
+
+# 4. Create a first checkpoint
 memory checkpoint --note "Switched auth from session cookies to JWTs"
 
-# 4. Record a decision
+# 5. Record a decision
 memory decision add \
   --title "JWT over cookies" \
   --rationale "Stateless, works with our mobile app" \
   --impact "All API routes must validate Bearer tokens"
 
-# 5. Add a task
+# 6. Add a task
 memory task add --title "Migrate existing sessions" --priority high
 
-# 6. Before your next chat — generate a context pack
+# 7. Optional: start the local dashboard/background worker
+memory service start
+
+# 8. Before your next chat — generate a context pack
 memory context-pack
 # Paste the output at the top of your next chat window
 ```
+
+### Pro Setup
+
+```bash
+# 1. Authenticate once per machine
+memory sync auth
+
+# 2. Run the universal sync flow
+memory sync
+
+# 3. Keep this workspace synced automatically
+memory sync start
+
+# 4. Optional: confirm the sync cursor and last sync time
+memory sync status
+```
+
+Use `memory sync` for normal day-to-day sync, git hooks, and background jobs. Keep `memory sync push` and `memory sync pull` for manual recovery or debugging.
 
 ---
 
@@ -454,6 +480,8 @@ memory sync auth [--endpoint <url>]
 ```
 
 Prompts for email, password, and an **encryption passphrase**. The passphrase is never sent to the server — it derives the AES-256-GCM key used to encrypt your memory locally before upload.
+
+The email is normalized and validated locally before any network request is sent, so obvious typos fail fast.
 
 > **Important:** There is no passphrase recovery. If you lose it, your cloud data cannot be decrypted.
 

@@ -13,6 +13,8 @@ MemCode gives coding assistants durable, project-aware memory across sessions an
 
 ## Quick Start
 
+### Free/Local Setup
+
 ```bash
 # Install globally
 npm install -g @memcode/cli
@@ -21,8 +23,14 @@ npm install -g @memcode/cli
 cd my-project
 memory init --hooks
 
-# Create a checkpoint
+# Wire MemCode into Copilot or Claude once per project
+memory copilot setup
+
+# Create a first checkpoint
 memory checkpoint --note "Switched to PostgreSQL for better full-text search"
+
+# Optional: start the local dashboard/background worker
+memory service start
 
 # Generate a context pack before a new chat session
 memory context-pack
@@ -30,6 +38,21 @@ memory context-pack
 # Recall a past decision
 memory recall --query "database choice" --limit 5
 ```
+
+### Pro Sync Setup
+
+```bash
+# Authenticate once per machine
+memory sync auth
+
+# Run the universal pull-then-push sync flow
+memory sync
+
+# Optional: keep this workspace synced in the background
+memory sync start
+```
+
+Use `memory sync` for normal hook and background sync. `memory sync push` and `memory sync pull` are manual override commands.
 
 ## Features
 

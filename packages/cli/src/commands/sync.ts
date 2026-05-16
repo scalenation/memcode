@@ -12,6 +12,7 @@ import { hydrateProjectContext } from '../context-hydration';
 
 const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const CLI_VERSION: string = (require('../../package.json') as { version: string }).version;
@@ -117,6 +118,25 @@ function readAuthConfig(): AuthConfig | null {
 function writeAuthConfig(cfg: AuthConfig): void {
   mkdirSync(join(homedir(), '.config', 'memcode'), { recursive: true });
   writeFileSync(AUTH_CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function validateEmailOrExit(email: string): string {
+  const normalized = normalizeEmail(email);
+  if (EMAIL_RE.test(normalized)) return normalized;
+
+  const suggestion = normalized.includes(',')
+    ? normalized.replace(/,/g, '.')
+    : '';
+
+  console.error(pc.red('Invalid email address.'));
+  if (suggestion && EMAIL_RE.test(suggestion)) {
+    console.error(pc.dim(`  Did you mean ${suggestion}?`));
+  }
+  process.exit(1);
 }
 
 function createSyncContext(path?: string): SyncContext | null {
@@ -279,7 +299,7 @@ syncCommand
     console.error(pc.bold('\nMemCode Cloud — authenticate\n'));
 
     try {
-      const email    = await askQuestion('Email: ');
+      const email    = validateEmailOrExit(await askQuestion('Email: '));
       const password = await askQuestion('Password: ', true);
 
       if (!email || !password) {
