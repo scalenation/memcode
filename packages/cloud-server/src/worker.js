@@ -1068,7 +1068,17 @@ async function readJson(request) {
 }
 
 function matchPath(pathname, regex) {
-  return pathname.match(regex);
+  const match = pathname.match(regex);
+  if (!match) return null;
+  return match.map((value, index) => (index === 0 ? value : decodePathParam(value)));
+}
+
+function decodePathParam(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }
 
 function parseCheckpointMeta(value) {
