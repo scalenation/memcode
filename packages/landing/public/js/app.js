@@ -1,7 +1,7 @@
 /* global API endpoint */
 const API_BASE = window.location.hostname === 'localhost'
   ? 'http://localhost:3000'
-  : window.location.origin;  // landing + API are on the same Vercel deployment
+  : window.location.origin;
 
 // ─── Checkout flow (2-step: email → embedded card via Stripe Elements) ────────
 
