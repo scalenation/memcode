@@ -99,9 +99,9 @@ Coding assistants forget everything when the session ends. MemCode fixes that.
 - Recall any past decision with `memory recall --query "why postgres"`.
 - **Pro:** Push your encrypted memory to the cloud and pull it on any machine.
 
-All memory lives in a single SQLite file at `.memory/memory.db`. No daemon or server is required. If you want always-on local refresh and search, you can run the optional `memory service` worker locally. No network unless you ask for it.
+All memory lives in a single SQLite file at `.memory/memory.db`. No daemon or server is required. If you want always-on local refresh, search, and browsing, you can run the optional `memory service` worker locally. No network unless you ask for it.
 
-Free/local MemCode includes checkpoints, decisions, tasks, chat-session import, timeline, and auto-injected context files. Pro layers cloud sync, hosted semantic recall, and cross-machine/team continuity on top of the same local database.
+Free/local MemCode includes checkpoints, decisions, tasks, chat-session import, timeline, a local dashboard for browsing memory, and auto-injected context files. Pro layers cloud sync, hosted semantic recall, and cross-machine/team continuity on top of the same local database.
 
 ## Optional Local Service
 
@@ -115,8 +115,8 @@ This launches a project-scoped local worker that:
 
 - refreshes imported local AI chat history on an interval,
 - updates configured assistant context files,
-- exposes local HTTP endpoints for recall, timeline, and context packs,
-- serves a small local viewer on `http://127.0.0.1:<port>`.
+- exposes local HTTP endpoints for recall, timeline, tasks, decisions, checkpoints, and context packs,
+- serves a richer local dashboard on `http://127.0.0.1:<port>`.
 
 Useful commands:
 

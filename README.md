@@ -37,7 +37,7 @@ memory recall --query "database choice" --limit 5
 - **Session-aware context** — imports recent local AI chats and turns them into compact breadcrumbs for the next session
 - **Recall** — keyword + recency-ranked search over decisions, tasks, checkpoints
 - **Context pack** — one-command, <500 ms project context block for chat hydration
-- **Optional local service** — always-on local worker for assistant refresh, recall endpoints, and a small viewer UI
+- **Optional local dashboard** — always-on local worker for assistant refresh, recall, browse endpoints, and a richer viewer UI
 - **Timeline** — chronological view of all memory events
 - **Decision log** — record architectural and process decisions with rationale
 - **Task tracking** — link tasks to decisions and checkpoints
@@ -62,7 +62,7 @@ memory recall --query "database choice" --limit 5
 | `memory checkpoint [--note]` | Create a manual checkpoint |
 | `memory recall --query <text>` | Ranked recall by keyword |
 | `memory context-pack` | Print context block for chat hydration, including recent imported AI sessions |
-| `memory service start` | Start the local background worker and search/viewer service |
+| `memory service start` | Start the local background worker and local dashboard service |
 | `memory timeline` | List recent events |
 | `memory decision add` | Record an architectural decision |
 | `memory task add` | Create a task |
@@ -100,7 +100,7 @@ See [docs/architecture.md](./docs/architecture.md) for a detailed breakdown of t
 
 MemCode’s direction is now explicitly split into:
 
-- Free/local memory: SQLite, checkpoints, transcript hydration, assistant context injection, keyword recall.
+- Free/local memory: SQLite, checkpoints, transcript hydration, assistant context injection, keyword recall, local dashboard browsing.
 - Pro memory: encrypted cloud sync, hosted semantic recall, and cross-machine continuity on top of the same local store.
 
 ## Security

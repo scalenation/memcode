@@ -42,6 +42,47 @@ interface ServiceRuntime {
   refreshedFiles: number;
 }
 
+interface TaskRecord {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+interface DecisionRecord {
+  id: string;
+  title: string;
+  rationale: string;
+  impact: string | null;
+  status: string;
+  created_at: number;
+  updated_at: number;
+}
+
+interface CheckpointRecord {
+  id: string;
+  summary_short: string;
+  summary_long: string | null;
+  trigger: string;
+  branch: string | null;
+  git_sha: string | null;
+  created_at: number;
+}
+
+interface DashboardSummary {
+  workspaceId: string;
+  workspaceName: string;
+  taskCounts: Record<string, number>;
+  decisionCounts: Record<string, number>;
+  checkpointCount: number;
+  sessionCount: number;
+  assistantFileCount: number;
+  runtime: ServiceRuntime;
+}
+
 export const serviceCommand = new Command('service')
   .description('Run the always-on local MemCode worker for assistant refresh and local search');
 
@@ -121,67 +162,251 @@ function parseLimit(url: URL, fallback: number, max: number): number {
   return Math.min(raw, max);
 }
 
+function parseQuery(url: URL): string | null {
+  const query = (url.searchParams.get('q') ?? '').trim();
+  return query.length > 0 ? query : null;
+}
+
+function likeQuery(query: string | null): string | null {
+  return query ? `%${query}%` : null;
+}
+
+function searchClause(columns: string[], query: string | null): { clause: string; params: string[] } {
+  if (!query) return { clause: '', params: [] };
+  const like = likeQuery(query) as string;
+  return {
+    clause: ` AND (${columns.map((column) => `${column} LIKE ?`).join(' OR ')})`,
+    params: columns.map(() => like),
+  };
+}
+
+function getTaskRecords(db: ReturnType<typeof openDb>, workspaceId: string, status: string | null, query: string | null, limit: number): TaskRecord[] {
+  const statusClause = status && status !== 'all' ? ' AND status = ?' : '';
+  const statusParams = status && status !== 'all' ? [status] : [];
+  const search = searchClause(['title', 'description'], query);
+  return db.prepare(
+    `SELECT id, title, description, status, priority, created_at, updated_at
+     FROM tasks
+     WHERE workspace_id = ?${statusClause}${search.clause}
+     ORDER BY
+       CASE status WHEN 'open' THEN 1 WHEN 'in-progress' THEN 2 WHEN 'done' THEN 3 ELSE 4 END,
+       CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+       updated_at DESC
+     LIMIT ?`,
+  ).all(workspaceId, ...statusParams, ...search.params, limit) as unknown as TaskRecord[];
+}
+
+function getDecisionRecords(db: ReturnType<typeof openDb>, workspaceId: string, status: string | null, query: string | null, limit: number): DecisionRecord[] {
+  const statusClause = status && status !== 'all' ? ' AND status = ?' : '';
+  const statusParams = status && status !== 'all' ? [status] : [];
+  const search = searchClause(['title', 'rationale', 'impact'], query);
+  return db.prepare(
+    `SELECT id, title, rationale, impact, status, created_at, updated_at
+     FROM decisions
+     WHERE workspace_id = ?${statusClause}${search.clause}
+     ORDER BY updated_at DESC
+     LIMIT ?`,
+  ).all(workspaceId, ...statusParams, ...search.params, limit) as unknown as DecisionRecord[];
+}
+
+function getCheckpointRecords(db: ReturnType<typeof openDb>, workspaceId: string, query: string | null, limit: number): CheckpointRecord[] {
+  const search = searchClause(['summary_short', 'summary_long', 'branch', 'trigger'], query);
+  return db.prepare(
+    `SELECT id, summary_short, summary_long, trigger, branch, git_sha, created_at
+     FROM checkpoints
+     WHERE workspace_id = ?${search.clause}
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  ).all(workspaceId, ...search.params, limit) as unknown as CheckpointRecord[];
+}
+
+function getDashboardSummary(
+  db: ReturnType<typeof openDb>,
+  workspaceId: string,
+  runtime: ServiceRuntime,
+  projectPath: string,
+): DashboardSummary {
+  const taskCounts = db.prepare(
+    `SELECT status, COUNT(*) AS total
+     FROM tasks
+     WHERE workspace_id = ?
+     GROUP BY status`,
+  ).all(workspaceId) as Array<{ status: string; total: number }>;
+  const decisionCounts = db.prepare(
+    `SELECT status, COUNT(*) AS total
+     FROM decisions
+     WHERE workspace_id = ?
+     GROUP BY status`,
+  ).all(workspaceId) as Array<{ status: string; total: number }>;
+  const checkpointCount = db.prepare('SELECT COUNT(*) AS total FROM checkpoints WHERE workspace_id = ?').get(workspaceId) as { total: number };
+  const sessionCount = db.prepare('SELECT COUNT(*) AS total FROM sessions WHERE workspace_id = ?').get(workspaceId) as { total: number };
+  return {
+    workspaceId,
+    workspaceName: runtime.workspaceName,
+    taskCounts: Object.fromEntries(taskCounts.map((row) => [row.status, Number(row.total)])),
+    decisionCounts: Object.fromEntries(decisionCounts.map((row) => [row.status, Number(row.total)])),
+    checkpointCount: Number(checkpointCount.total ?? 0),
+    sessionCount: Number(sessionCount.total ?? 0),
+    assistantFileCount: configuredAgentFilePaths(projectPath).length,
+    runtime,
+  };
+}
+
 function renderViewerHtml(port: number, projectPath: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MemCode Local Service</title>
+  <title>MemCode Local Dashboard</title>
   <style>
     :root { color-scheme: dark; }
-    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #0b1020; color: #edf2f7; }
-    .page { max-width: 1080px; margin: 0 auto; padding: 32px 20px 48px; }
-    .hero { display: grid; gap: 8px; margin-bottom: 28px; }
-    .hero h1 { margin: 0; font-size: 1.8rem; }
-    .hero p { margin: 0; color: #a0aec0; }
-    .grid { display: grid; gap: 18px; grid-template-columns: 1.1fr 0.9fr; }
-    .card { background: #111827; border: 1px solid #1f2937; border-radius: 16px; padding: 18px; }
-    .card h2 { margin: 0 0 12px; font-size: 1rem; }
+    body { margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: radial-gradient(circle at top, #16213d 0%, #0b1020 48%, #060814 100%); color: #edf2f7; }
+    .page { max-width: 1240px; margin: 0 auto; padding: 32px 20px 48px; }
+    .hero { display: grid; gap: 10px; margin-bottom: 24px; }
+    .eyebrow { color: #60a5fa; font-size: 0.82rem; letter-spacing: 0.12em; text-transform: uppercase; }
+    .hero h1 { margin: 0; font-size: 2rem; }
+    .hero p { margin: 0; color: #a0aec0; max-width: 900px; }
     .meta { font-size: 0.88rem; color: #94a3b8; }
-    input, button, textarea { font: inherit; }
-    input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
-    button { padding: 10px 14px; border: 0; border-radius: 10px; background: #2563eb; color: white; cursor: pointer; }
+    .stats { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 20px 0 26px; }
+    .stat { background: rgba(15, 23, 42, 0.88); border: 1px solid #22314f; border-radius: 16px; padding: 16px 18px; }
+    .stat .label { color: #94a3b8; font-size: 0.82rem; }
+    .stat .value { font-size: 1.8rem; font-weight: 700; margin-top: 8px; }
+    .grid { display: grid; gap: 18px; grid-template-columns: 1.15fr 0.85fr; }
+    .stack { display: grid; gap: 18px; }
+    .card { background: rgba(15, 23, 42, 0.9); border: 1px solid #1f2937; border-radius: 18px; padding: 18px; box-shadow: 0 12px 30px rgba(0,0,0,0.18); }
+    .card h2 { margin: 0 0 6px; font-size: 1rem; }
+    .card p { margin: 0 0 14px; color: #94a3b8; }
+    .toolbar { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 12px; }
+    input, button, select { font: inherit; }
+    input, select { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; cursor: pointer; }
     pre { white-space: pre-wrap; word-break: break-word; background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; min-height: 120px; overflow: auto; }
-    ul { margin: 0; padding-left: 18px; }
-    li { margin-bottom: 10px; }
+    .list { display: grid; gap: 10px; }
+    .item { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; }
+    .item-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+    .item-title strong { font-size: 0.96rem; }
+    .muted { color: #94a3b8; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 2px 9px; font-size: 0.78rem; background: #172033; color: #cbd5e1; }
+    .pill.open, .pill.active { background: rgba(37, 99, 235, 0.2); color: #93c5fd; }
+    .pill.in-progress, .pill.superseded { background: rgba(245, 158, 11, 0.16); color: #fcd34d; }
+    .pill.done { background: rgba(16, 185, 129, 0.18); color: #86efac; }
+    .pill.cancelled, .pill.rejected { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
+    .split { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .stats, .split { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .stats, .split, .toolbar { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="page">
     <div class="hero">
-      <h1>MemCode Local Service</h1>
-      <p>Always-on local memory worker for assistant context refresh, recall, and timeline browsing.</p>
+      <div class="eyebrow">Free Local Dashboard</div>
+      <h1>MemCode Local Dashboard</h1>
+      <p>The claude-mem-inspired part is already here: progressive local memory capture, recent AI session continuity, and an always-on local worker. This dashboard makes those local features much more visible for open source users without moving hosted retrieval or sync out of Pro.</p>
       <p class="meta">Project: ${escapeHtml(projectPath)} · Port: ${port}</p>
     </div>
+    <div class="stats" id="stats">
+      <div class="stat"><div class="label">Open Tasks</div><div class="value" id="stat-open-tasks">-</div></div>
+      <div class="stat"><div class="label">Active Decisions</div><div class="value" id="stat-active-decisions">-</div></div>
+      <div class="stat"><div class="label">Checkpoints</div><div class="value" id="stat-checkpoints">-</div></div>
+      <div class="stat"><div class="label">Imported Sessions</div><div class="value" id="stat-sessions">-</div></div>
+    </div>
     <div class="grid">
-      <div class="card">
-        <h2>Recall</h2>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:12px;">
-          <input id="query" placeholder="Search memory, decisions, checkpoints, tasks..." />
-          <button id="search">Search</button>
+      <div class="stack">
+        <div class="card">
+          <h2>Recall Search</h2>
+          <p>Search the local store across tasks, checkpoints, and decisions.</p>
+          <div class="toolbar">
+            <input id="query" placeholder="Search memory, decisions, checkpoints, tasks..." />
+            <select id="search-limit">
+              <option value="8">8 results</option>
+              <option value="12">12 results</option>
+              <option value="20">20 results</option>
+            </select>
+            <button id="search">Search</button>
+          </div>
+          <div class="list" id="results"><div class="item muted">Run a search to inspect local memory.</div></div>
         </div>
-        <pre id="results">Run a search to inspect local memory.</pre>
+        <div class="split">
+          <div class="card">
+            <h2>Open Tasks</h2>
+            <p>Browse local work without needing the CLI.</p>
+            <div class="list" id="tasks"><div class="item muted">Loading...</div></div>
+          </div>
+          <div class="card">
+            <h2>Active Decisions</h2>
+            <p>Keep architectural context visible for new contributors.</p>
+            <div class="list" id="decisions"><div class="item muted">Loading...</div></div>
+          </div>
+        </div>
+        <div class="split">
+          <div class="card">
+            <h2>Recent Checkpoints</h2>
+            <p>See recent project movement and commit snapshots.</p>
+            <div class="list" id="checkpoints"><div class="item muted">Loading...</div></div>
+          </div>
+          <div class="card">
+            <h2>Recent AI Sessions</h2>
+            <p>Surface recent assistant activity before the next chat begins.</p>
+            <div class="list" id="sessions"><div class="item muted">Loading...</div></div>
+          </div>
+        </div>
       </div>
-      <div class="card">
-        <h2>Context Pack</h2>
-        <pre id="context">Loading...</pre>
-      </div>
-      <div class="card">
-        <h2>Timeline</h2>
-        <ul id="timeline"><li>Loading...</li></ul>
-      </div>
-      <div class="card">
-        <h2>Health</h2>
-        <pre id="health">Loading...</pre>
+      <div class="stack">
+        <div class="card">
+          <h2>Context Pack</h2>
+          <p>Prompt-ready memory block for the next assistant session.</p>
+          <pre id="context">Loading...</pre>
+        </div>
+        <div class="card">
+          <h2>Timeline</h2>
+          <p>Merged project history from checkpoints, decisions, and tasks.</p>
+          <div class="list" id="timeline"><div class="item muted">Loading...</div></div>
+        </div>
+        <div class="card">
+          <h2>Health</h2>
+          <p>Local worker runtime status and refresh details.</p>
+          <pre id="health">Loading...</pre>
+        </div>
       </div>
     </div>
   </div>
   <script>
+    function formatDate(value) {
+      return new Date(value).toLocaleString();
+    }
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    function renderList(targetId, items, renderItem, emptyText) {
+      const node = document.getElementById(targetId);
+      node.innerHTML = '';
+      if (!items.length) {
+        node.innerHTML = '<div class="item muted">' + emptyText + '</div>';
+        return;
+      }
+      for (const item of items) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'item';
+        wrapper.innerHTML = renderItem(item);
+        node.appendChild(wrapper);
+      }
+    }
     async function loadHealth() {
       const data = await fetch('/health').then(r => r.json());
       document.getElementById('health').textContent = JSON.stringify(data, null, 2);
+    }
+    async function loadDashboard() {
+      const data = await fetch('/api/dashboard').then(r => r.json());
+      document.getElementById('stat-open-tasks').textContent = data.taskCounts.open || 0;
+      document.getElementById('stat-active-decisions').textContent = data.decisionCounts.active || 0;
+      document.getElementById('stat-checkpoints').textContent = data.checkpointCount || 0;
+      document.getElementById('stat-sessions').textContent = data.sessionCount || 0;
     }
     async function loadContext() {
       const data = await fetch('/api/context-pack').then(r => r.json());
@@ -189,28 +414,67 @@ function renderViewerHtml(port: number, projectPath: string): string {
     }
     async function loadTimeline() {
       const data = await fetch('/api/timeline?limit=12').then(r => r.json());
-      const list = document.getElementById('timeline');
-      list.innerHTML = '';
-      for (const item of data.entries) {
-        const li = document.createElement('li');
-        li.innerHTML = '<strong>' + item.title + '</strong><div class="meta">' + item.type + ' · ' + new Date(item.created_at).toLocaleString() + '</div>' + (item.detail ? '<div>' + item.detail + '</div>' : '');
-        list.appendChild(li);
-      }
-      if (!data.entries.length) list.innerHTML = '<li>No timeline entries yet.</li>';
+      renderList('timeline', data.entries, (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(item.title) + '</strong><span class="pill ' + escapeHtml(item.type) + '">' + escapeHtml(item.type) + '</span></div>' +
+        '<div class="meta">' + formatDate(item.created_at) + (item.meta ? ' · ' + escapeHtml(item.meta) : '') + '</div>' +
+        (item.detail ? '<div>' + escapeHtml(item.detail) + '</div>' : ''),
+      'No timeline entries yet.');
+    }
+    async function loadTasks() {
+      const data = await fetch('/api/tasks?status=open&limit=8').then(r => r.json());
+      renderList('tasks', data.tasks, (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(item.title) + '</strong><span class="pill ' + escapeHtml(item.status) + '">' + escapeHtml(item.status) + (item.priority ? ' · ' + escapeHtml(item.priority) : '') + '</span></div>' +
+        '<div class="meta">Updated ' + formatDate(item.updated_at) + '</div>' +
+        (item.description ? '<div>' + escapeHtml(item.description) + '</div>' : ''),
+      'No open tasks yet.');
+    }
+    async function loadDecisions() {
+      const data = await fetch('/api/decisions?status=active&limit=8').then(r => r.json());
+      renderList('decisions', data.decisions, (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(item.title) + '</strong><span class="pill ' + escapeHtml(item.status) + '">' + escapeHtml(item.status) + '</span></div>' +
+        '<div class="meta">Updated ' + formatDate(item.updated_at) + '</div>' +
+        '<div>' + escapeHtml(item.rationale) + '</div>' +
+        (item.impact ? '<div class="muted">Impact: ' + escapeHtml(item.impact) + '</div>' : ''),
+      'No active decisions yet.');
+    }
+    async function loadCheckpoints() {
+      const data = await fetch('/api/checkpoints?limit=8').then(r => r.json());
+      renderList('checkpoints', data.checkpoints, (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(item.summary_short) + '</strong><span class="pill">' + escapeHtml(item.trigger) + '</span></div>' +
+        '<div class="meta">' + formatDate(item.created_at) + (item.branch ? ' · ' + escapeHtml(item.branch) : '') + (item.git_sha ? ' @' + escapeHtml(String(item.git_sha).slice(0, 8)) : '') + '</div>' +
+        (item.summary_long ? '<div>' + escapeHtml(item.summary_long) + '</div>' : ''),
+      'No checkpoints yet.');
+    }
+    async function loadSessions() {
+      const data = await fetch('/api/recent-sessions?limit=6').then(r => r.json());
+      renderList('sessions', data.sessions, (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(item.agent || item.editor || 'assistant session') + '</strong><span class="pill">' + escapeHtml(String(item.message_count || 0)) + ' messages</span></div>' +
+        '<div class="meta">' + formatDate(item.last_message_at || item.started_at) + '</div>',
+      'No imported sessions yet.');
     }
     async function runSearch() {
       const query = document.getElementById('query').value.trim();
       if (!query) return;
-      const data = await fetch('/api/recall?q=' + encodeURIComponent(query) + '&limit=8').then(r => r.json());
-      document.getElementById('results').textContent = JSON.stringify(data.results, null, 2);
+      const limit = document.getElementById('search-limit').value;
+      const data = await fetch('/api/recall?q=' + encodeURIComponent(query) + '&limit=' + encodeURIComponent(limit)).then(r => r.json());
+      renderList('results', data.results, (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(item.title || item.type || 'result') + '</strong><span class="pill">' + escapeHtml(item.type || 'memory') + '</span></div>' +
+        (item.preview ? '<div>' + escapeHtml(item.preview) + '</div>' : '') +
+        (item.score ? '<div class="meta">Score: ' + escapeHtml(item.score) + '</div>' : ''),
+      'No matching local memory found.');
     }
     document.getElementById('search').addEventListener('click', runSearch);
     document.getElementById('query').addEventListener('keydown', (event) => {
       if (event.key === 'Enter') runSearch();
     });
+    loadDashboard();
     loadHealth();
     loadContext();
     loadTimeline();
+    loadTasks();
+    loadDecisions();
+    loadCheckpoints();
+    loadSessions();
   </script>
 </body>
 </html>`;
@@ -254,6 +518,11 @@ async function handleRequest(
   try {
     const workspace = getOrCreateWorkspace(db, projectPath);
 
+    if (method === 'GET' && url.pathname === '/api/dashboard') {
+      json(res, 200, getDashboardSummary(db, workspace.id, runtime, projectPath));
+      return;
+    }
+
     if (method === 'GET' && url.pathname === '/api/context-pack') {
       json(res, 200, {
         workspaceId: workspace.id,
@@ -280,6 +549,35 @@ async function handleRequest(
       const limit = parseLimit(url, 12, 50);
       json(res, 200, {
         entries: getTimeline(db, workspace.id, limit),
+      });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/tasks') {
+      const limit = parseLimit(url, 8, 50);
+      const status = (url.searchParams.get('status') ?? '').trim() || null;
+      const query = parseQuery(url);
+      json(res, 200, {
+        tasks: getTaskRecords(db, workspace.id, status, query, limit),
+      });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/decisions') {
+      const limit = parseLimit(url, 8, 50);
+      const status = (url.searchParams.get('status') ?? '').trim() || null;
+      const query = parseQuery(url);
+      json(res, 200, {
+        decisions: getDecisionRecords(db, workspace.id, status, query, limit),
+      });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/checkpoints') {
+      const limit = parseLimit(url, 8, 50);
+      const query = parseQuery(url);
+      json(res, 200, {
+        checkpoints: getCheckpointRecords(db, workspace.id, query, limit),
       });
       return;
     }
