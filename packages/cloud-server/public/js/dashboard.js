@@ -895,6 +895,7 @@ function renderAnalyticsEmpty(message) {
 
 function renderAgentUsage(aiUsage) {
   const availability = aiUsage?.availability;
+  const availabilityLoaded = Boolean(availability);
   const availabilityCards = [
     {
       label: 'Provider',
@@ -903,18 +904,24 @@ function renderAgentUsage(aiUsage) {
     },
     {
       label: 'Credits Remaining',
-      value: availability?.limitRemaining == null ? 'Unlimited' : fmtCredits(availability.limitRemaining),
-      sub: availability?.limit == null ? 'No key limit set' : `${fmtCredits(availability.limit)} key limit`,
+      value: !aiUsage?.hasOpenRouterKey ? 'No key' : !availabilityLoaded ? 'Unavailable' : availability.limitRemaining == null ? 'Unlimited' : fmtCredits(availability.limitRemaining),
+      sub: !aiUsage?.hasOpenRouterKey
+        ? 'Add an OpenRouter key in Profile'
+        : !availabilityLoaded
+          ? 'Live balance lookup failed'
+          : availability.limit == null
+            ? 'No key limit set'
+            : `${fmtCredits(availability.limit)} key limit`,
     },
     {
       label: 'Used Today',
-      value: fmtCredits(availability?.usageDaily ?? 0),
-      sub: `${fmtCredits(availability?.usageMonthly ?? 0)} this month`,
+      value: availabilityLoaded ? fmtCredits(availability?.usageDaily ?? 0) : '—',
+      sub: availabilityLoaded ? `${fmtCredits(availability?.usageMonthly ?? 0)} this month` : 'Waiting for provider data',
     },
     {
       label: 'BYOK Usage',
-      value: fmtCredits(availability?.byokUsage ?? 0),
-      sub: availability?.includeByokInLimit ? 'Counts toward key limit' : 'Tracked separately',
+      value: availabilityLoaded ? fmtCredits(availability?.byokUsage ?? 0) : '—',
+      sub: availabilityLoaded ? (availability?.includeByokInLimit ? 'Counts toward key limit' : 'Tracked separately') : 'Provider usage unavailable',
     },
   ];
   document.getElementById('agent-availability-cards').innerHTML = availabilityCards.map((item) => `
@@ -927,8 +934,8 @@ function renderAgentUsage(aiUsage) {
   document.getElementById('agent-availability-note').innerHTML = aiUsage?.hasOpenRouterKey
     ? [
       `Model ${esc(aiUsage.model || 'Unknown')}`,
-      availability?.isFreeTier ? 'Free-tier key' : 'Paid key',
-      availability?.limitReset ? `Reset ${esc(availability.limitReset)}` : 'No automatic reset',
+      availabilityLoaded ? (availability?.isFreeTier ? 'Free-tier key' : 'Paid key') : 'Verify key to load live credits',
+      availabilityLoaded ? (availability?.limitReset ? `Reset ${esc(availability.limitReset)}` : 'No automatic reset') : 'OpenRouter /v1/key unavailable',
     ].map((text) => `<span>${text}</span>`).join('')
     : '<span>Add an OpenRouter key in Profile to see live credit availability.</span>';
 
