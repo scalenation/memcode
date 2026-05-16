@@ -150,3 +150,14 @@ describe('memory context-pack', () => {
     expect(result.stdout).toContain('Project Memory Context');
   });
 });
+
+describe('memory service', () => {
+  beforeEach(() => { run('init', tmpDir); });
+
+  it('reports stopped status before the service is started', () => {
+    const result = run('service status', tmpDir);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Local memory service');
+    expect(result.stdout).toMatch(/stopped/i);
+  });
+});

@@ -89,6 +89,20 @@ This writes MemCode-managed context into:
 
 Those files refresh automatically after checkpoints, so you do not need to paste context manually every time.
 
+## 7c. Start the optional local memory service
+
+```bash
+memory service start
+```
+
+This runs an always-on local worker for the current project. It keeps imported chat history and configured assistant context files fresh in the background, and exposes local recall, timeline, and context-pack endpoints with a small local viewer.
+
+Check it with:
+
+```bash
+memory service status
+```
+
 ## 8. View the timeline
 
 ```bash

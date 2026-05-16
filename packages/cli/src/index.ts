@@ -11,6 +11,7 @@ import { timelineCommand } from './commands/timeline';
 import { decisionCommand } from './commands/decision';
 import { taskCommand } from './commands/task';
 import { syncCommand } from './commands/sync';
+import { serviceCommand } from './commands/service';
 import { doctorCommand } from './commands/doctor';
 import { copilotCommand } from './commands/copilot';
 import { loadProPlugin } from './pro-loader';
@@ -51,6 +52,7 @@ program.addCommand(timelineCommand);
 program.addCommand(decisionCommand);
 program.addCommand(taskCommand);
 program.addCommand(syncCommand);
+program.addCommand(serviceCommand);
 program.addCommand(doctorCommand);
 program.addCommand(copilotCommand);
 
