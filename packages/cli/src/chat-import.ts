@@ -14,7 +14,7 @@ interface TranscriptEvent {
   type?: string;
   id?: string;
   timestamp?: string;
-  data?: {
+  data?: Record<string, unknown> & {
     sessionId?: string;
     startTime?: string;
     producer?: string;
@@ -65,18 +65,50 @@ export function importChatHistory(
     const editor = start?.data?.vscodeVersion
       ? `VS Code ${start.data.vscodeVersion}`
       : 'VS Code';
+    const firstPrompt = firstUserPrompt(events);
+    const telemetry = extractSessionTelemetry(events, start, firstPrompt);
 
     const existingSession = db
       .prepare('SELECT ended_at FROM sessions WHERE id = ?')
       .get(sessionId) as unknown as { ended_at: number | null } | undefined;
     if (!existingSession) {
       db.prepare(`
-        INSERT INTO sessions (id, workspace_id, editor, agent, started_at, ended_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `).run(sessionId, workspaceId, editor, agent, startedAt, endedAt);
+        INSERT INTO sessions (id, workspace_id, editor, agent, source, provider, model, task_label, category, started_at, ended_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        sessionId,
+        workspaceId,
+        editor,
+        agent,
+        telemetry.source,
+        telemetry.provider,
+        telemetry.model,
+        telemetry.taskLabel,
+        telemetry.category,
+        startedAt,
+        endedAt,
+      );
       result.sessions++;
-    } else if (endedAt > (existingSession.ended_at ?? 0)) {
-      db.prepare('UPDATE sessions SET ended_at = ? WHERE id = ?').run(endedAt, sessionId);
+    } else {
+      const nextEndedAt = Math.max(endedAt, existingSession.ended_at ?? 0);
+      db.prepare(`
+        UPDATE sessions
+        SET ended_at = ?,
+            source = COALESCE(source, ?),
+            provider = COALESCE(provider, ?),
+            model = COALESCE(model, ?),
+            task_label = COALESCE(task_label, ?),
+            category = COALESCE(category, ?)
+        WHERE id = ?
+      `).run(
+        nextEndedAt || null,
+        telemetry.source,
+        telemetry.provider,
+        telemetry.model,
+        telemetry.taskLabel,
+        telemetry.category,
+        sessionId,
+      );
     }
 
     for (const event of events) {
@@ -203,6 +235,104 @@ function fileMtime(path: string): number {
 
 function estimateTokens(content: string): number {
   return Math.max(1, Math.ceil(content.length / 4));
+}
+
+function firstUserPrompt(events: TranscriptEvent[]): string {
+  for (const event of events) {
+    if (event.type !== 'user.message') continue;
+    const content = messageContent(event);
+    if (content) return content;
+  }
+  return '';
+}
+
+function extractSessionTelemetry(
+  events: TranscriptEvent[],
+  start: TranscriptEvent | undefined,
+  firstPrompt: string,
+): {
+  source: string | null;
+  provider: string | null;
+  model: string | null;
+  taskLabel: string | null;
+  category: 'decision' | 'bugfix' | 'feature' | 'discovery';
+} {
+  const source = normalizeString(start?.data?.producer) ?? 'github-copilot-chat';
+  const model = findMetadataString(events, ['modelId', 'model', 'chatModel', 'engine', 'deploymentModel']);
+  const provider = findMetadataString(events, ['provider', 'vendor']) ?? inferProviderFromModel(model);
+  return {
+    source,
+    provider,
+    model,
+    taskLabel: summarizeTaskLabel(firstPrompt),
+    category: inferSessionCategory(firstPrompt),
+  };
+}
+
+function findMetadataString(events: TranscriptEvent[], keys: string[]): string | null {
+  for (const event of events) {
+    const value = findStringByKeys(event.data, keys, 0);
+    if (value) return value;
+  }
+  return null;
+}
+
+function findStringByKeys(value: unknown, keys: string[], depth: number): string | null {
+  if (depth > 5 || value == null) return null;
+  if (typeof value === 'string') return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const nested = findStringByKeys(item, keys, depth + 1);
+      if (nested) return nested;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+
+  const record = value as Record<string, unknown>;
+  for (const [key, entry] of Object.entries(record)) {
+    if (keys.includes(key) && typeof entry === 'string' && entry.trim()) {
+      return entry.trim();
+    }
+    const nested = findStringByKeys(entry, keys, depth + 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function inferProviderFromModel(model: string | null): string | null {
+  if (!model) return null;
+  const normalized = model.toLowerCase();
+  if (normalized.includes('gpt') || normalized.includes('o1') || normalized.includes('o3') || normalized.includes('o4')) {
+    return 'OpenAI';
+  }
+  if (normalized.includes('claude')) return 'Anthropic';
+  if (normalized.includes('gemini')) return 'Google';
+  return null;
+}
+
+function summarizeTaskLabel(content: string): string | null {
+  const normalized = content.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  return normalized.length <= 120 ? normalized : `${normalized.slice(0, 117).trimEnd()}...`;
+}
+
+function inferSessionCategory(content: string): 'decision' | 'bugfix' | 'feature' | 'discovery' {
+  const normalized = content.toLowerCase();
+  if (/(bug|fix|error|issue|broken|crash|debug|regression|failing|failure)/.test(normalized)) {
+    return 'bugfix';
+  }
+  if (/(decision|decide|choose|tradeoff|trade-off|architecture|architectural|design|should we|which approach)/.test(normalized)) {
+    return 'decision';
+  }
+  if (/(feature|add|implement|create|build|support|enable|dashboard|page|workflow)/.test(normalized)) {
+    return 'feature';
+  }
+  return 'discovery';
+}
+
+function normalizeString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function safeList(path: string): string[] {

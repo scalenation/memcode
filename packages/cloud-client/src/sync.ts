@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { Checkpoint, Decision, Task, SyncState } from '@memcode/core';
+import type { Checkpoint, Decision, Message, Session, Task, SyncState } from '@memcode/core';
 import { transaction } from '@memcode/core';
 import { encryptPayload, decryptPayload } from './client';
 import type { CloudConfig, ProjectBrain, SyncPayload } from './client';
+
+const AGENT_CATEGORIES = ['decision', 'bugfix', 'feature', 'discovery'] as const;
 
 const DIRECT_PUSH_LIMIT_BYTES = 750_000;
 const PUSH_CHUNK_SIZE = 550_000;
@@ -80,11 +82,29 @@ export async function pushSync(
     )
     .all(config.workspaceId) as unknown as Task[];
 
+  const sessions = db
+    .prepare(
+      'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at',
+    )
+    .all(config.workspaceId) as unknown as Session[];
+
+  const messages = db
+    .prepare(
+      `SELECT m.*
+       FROM messages m
+       INNER JOIN sessions s ON s.id = m.session_id
+       WHERE s.workspace_id = ?
+       ORDER BY m.created_at`,
+    )
+    .all(config.workspaceId) as unknown as Message[];
+
   const now = Date.now();
   const cursor = String(now);
 
   const payload: SyncPayload = {
     workspaceId: config.workspaceId,
+    sessions,
+    messages,
     checkpoints,
     decisions,
     tasks,
@@ -93,7 +113,7 @@ export async function pushSync(
   };
 
   const encrypted = encryptPayload(payload, config.encryptionKey);
-  const brain = buildProjectBrain(config.workspaceId, checkpoints, decisions, tasks, now);
+  const brain = buildProjectBrain(config.workspaceId, checkpoints, decisions, tasks, sessions, messages, now);
 
   // Build dashboard metadata. The encrypted blob remains the source of truth;
   // this metadata powers searchable history in the web dashboard.
@@ -131,8 +151,8 @@ export async function pushSync(
   return {
     cursor: serverCursor,
     uploadedAt: now,
-    sessionsCount: 0,
-    messagesCount: 0,
+    sessionsCount: sessions.length,
+    messagesCount: messages.length,
     checkpointsCount: checkpoints.length,
     decisionsCount: decisions.length,
     tasksCount: tasks.length,
@@ -307,6 +327,8 @@ function buildProjectBrain(
   checkpoints: Checkpoint[],
   decisions: Decision[],
   tasks: Task[],
+  sessions: Session[],
+  messages: Message[],
   generatedAt: number,
 ): ProjectBrain {
   const recentCheckpoints = [...checkpoints]
@@ -360,6 +382,7 @@ function buildProjectBrain(
       priority: task.priority,
       updatedAt: task.updated_at,
     })),
+    agentTelemetry: buildAgentTelemetry(sessions, messages),
     stats: {
       checkpointCount: checkpoints.length,
       decisionCount: decisions.length,
@@ -368,6 +391,121 @@ function buildProjectBrain(
       completedTaskCount: completedTasks.length,
     },
   };
+}
+
+function buildAgentTelemetry(sessions: Session[], messages: Message[]) {
+  const sessionStats = new Map<string, { messageCount: number; estimatedTokens: number; lastMessageAt: number }>();
+
+  for (const message of messages) {
+    const existing = sessionStats.get(message.session_id) ?? { messageCount: 0, estimatedTokens: 0, lastMessageAt: 0 };
+    existing.messageCount += 1;
+    existing.estimatedTokens += Number(message.token_count ?? 0);
+    existing.lastMessageAt = Math.max(existing.lastMessageAt, Number(message.created_at ?? 0));
+    sessionStats.set(message.session_id, existing);
+  }
+
+  const recent = sessions
+    .map((session) => {
+      const stats = sessionStats.get(session.id) ?? { messageCount: 0, estimatedTokens: 0, lastMessageAt: Number(session.ended_at ?? session.started_at ?? 0) };
+      return {
+        id: session.id,
+        agent: session.agent ?? session.source ?? session.editor ?? 'Unknown agent',
+        source: session.source ?? null,
+        provider: session.provider ?? null,
+        model: session.model ?? null,
+        taskLabel: session.task_label ?? null,
+        category: normalizeCategory(session.category),
+        messageCount: stats.messageCount,
+        estimatedTokens: stats.estimatedTokens,
+        startedAt: Number(session.started_at ?? 0),
+        lastMessageAt: Math.max(stats.lastMessageAt, Number(session.ended_at ?? session.started_at ?? 0)),
+      };
+    })
+    .sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+    .slice(0, 12);
+
+  const summary = {
+    sessionCount: sessions.length,
+    messageCount: messages.length,
+    estimatedTokens: messages.reduce((sum, message) => sum + Number(message.token_count ?? 0), 0),
+    knownModelSessions: sessions.filter((session) => Boolean(session.model)).length,
+    unknownModelSessions: sessions.filter((session) => !session.model).length,
+    knownProviderSessions: sessions.filter((session) => Boolean(session.provider)).length,
+    taskLabeledSessions: sessions.filter((session) => Boolean(session.task_label)).length,
+  };
+
+  const byCategory = AGENT_CATEGORIES.map((category) => {
+    const matching = recent.filter((session) => session.category === category);
+    return {
+      category,
+      sessionCount: matching.length,
+      messageCount: matching.reduce((sum, session) => sum + session.messageCount, 0),
+      estimatedTokens: matching.reduce((sum, session) => sum + session.estimatedTokens, 0),
+    };
+  });
+
+  const byAgent = aggregateUsage(recent, (session) => session.agent, (key, bucket) => ({
+    agent: key,
+    sessionCount: bucket.sessionCount,
+    messageCount: bucket.messageCount,
+    estimatedTokens: bucket.estimatedTokens,
+  }));
+
+  const byModel = aggregateUsage(recent, (session) => `${session.provider ?? ''}::${session.model ?? ''}`, (_key, bucket) => ({
+    model: bucket.model,
+    provider: bucket.provider,
+    sessionCount: bucket.sessionCount,
+    messageCount: bucket.messageCount,
+    estimatedTokens: bucket.estimatedTokens,
+  }));
+
+  return {
+    summary,
+    byCategory,
+    byAgent,
+    byModel,
+    recent,
+  };
+}
+
+function aggregateUsage<T>(
+  sessions: Array<{
+    agent: string;
+    provider: string | null;
+    model: string | null;
+    messageCount: number;
+    estimatedTokens: number;
+  }>,
+  keyFn: (session: { agent: string; provider: string | null; model: string | null; messageCount: number; estimatedTokens: number }) => string,
+  mapFn: (key: string, bucket: { sessionCount: number; messageCount: number; estimatedTokens: number; provider: string | null; model: string | null }) => T,
+): T[] {
+  const buckets = new Map<string, { sessionCount: number; messageCount: number; estimatedTokens: number; provider: string | null; model: string | null }>();
+
+  for (const session of sessions) {
+    const key = keyFn(session);
+    const bucket = buckets.get(key) ?? { sessionCount: 0, messageCount: 0, estimatedTokens: 0, provider: session.provider, model: session.model };
+    bucket.sessionCount += 1;
+    bucket.messageCount += session.messageCount;
+    bucket.estimatedTokens += session.estimatedTokens;
+    bucket.provider ??= session.provider;
+    bucket.model ??= session.model;
+    buckets.set(key, bucket);
+  }
+
+  return [...buckets.entries()]
+    .map(([key, bucket]) => mapFn(key, bucket))
+    .sort((a, b) => {
+      const left = a as { estimatedTokens?: number; sessionCount?: number };
+      const right = b as { estimatedTokens?: number; sessionCount?: number };
+      return Number(right.estimatedTokens ?? right.sessionCount ?? 0) - Number(left.estimatedTokens ?? left.sessionCount ?? 0);
+    })
+    .slice(0, 8);
+}
+
+function normalizeCategory(category: unknown): 'decision' | 'bugfix' | 'feature' | 'discovery' {
+  return AGENT_CATEGORIES.includes(category as (typeof AGENT_CATEGORIES)[number])
+    ? category as 'decision' | 'bugfix' | 'feature' | 'discovery'
+    : 'discovery';
 }
 
 function compactCheckpointDetail(summaryLong: string, summaryShort: string): string {
@@ -426,16 +564,35 @@ function mergePayload(
       if (!existing) {
         db.prepare(`
           INSERT INTO sessions
-            (id, workspace_id, editor, agent, started_at, ended_at)
-          VALUES (?, ?, ?, ?, ?, ?)
+            (id, workspace_id, editor, agent, source, provider, model, task_label, category, started_at, ended_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           session.id, session.workspace_id, session.editor ?? null, session.agent ?? null,
+          session.source ?? null, session.provider ?? null, session.model ?? null,
+          session.task_label ?? null, session.category ?? null,
           session.started_at, session.ended_at ?? null,
         );
         merged.sessions++;
       } else if ((session.ended_at ?? 0) > (existing.ended_at ?? 0)) {
-        db.prepare('UPDATE sessions SET ended_at = ? WHERE id = ?')
-          .run(session.ended_at ?? null, session.id);
+        db.prepare(`
+          UPDATE sessions
+          SET ended_at = ?,
+              source = COALESCE(source, ?),
+              provider = COALESCE(provider, ?),
+              model = COALESCE(model, ?),
+              task_label = COALESCE(task_label, ?),
+              category = COALESCE(category, ?)
+          WHERE id = ?
+        `)
+          .run(
+            session.ended_at ?? null,
+            session.source ?? null,
+            session.provider ?? null,
+            session.model ?? null,
+            session.task_label ?? null,
+            session.category ?? null,
+            session.id,
+          );
         merged.sessions++;
       }
     }

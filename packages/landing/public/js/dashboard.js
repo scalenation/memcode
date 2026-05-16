@@ -17,7 +17,6 @@ let profileData = null; // { email, name, subscription }
 let historyData = [];
 let brainProjectData = [];
 let brainPayloadCache = new Map();
-let aiUsageCache = new Map();
 let currentBrainPayload = null;
 let currentBrainProject = null;
 let currentBrainFilter = 'all';
@@ -695,21 +694,6 @@ async function fetchBrainProject(projectId) {
   return body;
 }
 
-async function fetchAiUsage(projectId) {
-  const cacheKey = projectId || '__all__';
-  if (aiUsageCache.has(cacheKey)) {
-    return aiUsageCache.get(cacheKey);
-  }
-
-  const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
-  const res = await authFetch(`/v1/user/ai-usage${query}`);
-  const body = await res.json();
-  if (res.status === 402) throw new Error(proRequiredMessage());
-  if (!res.ok) throw new Error(body.error ?? 'Failed to load agent usage');
-  aiUsageCache.set(cacheKey, body);
-  return body;
-}
-
 function setProjectSelectValue(selectId, value) {
   const select = document.getElementById(selectId);
   if (select && value && Array.from(select.options).some(option => option.value === value)) {
@@ -884,44 +868,42 @@ function setBrainFilter(category) {
 function renderAnalyticsEmpty(message) {
   document.getElementById('agent-availability-cards').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">${esc(message)}</div></div>`;
   document.getElementById('agent-availability-note').innerHTML = '';
-  document.getElementById('agent-usage-summary').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No agent usage recorded yet.</div></div>`;
-  document.getElementById('agent-usage-by-category').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No categorized agent usage recorded yet.</div></div>`;
-  document.getElementById('agent-usage-recent').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No agent activity recorded yet.</div></div>';
-  document.getElementById('agent-usage-operations').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No operation usage recorded yet.</div></div>';
+  document.getElementById('agent-usage-summary').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No synced coding-agent usage recorded yet.</div></div>`;
+  document.getElementById('agent-usage-by-category').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No categorized coding-agent usage recorded yet.</div></div>`;
+  document.getElementById('agent-usage-recent').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No recent coding-agent sessions recorded yet.</div></div>';
+  document.getElementById('agent-usage-operations').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No model usage recorded yet.</div></div>';
   document.getElementById('analytics-category-cards').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">${esc(message)}</div></div>`;
   document.getElementById('analytics-recent-items').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No categorized memory available yet.</div></div>';
   document.getElementById('analytics-source-breakdown').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No source mix available yet.</div></div>';
 }
 
-function renderAgentUsage(aiUsage) {
-  const availability = aiUsage?.availability;
-  const availabilityLoaded = Boolean(availability);
+function renderAgentUsage(agentTelemetry) {
+  const summary = agentTelemetry?.summary ?? {};
+  const byAgent = agentTelemetry?.byAgent ?? [];
+  const byModel = agentTelemetry?.byModel ?? [];
+  const byCategory = agentTelemetry?.byCategory ?? [];
+  const recent = agentTelemetry?.recent ?? [];
+
   const availabilityCards = [
     {
-      label: 'Provider',
-      value: 'OpenRouter',
-      sub: aiUsage?.hasOpenRouterKey ? (availability?.label || aiUsage?.model || 'Configured') : 'No key configured',
+      label: 'Detected Agents',
+      value: String(byAgent.length),
+      sub: byAgent.length > 0 ? `${byAgent[0].agent}${byAgent.length > 1 ? ` +${byAgent.length - 1} more` : ''}` : 'No synced sessions yet',
     },
     {
-      label: 'Credits Remaining',
-      value: !aiUsage?.hasOpenRouterKey ? 'No key' : !availabilityLoaded ? 'Unavailable' : availability.limitRemaining == null ? 'Unlimited' : fmtCredits(availability.limitRemaining),
-      sub: !aiUsage?.hasOpenRouterKey
-        ? 'Add an OpenRouter key in Profile'
-        : !availabilityLoaded
-          ? 'Live balance lookup failed'
-          : availability.limit == null
-            ? 'No key limit set'
-            : `${fmtCredits(availability.limit)} key limit`,
+      label: 'Imported Sessions',
+      value: fmtInt(summary.sessionCount ?? 0),
+      sub: `${fmtInt(summary.messageCount ?? 0)} messages synced`,
     },
     {
-      label: 'Used Today',
-      value: availabilityLoaded ? fmtCredits(availability?.usageDaily ?? 0) : '—',
-      sub: availabilityLoaded ? `${fmtCredits(availability?.usageMonthly ?? 0)} this month` : 'Waiting for provider data',
+      label: 'Model Identified',
+      value: fmtInt(summary.knownModelSessions ?? 0),
+      sub: `${fmtInt(summary.unknownModelSessions ?? 0)} sessions missing model metadata`,
     },
     {
-      label: 'BYOK Usage',
-      value: availabilityLoaded ? fmtCredits(availability?.byokUsage ?? 0) : '—',
-      sub: availabilityLoaded ? (availability?.includeByokInLimit ? 'Counts toward key limit' : 'Tracked separately') : 'Provider usage unavailable',
+      label: 'Estimated Tokens',
+      value: fmtInt(summary.estimatedTokens ?? 0),
+      sub: `${fmtInt(summary.taskLabeledSessions ?? 0)} sessions labeled by task`,
     },
   ];
   document.getElementById('agent-availability-cards').innerHTML = availabilityCards.map((item) => `
@@ -931,20 +913,17 @@ function renderAgentUsage(aiUsage) {
       <div class="analytics-stat-sub">${esc(item.sub)}</div>
     </div>`).join('');
 
-  document.getElementById('agent-availability-note').innerHTML = aiUsage?.hasOpenRouterKey
-    ? [
-      `Model ${esc(aiUsage.model || 'Unknown')}`,
-      availabilityLoaded ? (availability?.isFreeTier ? 'Free-tier key' : 'Paid key') : 'Verify key to load live credits',
-      availabilityLoaded ? (availability?.limitReset ? `Reset ${esc(availability.limitReset)}` : 'No automatic reset') : 'OpenRouter /v1/key unavailable',
-    ].map((text) => `<span>${text}</span>`).join('')
-    : '<span>Add an OpenRouter key in Profile to see live credit availability.</span>';
+  document.getElementById('agent-availability-note').innerHTML = [
+    `${fmtInt(summary.knownProviderSessions ?? 0)} sessions with provider info`,
+    `${fmtInt(summary.taskLabeledSessions ?? 0)} sessions with task labels`,
+    byAgent.length > 0 ? `Top agent: ${esc(byAgent[0].agent)}` : 'Run a fresh sync after local transcript import to populate this view',
+  ].map((text) => `<span>${text}</span>`).join('');
 
-  const summary = aiUsage?.summary ?? {};
   const usageCards = [
-    ['Requests', String(summary.requestCount ?? 0), 'Brain asks and reports'],
-    ['Prompt Tokens', fmtInt(summary.promptTokens ?? 0), 'Input token volume'],
-    ['Completion Tokens', fmtInt(summary.completionTokens ?? 0), 'Output token volume'],
-    ['Total Tokens', fmtInt(summary.totalTokens ?? 0), 'All tracked agent usage'],
+    ['Messages', fmtInt(summary.messageCount ?? 0), 'Imported coding-agent messages'],
+    ['Estimated Tokens', fmtInt(summary.estimatedTokens ?? 0), 'Approximate token volume from imported chats'],
+    ['Known Models', fmtInt(summary.knownModelSessions ?? 0), 'Sessions with explicit model metadata'],
+    ['Labeled Tasks', fmtInt(summary.taskLabeledSessions ?? 0), 'Sessions grouped to a task prompt'],
   ];
   document.getElementById('agent-usage-summary').innerHTML = usageCards.map(([label, value, sub]) => `
     <div class="analytics-stat-card">
@@ -953,32 +932,32 @@ function renderAgentUsage(aiUsage) {
       <div class="analytics-stat-sub">${esc(sub)}</div>
     </div>`).join('');
 
-  document.getElementById('agent-usage-by-category').innerHTML = (aiUsage?.byCategory ?? []).map((entry) => `
+  document.getElementById('agent-usage-by-category').innerHTML = byCategory.map((entry) => `
     <div class="analytics-stat-card">
       <div class="analytics-stat-label">${esc(formatCategoryLabel(entry.category))}</div>
-      <div class="analytics-stat-value">${esc(fmtInt(entry.totalTokens))}</div>
-      <div class="analytics-stat-sub">${esc(`${entry.requestCount} request${entry.requestCount === 1 ? '' : 's'} · ${fmtInt(entry.promptTokens)} in · ${fmtInt(entry.completionTokens)} out`)}</div>
+      <div class="analytics-stat-value">${esc(fmtInt(entry.estimatedTokens))}</div>
+      <div class="analytics-stat-sub">${esc(`${entry.sessionCount} session${entry.sessionCount === 1 ? '' : 's'} · ${fmtInt(entry.messageCount)} messages`)}</div>
     </div>`).join('');
 
-  document.getElementById('agent-usage-recent').innerHTML = (aiUsage?.recent ?? []).length > 0
-    ? aiUsage.recent.map((entry) => renderBrainItem({
-      title: `${entry.operation === 'report' ? 'Report' : 'Ask'} · ${formatCategoryLabel(entry.category)}`,
-      meta: [entry.reportType, entry.model, entry.createdAt ? fmtDate(entry.createdAt) : null].filter(Boolean).join(' · '),
-      detail: `${fmtInt(entry.totalTokens)} tokens · ${fmtInt(entry.promptTokens)} in · ${fmtInt(entry.completionTokens)} out${entry.responseMs ? ` · ${entry.responseMs} ms` : ''}`,
+  document.getElementById('agent-usage-recent').innerHTML = recent.length > 0
+    ? recent.map((entry) => renderBrainItem({
+      title: entry.taskLabel || `${entry.agent} session`,
+      meta: [entry.agent, entry.model || 'Model unavailable', entry.lastMessageAt ? fmtDate(entry.lastMessageAt) : null].filter(Boolean).join(' · '),
+      detail: `${fmtInt(entry.estimatedTokens)} estimated tokens · ${fmtInt(entry.messageCount)} messages`,
       badges: [
         { label: formatCategoryLabel(entry.category), tone: entry.category },
-        { label: entry.operation },
+        { label: entry.provider || 'Provider unknown' },
       ],
     })).join('')
-    : '<div class="brain-item"><div class="brain-item-detail">No agent activity recorded yet.</div></div>';
+    : '<div class="brain-item"><div class="brain-item-detail">No recent coding-agent sessions recorded yet.</div></div>';
 
-  document.getElementById('agent-usage-operations').innerHTML = (aiUsage?.byOperation ?? []).length > 0
-    ? aiUsage.byOperation.map((entry) => renderBrainItem({
-      title: entry.operation === 'report' ? 'Reports' : 'Asks',
-      meta: `${entry.requestCount} request${entry.requestCount === 1 ? '' : 's'}`,
-      detail: `${fmtInt(entry.totalTokens)} total tokens`,
+  document.getElementById('agent-usage-operations').innerHTML = byModel.length > 0
+    ? byModel.map((entry) => renderBrainItem({
+      title: entry.model || 'Model unavailable',
+      meta: [entry.provider || 'Provider unknown', `${entry.sessionCount} session${entry.sessionCount === 1 ? '' : 's'}`].join(' · '),
+      detail: `${fmtInt(entry.estimatedTokens)} estimated tokens · ${fmtInt(entry.messageCount)} messages`,
     })).join('')
-    : '<div class="brain-item"><div class="brain-item-detail">No operation usage recorded yet.</div></div>';
+    : '<div class="brain-item"><div class="brain-item-detail">No model usage recorded yet.</div></div>';
 }
 
 function renderAnalytics(payload, project) {
@@ -1049,17 +1028,14 @@ async function loadAnalytics() {
     }
 
     const projectId = document.getElementById('analytics-workspace').value || projects[0].projectId;
-    const [payload, aiUsage] = await Promise.all([
-      fetchBrainProject(projectId),
-      fetchAiUsage(projectId),
-    ]);
+    const payload = await fetchBrainProject(projectId);
     if (!payload) {
       renderAnalyticsEmpty('This project has no compact brain yet. Run a fresh sync from the CLI.');
       return;
     }
 
     setProjectSelectValue('brain-workspace', projectId);
-    renderAgentUsage(aiUsage);
+    renderAgentUsage(payload.brain?.agentTelemetry ?? null);
     renderAnalytics(payload, projects.find(project => project.projectId === projectId) ?? null);
   } catch (err) {
     renderAnalyticsEmpty(err.message ?? 'Failed to load analytics.');

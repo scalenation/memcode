@@ -29,6 +29,60 @@ export interface ProjectBrainTask {
   updatedAt: number;
 }
 
+export interface ProjectBrainAgentSummary {
+  sessionCount: number;
+  messageCount: number;
+  estimatedTokens: number;
+  knownModelSessions: number;
+  unknownModelSessions: number;
+  knownProviderSessions: number;
+  taskLabeledSessions: number;
+}
+
+export interface ProjectBrainAgentCategoryUsage {
+  category: 'decision' | 'bugfix' | 'feature' | 'discovery';
+  sessionCount: number;
+  messageCount: number;
+  estimatedTokens: number;
+}
+
+export interface ProjectBrainAgentUsageByAgent {
+  agent: string;
+  sessionCount: number;
+  messageCount: number;
+  estimatedTokens: number;
+}
+
+export interface ProjectBrainAgentUsageByModel {
+  model: string | null;
+  provider: string | null;
+  sessionCount: number;
+  messageCount: number;
+  estimatedTokens: number;
+}
+
+export interface ProjectBrainRecentAgentSession {
+  id: string;
+  agent: string;
+  source: string | null;
+  provider: string | null;
+  model: string | null;
+  taskLabel: string | null;
+  category: 'decision' | 'bugfix' | 'feature' | 'discovery';
+  messageCount: number;
+  estimatedTokens: number;
+  startedAt: number;
+  lastMessageAt: number;
+}
+
+export interface ProjectBrainAgentTelemetry {
+  summary: ProjectBrainAgentSummary;
+  byCategory: ProjectBrainAgentCategoryUsage[];
+  byAgent: ProjectBrainAgentUsageByAgent[];
+  byModel: ProjectBrainAgentUsageByModel[];
+  recent: ProjectBrainRecentAgentSession[];
+}
+
 export interface ProjectBrain {
   workspaceId: string;
   generatedAt: number;
@@ -36,6 +90,7 @@ export interface ProjectBrain {
   milestones: ProjectBrainMilestone[];
   decisions: ProjectBrainDecision[];
   tasks: ProjectBrainTask[];
+  agentTelemetry: ProjectBrainAgentTelemetry;
   stats: {
     checkpointCount: number;
     decisionCount: number;

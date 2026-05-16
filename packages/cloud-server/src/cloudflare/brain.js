@@ -478,6 +478,7 @@ function compactBrain(brain) {
     milestones,
     decisions,
     tasks,
+    agentTelemetry: compactAgentTelemetry(brain.agentTelemetry),
     stats: {
       checkpointCount: brain.stats.checkpointCount,
       decisionCount: brain.stats.decisionCount,
@@ -507,6 +508,7 @@ function mergeBrains(targetWorkspaceId, brains) {
     milestones: brains.flatMap((brain) => brain.milestones),
     decisions: brains.flatMap((brain) => brain.decisions),
     tasks: brains.flatMap((brain) => brain.tasks),
+    agentTelemetry: mergeAgentTelemetry(brains.map((brain) => brain.agentTelemetry)),
     stats: {
       checkpointCount: brains.reduce((sum, brain) => sum + (brain.stats.checkpointCount || 0), 0),
       decisionCount: brains.reduce((sum, brain) => sum + (brain.stats.decisionCount || 0), 0),
@@ -516,6 +518,101 @@ function mergeBrains(targetWorkspaceId, brains) {
     },
   });
   return { ...merged, workspaceId: targetWorkspaceId };
+}
+
+function compactAgentTelemetry(agentTelemetry) {
+  const empty = emptyAgentTelemetry();
+  if (!agentTelemetry) return empty;
+
+  const recent = [...(agentTelemetry.recent ?? [])]
+    .map((entry) => ({
+      ...entry,
+      agent: compactText(entry.agent, entry.agent, 120),
+      taskLabel: entry.taskLabel ? compactText(entry.taskLabel, entry.agent, 140) : entry.taskLabel,
+    }))
+    .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+    .slice(0, 12);
+
+  return {
+    summary: {
+      sessionCount: Number(agentTelemetry.summary?.sessionCount ?? recent.length),
+      messageCount: Number(agentTelemetry.summary?.messageCount ?? recent.reduce((sum, entry) => sum + Number(entry.messageCount ?? 0), 0)),
+      estimatedTokens: Number(agentTelemetry.summary?.estimatedTokens ?? recent.reduce((sum, entry) => sum + Number(entry.estimatedTokens ?? 0), 0)),
+      knownModelSessions: Number(agentTelemetry.summary?.knownModelSessions ?? recent.filter((entry) => entry.model).length),
+      unknownModelSessions: Number(agentTelemetry.summary?.unknownModelSessions ?? recent.filter((entry) => !entry.model).length),
+      knownProviderSessions: Number(agentTelemetry.summary?.knownProviderSessions ?? recent.filter((entry) => entry.provider).length),
+      taskLabeledSessions: Number(agentTelemetry.summary?.taskLabeledSessions ?? recent.filter((entry) => entry.taskLabel).length),
+    },
+    byCategory: normalizeAgentBuckets(agentTelemetry.byCategory, ['category']),
+    byAgent: normalizeAgentBuckets(agentTelemetry.byAgent, ['agent']),
+    byModel: normalizeAgentBuckets(agentTelemetry.byModel, ['model', 'provider']),
+    recent,
+  };
+}
+
+function mergeAgentTelemetry(telemetries) {
+  const compacted = telemetries.map((telemetry) => compactAgentTelemetry(telemetry));
+  const recent = compacted
+    .flatMap((telemetry) => telemetry.recent)
+    .sort((a, b) => (b.lastMessageAt || 0) - (a.lastMessageAt || 0))
+    .slice(0, 12);
+
+  return {
+    summary: compacted.reduce((summary, telemetry) => ({
+      sessionCount: summary.sessionCount + Number(telemetry.summary?.sessionCount ?? 0),
+      messageCount: summary.messageCount + Number(telemetry.summary?.messageCount ?? 0),
+      estimatedTokens: summary.estimatedTokens + Number(telemetry.summary?.estimatedTokens ?? 0),
+      knownModelSessions: summary.knownModelSessions + Number(telemetry.summary?.knownModelSessions ?? 0),
+      unknownModelSessions: summary.unknownModelSessions + Number(telemetry.summary?.unknownModelSessions ?? 0),
+      knownProviderSessions: summary.knownProviderSessions + Number(telemetry.summary?.knownProviderSessions ?? 0),
+      taskLabeledSessions: summary.taskLabeledSessions + Number(telemetry.summary?.taskLabeledSessions ?? 0),
+    }), emptyAgentTelemetry().summary),
+    byCategory: mergeAgentBuckets(compacted.flatMap((telemetry) => telemetry.byCategory ?? []), (entry) => entry.category ?? 'discovery'),
+    byAgent: mergeAgentBuckets(compacted.flatMap((telemetry) => telemetry.byAgent ?? []), (entry) => entry.agent ?? 'Unknown agent'),
+    byModel: mergeAgentBuckets(compacted.flatMap((telemetry) => telemetry.byModel ?? []), (entry) => `${entry.provider ?? ''}|${entry.model ?? ''}`),
+    recent,
+  };
+}
+
+function emptyAgentTelemetry() {
+  return {
+    summary: {
+      sessionCount: 0,
+      messageCount: 0,
+      estimatedTokens: 0,
+      knownModelSessions: 0,
+      unknownModelSessions: 0,
+      knownProviderSessions: 0,
+      taskLabeledSessions: 0,
+    },
+    byCategory: [],
+    byAgent: [],
+    byModel: [],
+    recent: [],
+  };
+}
+
+function normalizeAgentBuckets(entries, labels) {
+  return [...(entries ?? [])]
+    .map((entry) => ({ ...entry }))
+    .filter((entry) => labels.some((label) => entry[label]))
+    .sort((a, b) => Number(b.estimatedTokens ?? 0) - Number(a.estimatedTokens ?? 0))
+    .slice(0, 8);
+}
+
+function mergeAgentBuckets(entries, keyFn) {
+  const buckets = new Map();
+  for (const entry of entries) {
+    const key = keyFn(entry);
+    const existing = buckets.get(key) ?? { ...entry, sessionCount: 0, messageCount: 0, estimatedTokens: 0 };
+    existing.sessionCount += Number(entry.sessionCount ?? 0);
+    existing.messageCount += Number(entry.messageCount ?? 0);
+    existing.estimatedTokens += Number(entry.estimatedTokens ?? 0);
+    buckets.set(key, existing);
+  }
+  return [...buckets.values()]
+    .sort((a, b) => Number(b.estimatedTokens ?? 0) - Number(a.estimatedTokens ?? 0))
+    .slice(0, 8);
 }
 
 function compactMeta(meta, brain) {

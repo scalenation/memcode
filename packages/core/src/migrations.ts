@@ -103,4 +103,14 @@ CREATE INDEX IF NOT EXISTS idx_messages_session
   ON messages(session_id, created_at);
     `,
   },
+  {
+    name: '002_session_telemetry',
+    sql: `
+ALTER TABLE sessions ADD COLUMN source TEXT;
+ALTER TABLE sessions ADD COLUMN provider TEXT;
+ALTER TABLE sessions ADD COLUMN model TEXT;
+ALTER TABLE sessions ADD COLUMN task_label TEXT;
+ALTER TABLE sessions ADD COLUMN category TEXT;
+    `,
+  },
 ];

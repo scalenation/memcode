@@ -10,6 +10,11 @@ export interface Session {
   workspace_id: string;
   editor?: string;
   agent?: string;
+  source?: string;
+  provider?: string;
+  model?: string;
+  task_label?: string;
+  category?: 'decision' | 'bugfix' | 'feature' | 'discovery';
   started_at: number;
   ended_at?: number;
 }
