@@ -83,6 +83,27 @@ interface DashboardSummary {
   runtime: ServiceRuntime;
 }
 
+interface ActivityBucket {
+  day: string;
+  tasks: number;
+  decisions: number;
+  checkpoints: number;
+  total: number;
+}
+
+interface ActivitySummary {
+  days: number;
+  from: number;
+  to: number;
+  totals: {
+    tasks: number;
+    decisions: number;
+    checkpoints: number;
+    total: number;
+  };
+  buckets: ActivityBucket[];
+}
+
 export const serviceCommand = new Command('service')
   .description('Run the always-on local MemCode worker for assistant refresh and local search');
 
@@ -165,6 +186,12 @@ function parseLimit(url: URL, fallback: number, max: number): number {
 function parseQuery(url: URL): string | null {
   const query = (url.searchParams.get('q') ?? '').trim();
   return query.length > 0 ? query : null;
+}
+
+function parseDays(url: URL, fallback: number, max: number): number {
+  const raw = Number.parseInt(url.searchParams.get('days') ?? '', 10);
+  if (!Number.isFinite(raw) || raw <= 0) return fallback;
+  return Math.min(raw, max);
 }
 
 function likeQuery(query: string | null): string | null {
@@ -252,7 +279,102 @@ function getDashboardSummary(
   };
 }
 
+function getActivitySummary(
+  db: ReturnType<typeof openDb>,
+  workspaceId: string,
+  days: number,
+): ActivitySummary {
+  const now = Date.now();
+  const from = now - (days - 1) * 24 * 60 * 60 * 1000;
+
+  const mergeRows = (
+    rows: Array<{ day: string; total: number }>,
+    field: 'tasks' | 'decisions' | 'checkpoints',
+    buckets: Map<string, ActivityBucket>,
+  ) => {
+    for (const row of rows) {
+      const existing = buckets.get(row.day) ?? {
+        day: row.day,
+        tasks: 0,
+        decisions: 0,
+        checkpoints: 0,
+        total: 0,
+      };
+      existing[field] = Number(row.total);
+      existing.total = existing.tasks + existing.decisions + existing.checkpoints;
+      buckets.set(row.day, existing);
+    }
+  };
+
+  const taskRows = db.prepare(
+    `SELECT date(created_at / 1000, 'unixepoch') AS day, COUNT(*) AS total
+     FROM tasks
+     WHERE workspace_id = ? AND created_at >= ?
+     GROUP BY day
+     ORDER BY day DESC`,
+  ).all(workspaceId, from) as Array<{ day: string; total: number }>;
+
+  const decisionRows = db.prepare(
+    `SELECT date(created_at / 1000, 'unixepoch') AS day, COUNT(*) AS total
+     FROM decisions
+     WHERE workspace_id = ? AND created_at >= ?
+     GROUP BY day
+     ORDER BY day DESC`,
+  ).all(workspaceId, from) as Array<{ day: string; total: number }>;
+
+  const checkpointRows = db.prepare(
+    `SELECT date(created_at / 1000, 'unixepoch') AS day, COUNT(*) AS total
+     FROM checkpoints
+     WHERE workspace_id = ? AND created_at >= ?
+     GROUP BY day
+     ORDER BY day DESC`,
+  ).all(workspaceId, from) as Array<{ day: string; total: number }>;
+
+  const buckets = new Map<string, ActivityBucket>();
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const bucketDate = new Date(now - offset * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    buckets.set(bucketDate, {
+      day: bucketDate,
+      tasks: 0,
+      decisions: 0,
+      checkpoints: 0,
+      total: 0,
+    });
+  }
+
+  mergeRows(taskRows, 'tasks', buckets);
+  mergeRows(decisionRows, 'decisions', buckets);
+  mergeRows(checkpointRows, 'checkpoints', buckets);
+
+  const bucketList = Array.from(buckets.values()).sort((left, right) =>
+    right.day.localeCompare(left.day),
+  );
+
+  const totals = bucketList.reduce(
+    (acc, bucket) => {
+      acc.tasks += bucket.tasks;
+      acc.decisions += bucket.decisions;
+      acc.checkpoints += bucket.checkpoints;
+      acc.total += bucket.total;
+      return acc;
+    },
+    { tasks: 0, decisions: 0, checkpoints: 0, total: 0 },
+  );
+
+  return {
+    days,
+    from,
+    to: now,
+    totals,
+    buckets: bucketList,
+  };
+}
+
 function renderViewerHtml(port: number, projectPath: string): string {
+  const filterStorageKey = JSON.stringify(`memcode.dashboard.filters:${projectPath}`);
+  const currentFilterStorageKey = JSON.stringify(`memcode.dashboard.current:${projectPath}`);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -278,9 +400,12 @@ function renderViewerHtml(port: number, projectPath: string): string {
     .card h2 { margin: 0 0 6px; font-size: 1rem; }
     .card p { margin: 0 0 14px; color: #94a3b8; }
     .toolbar { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; margin-bottom: 12px; }
+    .filter-grid { display: grid; gap: 10px; grid-template-columns: 2fr 1fr 1fr 1fr; margin-bottom: 12px; }
+    .filter-actions { display: grid; gap: 10px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
     input, button, select { font: inherit; }
     input, select { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; }
     button { padding: 10px 14px; border: 0; border-radius: 10px; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: white; cursor: pointer; }
+    button.secondary { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
     pre { white-space: pre-wrap; word-break: break-word; background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 14px; min-height: 120px; overflow: auto; }
     .list { display: grid; gap: 10px; }
     .item { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 12px 14px; }
@@ -293,9 +418,13 @@ function renderViewerHtml(port: number, projectPath: string): string {
     .pill.done { background: rgba(16, 185, 129, 0.18); color: #86efac; }
     .pill.cancelled, .pill.rejected { background: rgba(239, 68, 68, 0.16); color: #fca5a5; }
     .split { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+    .mini-stats { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; }
+    .mini-stat { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 10px 12px; }
+    .mini-stat strong { display: block; font-size: 1.1rem; margin-top: 4px; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     @media (max-width: 900px) { .stats, .split { grid-template-columns: 1fr 1fr; } }
-    @media (max-width: 640px) { .stats, .split, .toolbar { grid-template-columns: 1fr; } }
+    @media (max-width: 900px) { .filter-grid, .filter-actions, .mini-stats { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 640px) { .stats, .split, .toolbar, .filter-grid, .filter-actions, .mini-stats { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -315,10 +444,45 @@ function renderViewerHtml(port: number, projectPath: string): string {
     <div class="grid">
       <div class="stack">
         <div class="card">
+          <h2>Saved Dashboard Filters</h2>
+          <p>Keep local dashboard views sticky per project and save presets in the browser for common workflows.</p>
+          <div class="filter-grid">
+            <input id="filter-query" placeholder="Search tasks, decisions, checkpoints..." />
+            <select id="filter-task-status">
+              <option value="open">Open tasks</option>
+              <option value="in-progress">In-progress tasks</option>
+              <option value="done">Done tasks</option>
+              <option value="cancelled">Cancelled tasks</option>
+              <option value="all">All tasks</option>
+            </select>
+            <select id="filter-decision-status">
+              <option value="active">Active decisions</option>
+              <option value="superseded">Superseded decisions</option>
+              <option value="rejected">Rejected decisions</option>
+              <option value="all">All decisions</option>
+            </select>
+            <select id="filter-activity-days">
+              <option value="7">Last 7 days</option>
+              <option value="14">Last 14 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+            </select>
+          </div>
+          <div class="filter-actions">
+            <button id="apply-filters">Apply filters</button>
+            <button id="save-filter" class="secondary">Save current</button>
+            <select id="saved-filters">
+              <option value="">Saved filters</option>
+            </select>
+            <button id="apply-saved-filter" class="secondary">Use saved</button>
+            <button id="delete-saved-filter" class="secondary">Delete saved</button>
+          </div>
+        </div>
+        <div class="card">
           <h2>Recall Search</h2>
-          <p>Search the local store across tasks, checkpoints, and decisions.</p>
+          <p>Search the local store with the current dashboard query.</p>
           <div class="toolbar">
-            <input id="query" placeholder="Search memory, decisions, checkpoints, tasks..." />
+            <input id="search-query-preview" placeholder="Search query comes from the filter bar above" disabled />
             <select id="search-limit">
               <option value="8">8 results</option>
               <option value="12">12 results</option>
@@ -365,6 +529,17 @@ function renderViewerHtml(port: number, projectPath: string): string {
           <div class="list" id="timeline"><div class="item muted">Loading...</div></div>
         </div>
         <div class="card">
+          <h2>Activity View</h2>
+          <p>Simple local activity views over tasks, decisions, and checkpoints for the selected time window.</p>
+          <div class="mini-stats" id="activity-totals">
+            <div class="mini-stat"><span class="muted">Total</span><strong id="activity-total-all">-</strong></div>
+            <div class="mini-stat"><span class="muted">Tasks</span><strong id="activity-total-tasks">-</strong></div>
+            <div class="mini-stat"><span class="muted">Decisions</span><strong id="activity-total-decisions">-</strong></div>
+            <div class="mini-stat"><span class="muted">Checkpoints</span><strong id="activity-total-checkpoints">-</strong></div>
+          </div>
+          <div class="list" id="activity"><div class="item muted">Loading...</div></div>
+        </div>
+        <div class="card">
           <h2>Health</h2>
           <p>Local worker runtime status and refresh details.</p>
           <pre id="health">Loading...</pre>
@@ -373,8 +548,24 @@ function renderViewerHtml(port: number, projectPath: string): string {
     </div>
   </div>
   <script>
+    const FILTER_STORAGE_KEY = ${filterStorageKey};
+    const CURRENT_FILTER_STORAGE_KEY = ${currentFilterStorageKey};
+    const DEFAULT_FILTERS = {
+      query: '',
+      taskStatus: 'open',
+      decisionStatus: 'active',
+      activityDays: '14',
+    };
+    let currentFilters = { ...DEFAULT_FILTERS };
+
     function formatDate(value) {
       return new Date(value).toLocaleString();
+    }
+    function formatDay(value) {
+      return new Date(value + 'T00:00:00Z').toLocaleDateString(undefined, {
+        month: 'short',
+        day: 'numeric',
+      });
     }
     function escapeHtml(value) {
       return String(value)
@@ -382,6 +573,64 @@ function renderViewerHtml(port: number, projectPath: string): string {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+    }
+    function normalizeFilters(filters) {
+      return {
+        query: typeof filters?.query === 'string' ? filters.query : DEFAULT_FILTERS.query,
+        taskStatus: typeof filters?.taskStatus === 'string' ? filters.taskStatus : DEFAULT_FILTERS.taskStatus,
+        decisionStatus: typeof filters?.decisionStatus === 'string' ? filters.decisionStatus : DEFAULT_FILTERS.decisionStatus,
+        activityDays: typeof filters?.activityDays === 'string' ? filters.activityDays : DEFAULT_FILTERS.activityDays,
+      };
+    }
+    function readSavedFilters() {
+      try {
+        const raw = localStorage.getItem(FILTER_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    function writeSavedFilters(filters) {
+      localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify(filters));
+    }
+    function loadCurrentFilters() {
+      try {
+        const raw = localStorage.getItem(CURRENT_FILTER_STORAGE_KEY);
+        return normalizeFilters(raw ? JSON.parse(raw) : DEFAULT_FILTERS);
+      } catch {
+        return { ...DEFAULT_FILTERS };
+      }
+    }
+    function persistCurrentFilters(filters) {
+      localStorage.setItem(CURRENT_FILTER_STORAGE_KEY, JSON.stringify(filters));
+    }
+    function writeFilterInputs(filters) {
+      document.getElementById('filter-query').value = filters.query;
+      document.getElementById('filter-task-status').value = filters.taskStatus;
+      document.getElementById('filter-decision-status').value = filters.decisionStatus;
+      document.getElementById('filter-activity-days').value = filters.activityDays;
+      document.getElementById('search-query-preview').value = filters.query || 'No active search query';
+    }
+    function readFilterInputs() {
+      return normalizeFilters({
+        query: document.getElementById('filter-query').value.trim(),
+        taskStatus: document.getElementById('filter-task-status').value,
+        decisionStatus: document.getElementById('filter-decision-status').value,
+        activityDays: document.getElementById('filter-activity-days').value,
+      });
+    }
+    function refreshSavedFilterOptions(selectedName) {
+      const select = document.getElementById('saved-filters');
+      const filters = readSavedFilters();
+      select.innerHTML = '<option value="">Saved filters</option>';
+      for (const entry of filters) {
+        const option = document.createElement('option');
+        option.value = entry.name;
+        option.textContent = entry.name;
+        if (selectedName && selectedName === entry.name) option.selected = true;
+        select.appendChild(option);
+      }
     }
     function renderList(targetId, items, renderItem, emptyText) {
       const node = document.getElementById(targetId);
@@ -421,29 +670,32 @@ function renderViewerHtml(port: number, projectPath: string): string {
       'No timeline entries yet.');
     }
     async function loadTasks() {
-      const data = await fetch('/api/tasks?status=open&limit=8').then(r => r.json());
+      const query = currentFilters.query ? '&q=' + encodeURIComponent(currentFilters.query) : '';
+      const data = await fetch('/api/tasks?status=' + encodeURIComponent(currentFilters.taskStatus) + '&limit=8' + query).then(r => r.json());
       renderList('tasks', data.tasks, (item) =>
         '<div class="item-title"><strong>' + escapeHtml(item.title) + '</strong><span class="pill ' + escapeHtml(item.status) + '">' + escapeHtml(item.status) + (item.priority ? ' · ' + escapeHtml(item.priority) : '') + '</span></div>' +
         '<div class="meta">Updated ' + formatDate(item.updated_at) + '</div>' +
         (item.description ? '<div>' + escapeHtml(item.description) + '</div>' : ''),
-      'No open tasks yet.');
+      'No matching tasks found.');
     }
     async function loadDecisions() {
-      const data = await fetch('/api/decisions?status=active&limit=8').then(r => r.json());
+      const query = currentFilters.query ? '&q=' + encodeURIComponent(currentFilters.query) : '';
+      const data = await fetch('/api/decisions?status=' + encodeURIComponent(currentFilters.decisionStatus) + '&limit=8' + query).then(r => r.json());
       renderList('decisions', data.decisions, (item) =>
         '<div class="item-title"><strong>' + escapeHtml(item.title) + '</strong><span class="pill ' + escapeHtml(item.status) + '">' + escapeHtml(item.status) + '</span></div>' +
         '<div class="meta">Updated ' + formatDate(item.updated_at) + '</div>' +
         '<div>' + escapeHtml(item.rationale) + '</div>' +
         (item.impact ? '<div class="muted">Impact: ' + escapeHtml(item.impact) + '</div>' : ''),
-      'No active decisions yet.');
+      'No matching decisions found.');
     }
     async function loadCheckpoints() {
-      const data = await fetch('/api/checkpoints?limit=8').then(r => r.json());
+      const query = currentFilters.query ? '&q=' + encodeURIComponent(currentFilters.query) : '';
+      const data = await fetch('/api/checkpoints?limit=8' + query).then(r => r.json());
       renderList('checkpoints', data.checkpoints, (item) =>
         '<div class="item-title"><strong>' + escapeHtml(item.summary_short) + '</strong><span class="pill">' + escapeHtml(item.trigger) + '</span></div>' +
         '<div class="meta">' + formatDate(item.created_at) + (item.branch ? ' · ' + escapeHtml(item.branch) : '') + (item.git_sha ? ' @' + escapeHtml(String(item.git_sha).slice(0, 8)) : '') + '</div>' +
         (item.summary_long ? '<div>' + escapeHtml(item.summary_long) + '</div>' : ''),
-      'No checkpoints yet.');
+      'No matching checkpoints found.');
     }
     async function loadSessions() {
       const data = await fetch('/api/recent-sessions?limit=6').then(r => r.json());
@@ -452,8 +704,19 @@ function renderViewerHtml(port: number, projectPath: string): string {
         '<div class="meta">' + formatDate(item.last_message_at || item.started_at) + '</div>',
       'No imported sessions yet.');
     }
+    async function loadActivity() {
+      const data = await fetch('/api/activity?days=' + encodeURIComponent(currentFilters.activityDays)).then(r => r.json());
+      document.getElementById('activity-total-all').textContent = data.totals.total || 0;
+      document.getElementById('activity-total-tasks').textContent = data.totals.tasks || 0;
+      document.getElementById('activity-total-decisions').textContent = data.totals.decisions || 0;
+      document.getElementById('activity-total-checkpoints').textContent = data.totals.checkpoints || 0;
+      renderList('activity', data.buckets.filter((item) => item.total > 0), (item) =>
+        '<div class="item-title"><strong>' + escapeHtml(formatDay(item.day)) + '</strong><span class="pill">' + escapeHtml(String(item.total)) + ' events</span></div>' +
+        '<div class="meta">Tasks ' + escapeHtml(String(item.tasks)) + ' · Decisions ' + escapeHtml(String(item.decisions)) + ' · Checkpoints ' + escapeHtml(String(item.checkpoints)) + '</div>',
+      'No project activity in this window.');
+    }
     async function runSearch() {
-      const query = document.getElementById('query').value.trim();
+      const query = currentFilters.query.trim();
       if (!query) return;
       const limit = document.getElementById('search-limit').value;
       const data = await fetch('/api/recall?q=' + encodeURIComponent(query) + '&limit=' + encodeURIComponent(limit)).then(r => r.json());
@@ -463,18 +726,59 @@ function renderViewerHtml(port: number, projectPath: string): string {
         (item.score ? '<div class="meta">Score: ' + escapeHtml(item.score) + '</div>' : ''),
       'No matching local memory found.');
     }
+    async function applyFilters() {
+      currentFilters = readFilterInputs();
+      persistCurrentFilters(currentFilters);
+      writeFilterInputs(currentFilters);
+      await Promise.all([loadTasks(), loadDecisions(), loadCheckpoints(), loadActivity()]);
+      if (currentFilters.query) {
+        await runSearch();
+      } else {
+        renderList('results', [], () => '', 'Run a search to inspect local memory.');
+      }
+    }
+    function saveCurrentFilter() {
+      const name = window.prompt('Save current dashboard filters as:');
+      if (!name) return;
+      const savedFilters = readSavedFilters().filter((entry) => entry.name !== name);
+      savedFilters.push({ name, filters: currentFilters });
+      savedFilters.sort((left, right) => left.name.localeCompare(right.name));
+      writeSavedFilters(savedFilters);
+      refreshSavedFilterOptions(name);
+    }
+    async function applySavedFilter() {
+      const selectedName = document.getElementById('saved-filters').value;
+      if (!selectedName) return;
+      const savedFilter = readSavedFilters().find((entry) => entry.name === selectedName);
+      if (!savedFilter) return;
+      currentFilters = normalizeFilters(savedFilter.filters);
+      writeFilterInputs(currentFilters);
+      await applyFilters();
+    }
+    function deleteSavedFilter() {
+      const selectedName = document.getElementById('saved-filters').value;
+      if (!selectedName) return;
+      const remaining = readSavedFilters().filter((entry) => entry.name !== selectedName);
+      writeSavedFilters(remaining);
+      refreshSavedFilterOptions();
+    }
     document.getElementById('search').addEventListener('click', runSearch);
-    document.getElementById('query').addEventListener('keydown', (event) => {
+    document.getElementById('apply-filters').addEventListener('click', () => { void applyFilters(); });
+    document.getElementById('save-filter').addEventListener('click', saveCurrentFilter);
+    document.getElementById('apply-saved-filter').addEventListener('click', () => { void applySavedFilter(); });
+    document.getElementById('delete-saved-filter').addEventListener('click', deleteSavedFilter);
+    document.getElementById('filter-query').addEventListener('keydown', (event) => {
       if (event.key === 'Enter') runSearch();
     });
+    currentFilters = loadCurrentFilters();
+    writeFilterInputs(currentFilters);
+    refreshSavedFilterOptions();
     loadDashboard();
     loadHealth();
     loadContext();
     loadTimeline();
-    loadTasks();
-    loadDecisions();
-    loadCheckpoints();
     loadSessions();
+    void applyFilters();
   </script>
 </body>
 </html>`;
@@ -550,6 +854,12 @@ async function handleRequest(
       json(res, 200, {
         entries: getTimeline(db, workspace.id, limit),
       });
+      return;
+    }
+
+    if (method === 'GET' && url.pathname === '/api/activity') {
+      const days = parseDays(url, 14, 180);
+      json(res, 200, getActivitySummary(db, workspace.id, days));
       return;
     }
 
