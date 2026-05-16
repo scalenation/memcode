@@ -4,6 +4,8 @@ import {
   completeWithOpenRouter,
 } from './openrouter.js';
 
+const BRAIN_CATEGORIES = ['decision', 'bugfix', 'feature', 'discovery'];
+
 export async function listProjectGroups(db, userId) {
   const workspaces = await listUserWorkspaces(db, userId);
   if (workspaces.length === 0) return [];
@@ -74,11 +76,12 @@ export async function latestBrainRow(db, userId, workspaceId) {
     [userId, workspaceId],
   );
   if (!row) return null;
+  const brain = decorateBrain(parseJson(row.brain));
   return {
     workspaceId,
     cursor: row.cursor,
     updatedAt: toIsoString(row.created_at),
-    brain: parseJson(row.brain),
+    brain,
     meta: normalizeMeta(parseJson(row.meta)),
   };
 }
@@ -205,16 +208,17 @@ async function listUserWorkspaces(db, userId) {
 
 function aggregateBrainRows(projectId, projectName, rows) {
   if (rows.length === 1) {
+    const brain = decorateBrain({
+      ...rows[0].brain,
+      workspaceId: projectName,
+    });
     return {
       ...rows[0],
-      brain: {
-        ...rows[0].brain,
-        workspaceId: projectName,
-      },
+      brain,
     };
   }
   const sorted = [...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  const mergedBrain = compactBrain(mergeBrains(projectName || projectId, sorted.map((row) => row.brain)));
+  const mergedBrain = decorateBrain(mergeBrains(projectName || projectId, sorted.map((row) => row.brain)));
   return {
     workspaceId: projectId,
     cursor: sorted[0].cursor,
@@ -226,16 +230,19 @@ function aggregateBrainRows(projectId, projectName, rows) {
 
 function answerFromBrain(brain, question) {
   const terms = tokenize(question);
-  const evidence = [
-    ...brain.milestones.map((item) => ({ kind: 'milestone', title: item.title, snippet: item.detail ?? item.title })),
-    ...brain.decisions.map((item) => ({ kind: 'decision', title: item.title, snippet: item.rationale })),
-    ...brain.tasks.map((item) => ({ kind: 'task', title: item.title, snippet: item.description ?? item.title })),
-  ]
-    .map((item) => ({ ...item, score: scoreText(`${item.title} ${item.snippet}`, terms) }))
+  const evidence = buildBrainSearchIndex(brain)
+    .map((item) => ({
+      kind: item.kind,
+      category: item.category,
+      title: item.title,
+      snippet: item.detail ?? item.title,
+      score: scoreText(buildBrainSearchText(item), terms),
+      sortAt: item.sortAt,
+    }))
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.score - a.score || b.sortAt - a.sortAt)
     .slice(0, 6)
-    .map(({ kind, title, snippet }) => ({ kind, title, snippet }));
+    .map(({ kind, category, title, snippet }) => ({ kind, category, title, snippet }));
 
   const answerParts = [brain.summary];
   if (evidence.length > 0) {
@@ -346,6 +353,17 @@ function compactBrain(brain) {
   };
 }
 
+function decorateBrain(brain) {
+  const compacted = compactBrain(brain);
+  const searchIndex = buildBrainSearchIndex(compacted);
+  return {
+    ...compacted,
+    categories: [...BRAIN_CATEGORIES],
+    searchIndex,
+    analytics: buildBrainAnalytics(searchIndex),
+  };
+}
+
 function mergeBrains(targetWorkspaceId, brains) {
   const merged = compactBrain({
     workspaceId: targetWorkspaceId,
@@ -401,6 +419,110 @@ function buildSummary(milestones, decisions, openTasks) {
   if (decisions.length > 0) parts.push(`Recent decisions: ${decisions.slice(0, 3).map((item) => item.title).join('; ')}.`);
   if (openTasks.length > 0) parts.push(`Current focus: ${openTasks.slice(0, 4).map((item) => item.title).join('; ')}.`);
   return parts.join(' ');
+}
+
+function buildBrainSearchIndex(brain) {
+  const milestones = (brain.milestones ?? []).map((item) => ({
+    id: item.id,
+    kind: 'milestone',
+    category: categorizeBrainItem('milestone', item),
+    title: item.title,
+    detail: item.detail ?? null,
+    status: null,
+    priority: null,
+    branch: item.branch ?? null,
+    trigger: item.trigger ?? null,
+    sortAt: item.createdAt ?? 0,
+  }));
+
+  const decisions = (brain.decisions ?? []).map((item) => ({
+    id: item.id,
+    kind: 'decision',
+    category: 'decision',
+    title: item.title,
+    detail: item.rationale ?? item.impact ?? null,
+    status: item.status ?? null,
+    priority: null,
+    branch: null,
+    trigger: null,
+    sortAt: item.updatedAt ?? 0,
+  }));
+
+  const tasks = (brain.tasks ?? []).map((item) => ({
+    id: item.id,
+    kind: 'task',
+    category: categorizeBrainItem('task', item),
+    title: item.title,
+    detail: item.description ?? null,
+    status: item.status ?? null,
+    priority: item.priority ?? null,
+    branch: null,
+    trigger: null,
+    sortAt: item.updatedAt ?? 0,
+  }));
+
+  return [...milestones, ...decisions, ...tasks]
+    .sort((a, b) => b.sortAt - a.sortAt)
+    .slice(0, 48);
+}
+
+function buildBrainAnalytics(searchIndex) {
+  const categoryCounts = Object.fromEntries(BRAIN_CATEGORIES.map((category) => [category, 0]));
+  const kindCounts = { milestone: 0, decision: 0, task: 0 };
+
+  for (const item of searchIndex) {
+    if (categoryCounts[item.category] != null) categoryCounts[item.category] += 1;
+    if (kindCounts[item.kind] != null) kindCounts[item.kind] += 1;
+  }
+
+  return {
+    totalItems: searchIndex.length,
+    categoryCounts,
+    kindCounts,
+    recentItems: searchIndex.slice(0, 12),
+  };
+}
+
+function categorizeBrainItem(kind, item) {
+  if (kind === 'decision') return 'decision';
+
+  const haystack = normalizeKey([
+    item.title,
+    item.detail,
+    item.description,
+    item.rationale,
+    item.impact,
+    item.status,
+    item.priority,
+    item.trigger,
+    item.branch,
+  ].filter(Boolean).join(' '));
+
+  if (/(bug|bugfix|fix|fixed|fixing|hotfix|regression|incident|outage|crash|failure|broken|repair|patch|error)/.test(haystack)) {
+    return 'bugfix';
+  }
+  if (/(investigate|investigation|discover|discovery|research|explore|analysis|analyze|spike|audit|triage|learn|evaluate|probe)/.test(haystack)) {
+    return 'discovery';
+  }
+  if (/(feature|implement|implementation|add|build|create|launch|ship|support|enable|introduce|improve|enhance|upgrade)/.test(haystack)) {
+    return 'feature';
+  }
+
+  if (kind === 'milestone' || kind === 'task') return 'feature';
+  return 'discovery';
+}
+
+function buildBrainSearchText(item) {
+  return [
+    item.title,
+    item.detail,
+    item.category,
+    item.kind,
+    item.status,
+    item.priority,
+    item.branch,
+    item.trigger,
+  ].filter(Boolean).join(' ');
 }
 
 async function loadUserAiSettings(db, env, userId) {

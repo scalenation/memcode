@@ -16,6 +16,10 @@ let addCardElements = null;
 let profileData = null; // { email, name, subscription }
 let historyData = [];
 let brainProjectData = [];
+let brainPayloadCache = new Map();
+let currentBrainPayload = null;
+let currentBrainProject = null;
+let currentBrainFilter = 'all';
 let openRouterModels = [];
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
@@ -54,6 +58,9 @@ function navigateTo(sectionId) {
   }
   if (sectionId === 'brain') {
     loadBrain();
+  }
+  if (sectionId === 'analytics') {
+    loadAnalytics();
   }
 }
 
@@ -611,6 +618,7 @@ async function loadWorkspaces() {
 }
 
 async function ensureBrainProjects(force = false) {
+  if (force) brainPayloadCache = new Map();
   if (!force && brainProjectData.length > 0) {
     populateBrainProjectSelect(brainProjectData);
     return brainProjectData;
@@ -626,7 +634,11 @@ async function ensureBrainProjects(force = false) {
 }
 
 function populateBrainProjectSelect(projects) {
-  const select = document.getElementById('brain-workspace');
+  populateProjectSelect(document.getElementById('brain-workspace'), projects);
+  populateProjectSelect(document.getElementById('analytics-workspace'), projects);
+}
+
+function populateProjectSelect(select, projects) {
   if (!select) return;
   const currentValue = select.value;
   select.innerHTML = '';
@@ -657,6 +669,27 @@ function populateBrainProjectSelect(projects) {
   select.value = nextValue;
 }
 
+async function fetchBrainProject(projectId) {
+  if (brainPayloadCache.has(projectId)) {
+    return brainPayloadCache.get(projectId);
+  }
+
+  const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}`);
+  const body = await res.json();
+  if (res.status === 402) throw new Error(proRequiredMessage());
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(body.error ?? 'Failed to load project brain');
+  brainPayloadCache.set(projectId, body);
+  return body;
+}
+
+function setProjectSelectValue(selectId, value) {
+  const select = document.getElementById(selectId);
+  if (select && value && Array.from(select.options).some(option => option.value === value)) {
+    select.value = value;
+  }
+}
+
 async function loadBrain() {
   const loading = document.getElementById('brain-summary-loading');
   const content = document.getElementById('brain-summary-content');
@@ -667,22 +700,29 @@ async function loadBrain() {
   try {
     const projects = await ensureBrainProjects();
     if (projects.length === 0) {
+      currentBrainPayload = null;
+      currentBrainProject = null;
       renderBrainEmpty('Sync a project first to build a project brain.');
       return;
     }
 
     const projectId = document.getElementById('brain-workspace').value || projects[0].projectId;
-    const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}`);
-    const body = await res.json();
-    if (res.status === 402) throw new Error(proRequiredMessage());
-    if (res.status === 404) {
+    const body = await fetchBrainProject(projectId);
+    if (!body) {
+      currentBrainPayload = null;
+      currentBrainProject = null;
       renderBrainEmpty('This project has no compact brain yet. Run a fresh sync from the CLI.');
       return;
     }
-    if (!res.ok) throw new Error(body.error ?? 'Failed to load project brain');
 
-    renderBrain(body, projects.find(project => project.projectId === projectId) ?? null);
+    currentBrainPayload = body;
+    currentBrainProject = projects.find(project => project.projectId === projectId) ?? null;
+    setProjectSelectValue('analytics-workspace', projectId);
+    renderBrain(body, currentBrainProject);
+    renderBrainSearchResults();
   } catch (err) {
+    currentBrainPayload = null;
+    currentBrainProject = null;
     renderBrainEmpty(err.message ?? 'Failed to load project brain.');
     showNotice(err.message ?? 'Failed to load project brain.', 'error');
   }
@@ -705,10 +745,14 @@ function renderBrainEmpty(message) {
   document.getElementById('brain-stats').innerHTML = '';
   document.getElementById('brain-milestones').innerHTML = '';
   document.getElementById('brain-decisions-tasks').innerHTML = '';
+  document.getElementById('brain-search-results').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No searchable memory available yet.</div></div>';
+  document.getElementById('brain-search-count').textContent = '';
 }
 
 function renderBrain(payload, project) {
   const brain = payload.brain;
+  const searchIndex = brain.searchIndex ?? [];
+  const categoryByKey = new Map(searchIndex.map(item => [`${item.kind}:${item.id || item.title}`, item.category]));
   document.getElementById('brain-summary-loading').hidden = true;
   document.getElementById('brain-summary-content').hidden = false;
   document.getElementById('brain-summary').textContent = brain.summary;
@@ -724,7 +768,7 @@ function renderBrain(payload, project) {
   document.getElementById('brain-milestones').innerHTML = milestones.length > 0
     ? milestones.map(item => renderBrainItem({
       title: item.title,
-      meta: [item.trigger, item.branch, item.createdAt ? fmtDate(item.createdAt) : null].filter(Boolean).join(' · '),
+      meta: [formatCategoryLabel(categoryByKey.get(`milestone:${item.id || item.title}`)), item.trigger, item.branch, item.createdAt ? fmtDate(item.createdAt) : null].filter(Boolean).join(' · '),
       detail: item.detail || 'No detail recorded.',
     })).join('')
     : '<div class="brain-item"><div class="brain-item-detail">No milestones recorded yet.</div></div>';
@@ -732,12 +776,12 @@ function renderBrain(payload, project) {
   const combined = [
     ...brain.decisions.slice(0, 4).map(item => ({
       title: `Decision: ${item.title}`,
-      meta: [item.status, item.updatedAt ? fmtDate(item.updatedAt) : null].filter(Boolean).join(' · '),
+      meta: [formatCategoryLabel(categoryByKey.get(`decision:${item.id || item.title}`)), item.status, item.updatedAt ? fmtDate(item.updatedAt) : null].filter(Boolean).join(' · '),
       detail: item.rationale,
     })),
     ...brain.tasks.slice(0, 4).map(item => ({
       title: `Task: ${item.title}`,
-      meta: [item.status, item.priority, item.updatedAt ? fmtDate(item.updatedAt) : null].filter(Boolean).join(' · '),
+      meta: [formatCategoryLabel(categoryByKey.get(`task:${item.id || item.title}`)), item.status, item.priority, item.updatedAt ? fmtDate(item.updatedAt) : null].filter(Boolean).join(' · '),
       detail: item.description || 'No description recorded.',
     })),
   ];
@@ -749,10 +793,153 @@ function renderBrain(payload, project) {
 function renderBrainItem(item) {
   return `
     <div class="brain-item">
+      ${item.badges?.length ? `<div class="brain-item-badges">${item.badges.map(renderBrainBadge).join('')}</div>` : ''}
       <div class="brain-item-title">${esc(item.title)}</div>
       ${item.meta ? `<div class="brain-item-meta">${esc(item.meta)}</div>` : ''}
       ${item.detail ? `<div class="brain-item-detail">${esc(item.detail)}</div>` : ''}
     </div>`;
+}
+
+function renderBrainBadge(badge) {
+  const tone = badge.tone ? ` category-${badge.tone}` : '';
+  return `<span class="brain-item-badge${tone}">${esc(badge.label)}</span>`;
+}
+
+function formatCategoryLabel(category) {
+  if (!category) return '';
+  return category.charAt(0).toUpperCase() + category.slice(1);
+}
+
+function buildBrainSearchText(item) {
+  return [item.title, item.detail, item.category, item.kind, item.status, item.priority, item.branch, item.trigger]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function renderBrainSearchResults() {
+  const list = document.getElementById('brain-search-results');
+  const count = document.getElementById('brain-search-count');
+  const query = document.getElementById('brain-search-input')?.value?.trim().toLowerCase() ?? '';
+  const items = currentBrainPayload?.brain?.searchIndex ?? [];
+
+  const filtered = items.filter(item => {
+    if (currentBrainFilter !== 'all' && item.category !== currentBrainFilter) return false;
+    if (!query) return true;
+    return buildBrainSearchText(item).includes(query);
+  });
+
+  count.textContent = filtered.length > 0
+    ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}`
+    : 'No matches';
+
+  list.innerHTML = filtered.length > 0
+    ? filtered.slice(0, 20).map(item => renderBrainItem({
+      title: item.title,
+      meta: [item.kind, item.status, item.priority, item.sortAt ? fmtDate(item.sortAt) : null].filter(Boolean).join(' · '),
+      detail: item.detail || 'No detail recorded.',
+      badges: [
+        { label: formatCategoryLabel(item.category), tone: item.category },
+        { label: item.kind },
+      ],
+    })).join('')
+    : '<div class="brain-item"><div class="brain-item-detail">No memory matched this search.</div></div>';
+}
+
+function setBrainFilter(category) {
+  currentBrainFilter = category;
+  document.querySelectorAll('[data-brain-filter]').forEach(button => {
+    button.classList.toggle('active', button.dataset.brainFilter === category);
+  });
+  renderBrainSearchResults();
+}
+
+function renderAnalyticsEmpty(message) {
+  document.getElementById('analytics-category-cards').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">${esc(message)}</div></div>`;
+  document.getElementById('analytics-recent-items').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No categorized memory available yet.</div></div>';
+  document.getElementById('analytics-source-breakdown').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No source mix available yet.</div></div>';
+}
+
+function renderAnalytics(payload, project) {
+  const analytics = payload?.brain?.analytics;
+  const searchIndex = payload?.brain?.searchIndex ?? [];
+  if (!analytics) {
+    renderAnalyticsEmpty('No analytics available for this project yet.');
+    return;
+  }
+
+  const total = analytics.totalItems || 0;
+  const categories = ['decision', 'bugfix', 'feature', 'discovery'];
+  document.getElementById('analytics-category-cards').innerHTML = categories.map((category) => {
+    const value = analytics.categoryCounts?.[category] ?? 0;
+    const share = total > 0 ? Math.round((value / total) * 100) : 0;
+    return `
+      <div class="analytics-stat-card">
+        <div class="analytics-stat-label">${esc(formatCategoryLabel(category))}</div>
+        <div class="analytics-stat-value">${esc(String(value))}</div>
+        <div class="analytics-stat-sub">${esc(`${share}% of searchable memory`)} </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('analytics-recent-items').innerHTML = (analytics.recentItems ?? []).length > 0
+    ? analytics.recentItems.map(item => renderBrainItem({
+      title: item.title,
+      meta: [project?.projectName || payload.projectName || payload.brain.workspaceId, item.kind, item.sortAt ? fmtDate(item.sortAt) : null].filter(Boolean).join(' · '),
+      detail: item.detail || 'No detail recorded.',
+      badges: [
+        { label: formatCategoryLabel(item.category), tone: item.category },
+        { label: item.kind },
+      ],
+    })).join('')
+    : '<div class="brain-item"><div class="brain-item-detail">No categorized memory available yet.</div></div>';
+
+  const sourceKinds = [
+    ['milestone', 'Milestones'],
+    ['decision', 'Decisions'],
+    ['task', 'Tasks'],
+  ];
+  document.getElementById('analytics-source-breakdown').innerHTML = sourceKinds.map(([kind, label]) => {
+    const count = analytics.kindCounts?.[kind] ?? 0;
+    const topCategories = searchIndex
+      .filter(item => item.kind === kind)
+      .reduce((acc, item) => {
+        acc[item.category] = (acc[item.category] ?? 0) + 1;
+        return acc;
+      }, {});
+    const mix = Object.entries(topCategories)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 2)
+      .map(([category, value]) => `${formatCategoryLabel(category)} ${value}`)
+      .join(' · ');
+    return renderBrainItem({
+      title: label,
+      meta: `${count} item${count === 1 ? '' : 's'}`,
+      detail: mix || 'No categorized items yet.',
+    });
+  }).join('');
+}
+
+async function loadAnalytics() {
+  try {
+    const projects = await ensureBrainProjects();
+    if (projects.length === 0) {
+      renderAnalyticsEmpty('Sync a project first to unlock analytics.');
+      return;
+    }
+
+    const projectId = document.getElementById('analytics-workspace').value || projects[0].projectId;
+    const payload = await fetchBrainProject(projectId);
+    if (!payload) {
+      renderAnalyticsEmpty('This project has no compact brain yet. Run a fresh sync from the CLI.');
+      return;
+    }
+
+    setProjectSelectValue('brain-workspace', projectId);
+    renderAnalytics(payload, projects.find(project => project.projectId === projectId) ?? null);
+  } catch (err) {
+    renderAnalyticsEmpty(err.message ?? 'Failed to load analytics.');
+    showNotice(err.message ?? 'Failed to load analytics.', 'error');
+  }
 }
 
 async function askBrain() {
@@ -780,7 +967,7 @@ async function askBrain() {
     document.getElementById('brain-answer-content').hidden = false;
     document.getElementById('brain-answer').textContent = body.answer;
     document.getElementById('brain-evidence').innerHTML = (body.evidence ?? []).map(item => `
-      <span class="brain-evidence-chip">${esc(item.kind)}: ${esc(item.title)}</span>
+      <span class="brain-evidence-chip">${esc(item.category ?? item.kind)} · ${esc(item.kind)}: ${esc(item.title)}</span>
     `).join('');
   } catch (err) {
     showNotice(err.message ?? 'Failed to query project brain.', 'error');
@@ -1199,8 +1386,22 @@ document.getElementById('brain-workspace')?.addEventListener('change', () => {
   loadBrain();
 });
 
+document.getElementById('analytics-workspace')?.addEventListener('change', () => {
+  loadAnalytics();
+});
+
 document.getElementById('brain-ask-btn')?.addEventListener('click', () => {
   askBrain();
+});
+
+document.getElementById('brain-search-input')?.addEventListener('input', () => {
+  renderBrainSearchResults();
+});
+
+document.getElementById('brain-filter-row')?.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-brain-filter]');
+  if (!button) return;
+  setBrainFilter(button.dataset.brainFilter);
 });
 
 document.getElementById('brain-ask-input')?.addEventListener('keydown', (event) => {

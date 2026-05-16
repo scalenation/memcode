@@ -30,6 +30,7 @@
     .sidebar-spacer { flex: 1; }
     .main-content { flex: 1; min-width: 0; overflow: visible; padding: 36px 40px 56px; }
     .section { display: none; max-width: 660px; }
+    .section.section-wide { max-width: 980px; }
     .section.active { display: block; }
     .section-title { font-size: 1.2rem; font-weight: 700; margin: 0 0 24px; }
     .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 20px; }
@@ -189,8 +190,32 @@
     .brain-answer { font-size: 0.84rem; line-height: 1.6; color: var(--text); margin-bottom: 12px; }
     .brain-evidence { display: flex; flex-wrap: wrap; gap: 8px; }
     .brain-evidence-chip { font-size: 0.72rem; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; color: var(--text-dim); background: var(--bg); }
+    .brain-search-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
+    .brain-search-wrap { flex: 1; min-width: 240px; display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 12px; }
+    .brain-search-wrap svg { color: var(--text-dim); flex-shrink: 0; }
+    .brain-search-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-size: 0.88rem; padding: 10px 0; }
+    .brain-search-count { font-size: 0.78rem; color: var(--text-dim); }
+    .brain-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .brain-filter-chip { border: 1px solid var(--border); background: var(--bg); color: var(--text-dim); border-radius: 999px; padding: 6px 12px; font-size: 0.76rem; font-weight: 600; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+    .brain-filter-chip:hover { color: var(--text); border-color: var(--text-dim); }
+    .brain-filter-chip.active { color: var(--accent); border-color: rgba(108,99,255,0.35); background: rgba(108,99,255,0.12); }
+    .brain-item-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .brain-item-badge { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; border-radius: 999px; padding: 3px 8px; border: 1px solid var(--border); color: var(--text-dim); background: var(--surface); }
+    .brain-item-badge.category-decision { color: #60a5fa; border-color: rgba(96,165,250,0.3); background: rgba(96,165,250,0.1); }
+    .brain-item-badge.category-bugfix { color: #f87171; border-color: rgba(248,113,113,0.3); background: rgba(248,113,113,0.1); }
+    .brain-item-badge.category-feature { color: #34d399; border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.1); }
+    .brain-item-badge.category-discovery { color: #fbbf24; border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.1); }
+    .analytics-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 14px; margin-bottom: 20px; }
+    .analytics-category-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .analytics-stat-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; }
+    .analytics-stat-label { font-size: 0.74rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+    .analytics-stat-value { font-size: 1.25rem; font-weight: 800; }
+    .analytics-stat-sub { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
+    .analytics-list { display: flex; flex-direction: column; gap: 10px; }
     @media (max-width: 820px) {
       .brain-grid { grid-template-columns: 1fr; }
+      .analytics-grid { grid-template-columns: 1fr; }
+      .analytics-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
@@ -222,6 +247,10 @@
     <button class="nav-item" data-section="brain">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3.5a3.5 3.5 0 0 0-3.5 3.5v1A2.5 2.5 0 0 0 3 10.5v1A2.5 2.5 0 0 0 5.5 14v1A3.5 3.5 0 0 0 9 18.5h.5A2.5 2.5 0 0 0 12 21a2.5 2.5 0 0 0 2.5-2.5h.5a3.5 3.5 0 0 0 3.5-3.5v-1A2.5 2.5 0 0 0 21 11.5v-1A2.5 2.5 0 0 0 18.5 8v-1A3.5 3.5 0 0 0 15 3.5h-.5A2.5 2.5 0 0 0 12 1a2.5 2.5 0 0 0-2.5 2.5H9Z"/></svg>
       Brain
+    </button>
+    <button class="nav-item" data-section="analytics">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V3"/></svg>
+      Analytics
     </button>
     <button class="nav-item" data-section="profile">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
@@ -444,7 +473,7 @@
       <div id="hist-list"></div>
     </section>
 
-    <section id="section-brain" class="section">
+    <section id="section-brain" class="section section-wide">
       <h1 class="section-title">Project Brain</h1>
 
       <div class="brain-toolbar">
@@ -496,6 +525,25 @@
         <pre id="brain-report" class="brain-report" hidden></pre>
       </div>
 
+      <div class="card">
+        <p class="card-title">Search Memory</p>
+        <div class="brain-search-toolbar">
+          <div class="brain-search-wrap">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input id="brain-search-input" class="brain-search-input" type="search" placeholder="Search decisions, bugfixes, features, or discoveries…" autocomplete="off" />
+          </div>
+          <div id="brain-search-count" class="brain-search-count"></div>
+        </div>
+        <div class="brain-filter-row" id="brain-filter-row">
+          <button class="brain-filter-chip active" data-brain-filter="all">All</button>
+          <button class="brain-filter-chip" data-brain-filter="decision">Decision</button>
+          <button class="brain-filter-chip" data-brain-filter="bugfix">Bugfix</button>
+          <button class="brain-filter-chip" data-brain-filter="feature">Feature</button>
+          <button class="brain-filter-chip" data-brain-filter="discovery">Discovery</button>
+        </div>
+        <div id="brain-search-results" class="brain-list"></div>
+      </div>
+
       <div class="brain-grid">
         <div class="card">
           <p class="card-title">Milestones</p>
@@ -504,6 +552,32 @@
         <div class="card">
           <p class="card-title">Decisions &amp; Tasks</p>
           <div id="brain-decisions-tasks" class="brain-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="section-analytics" class="section section-wide">
+      <h1 class="section-title">Analytics</h1>
+
+      <div class="brain-toolbar">
+        <div class="brain-select-wrap">
+          <select id="analytics-workspace" class="brain-select"></select>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Category Breakdown</p>
+        <div id="analytics-category-cards" class="analytics-category-grid"></div>
+      </div>
+
+      <div class="analytics-grid">
+        <div class="card">
+          <p class="card-title">Recent Categorized Memory</p>
+          <div id="analytics-recent-items" class="analytics-list"></div>
+        </div>
+        <div class="card">
+          <p class="card-title">Source Mix</p>
+          <div id="analytics-source-breakdown" class="analytics-list"></div>
         </div>
       </div>
     </section>
