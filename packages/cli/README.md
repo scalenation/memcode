@@ -13,6 +13,8 @@
 
 Run `memory copilot setup` once and your project context is automatically injected at the start of **every chat** — no copy-paste, no manual updates.
 
+MemCode now also pulls in recent local AI chat transcripts from supported editors before generating context, so new sessions start with recent intent and outcome breadcrumbs instead of just raw repo state.
+
 Works with:
 - **VS Code Copilot** (via `.github/copilot-instructions.md`)
 - **Claude Code** (via `CLAUDE.md`)
@@ -98,6 +100,8 @@ Coding assistants forget everything when the session ends. MemCode fixes that.
 - **Pro:** Push your encrypted memory to the cloud and pull it on any machine.
 
 All memory lives in a single SQLite file at `.memory/memory.db`. No daemon. No server. No network unless you ask for it.
+
+Free/local MemCode includes checkpoints, decisions, tasks, chat-session import, timeline, and auto-injected context files. Pro layers cloud sync, hosted semantic recall, and cross-machine/team continuity on top of the same local database.
 
 ---
 
@@ -228,6 +232,8 @@ memory context-pack [options]
 | `--path <path>` | Project path |
 
 Output includes: workspace metadata, recent checkpoints, open tasks, latest decisions, and a file-tree snapshot. Typically under 2 KB and renders in < 500 ms.
+
+It also includes a compact `Recent AI Sessions` section when local transcript history is available, giving assistants a progressive-disclosure view of recent intent and outcomes.
 
 ```
 === MemCode Context Pack ===

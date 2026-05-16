@@ -12,15 +12,20 @@ packages/
   cloud-client/     # Optional encrypted cloud sync (Pro)
 ```
 
+The product boundary is intentionally split in two layers:
+
+- Free/local: SQLite-backed memory, git hooks, transcript hydration, context injection files, recall, timeline.
+- Pro: encrypted cloud sync, hosted semantic retrieval, cross-machine continuity, and future team memory features.
+
 ## Data Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Event sources                                              │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌───────────┐  │
-│  │ CLI cmd  │  │ git hook │  │ VS Code  │  │ on-save   │  │
+│  │ CLI cmd  │  │ git hook │  │ VS Code  │  │ transcript│  │
 │  │ memory   │  │ pre/post │  │ command  │  │ debounce  │  │
-│  │ checkpoint│  │ checkout │  │ palette  │  │ watcher   │  │
+│  │ checkpoint│  │ checkout │  │ palette  │  │ + import  │  │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └─────┬─────┘  │
 └───────┼─────────────┼─────────────┼───────────────┼────────┘
         │             │             │               │
@@ -36,6 +41,9 @@ packages/
                     │  └──────┬───────┘  │
                     │  ┌──────▼───────┐  │
                     │  │  SQLite DB   │  │  ← atomic write
+                    │  └──────┬───────┘  │
+                    │  ┌──────▼───────┐  │
+                    │  │ Session store │  │  ← imported local chats
                     │  └──────┬───────┘  │
                     │  ┌──────▼───────┐  │
                     │  │ JSONL archive│  │  ← raw events
@@ -56,6 +64,8 @@ packages/
 
 All domain logic. No dependency on VS Code, Commander, or any HTTP client.
 
+Today, `@memcode/core` is the stable storage and retrieval layer. It now supports both explicit project memory items and imported AI session/message history, which allows MemCode to build progressive, session-aware context without requiring a daemon.
+
 Key modules:
 
 | Module | Responsibility |
@@ -68,7 +78,7 @@ Key modules:
 | `redaction.ts` | Pattern + entropy-based secret stripping |
 | `summarizer.ts` | Deterministic short/long summaries |
 | `retrieval.ts` | Keyword + recency-decay recall |
-| `context-pack.ts` | Context block composition |
+| `context-pack.ts` | Context block composition with recent session breadcrumbs |
 | `timeline.ts` | Merged chronological event view |
 | `hooks.ts` | Git hook installer/uninstaller |
 | `items.ts` | Decision and task CRUD |
@@ -77,6 +87,12 @@ Key modules:
 
 Commander-based CLI. Each command lives in `src/commands/`. Commands open the
 DB, call core functions, and print formatted output.
+
+The CLI is also the current orchestration layer for local memory hydration:
+
+- `memory checkpoint` refreshes assistant context files.
+- `memory context-pack` imports local chat transcripts before generating prompt context.
+- `memory copilot setup` and `memory copilot refresh` write auto-injected context into `CLAUDE.md` and `.github/copilot-instructions.md`.
 
 ### `memcode-vscode`
 
@@ -93,6 +109,8 @@ Optional Pro feature. AES-256-GCM client-side encryption before upload.
 Push/pull against a stateless REST API. Merge strategy: last-write-wins on
 `updated_at`; checkpoints are append-only.
 
+This is the main place where MemCode diverges from claude-mem in a good way for productization: the same local database powers both free and Pro, while Pro adds continuity and retrieval depth instead of replacing the local workflow.
+
 ## SQLite Schema
 
 ```
@@ -106,6 +124,34 @@ checkpoints ──< artifacts
 
 All tables use opaque hex IDs (`randomBytes(8).toString('hex')`).
 Timestamps are Unix milliseconds.
+
+## Current Memory Pipeline
+
+```text
+Git hooks / CLI / editor transcripts
+  -> SQLite (checkpoints, decisions, tasks, sessions, messages)
+  -> context-pack generation
+  -> CLAUDE.md / copilot-instructions.md injection
+  -> optional encrypted cloud sync (Pro)
+```
+
+This is intentionally local-first and synchronous today.
+
+## Claud​​e-Mem Patterns We Are Adopting
+
+Claude-mem gets several architectural choices right. MemCode should absorb these patterns while keeping its local-first and commercial split intact:
+
+1. Hook-driven capture instead of relying only on manual commands.
+2. Progressive disclosure in injected context instead of dumping raw history.
+3. Graceful degradation: memory failures should never block the host assistant.
+4. Clean free/pro layering where Pro extends local memory rather than forking the architecture.
+
+MemCode already implements the progressive-disclosure direction for recent AI sessions in generated context. The next recommended steps are:
+
+1. Add assistant-specific lifecycle adapters beyond git hooks.
+2. Add a lightweight background worker for non-blocking summarization and indexing.
+3. Add local search endpoints or a viewer over the same SQLite store.
+4. Keep hosted semantic search and team features in Pro, not in the free local path.
 
 ## Retrieval Scoring
 
@@ -139,3 +185,16 @@ Installed to `.git/hooks/`:
 | `SummarizerProvider` | (future) plug in an LLM summariser |
 | `RedactionProvider` | (future) custom redaction rules |
 | `EmbeddingProvider` | (future) dense vector search |
+
+## Free vs Pro
+
+| Capability | Free / Local | Pro |
+|-----------|---------------|-----|
+| Checkpoints, tasks, decisions | Yes | Yes |
+| Local session/message import | Yes | Yes |
+| Context injection into assistant instruction files | Yes | Yes |
+| Keyword recall and timeline | Yes | Yes |
+| Cloud sync across machines | No | Yes |
+| Hosted semantic recall | No | Yes |
+| Team memory / shared workspaces | No | Yes |
+| Cross-project insights | Planned local basics | Advanced hosted |

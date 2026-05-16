@@ -74,6 +74,21 @@ memory context-pack --copy
 
 Paste the output at the start of your chat session to hydrate the assistant with project context.
 
+If local VS Code Copilot or Cursor transcripts are available, MemCode will also import recent chat history and include a compact `Recent AI Sessions` section so the next assistant sees recent intent and outcomes.
+
+## 7b. Wire context into your assistant automatically
+
+```bash
+memory copilot setup
+```
+
+This writes MemCode-managed context into:
+
+- `.github/copilot-instructions.md` for VS Code Copilot
+- `CLAUDE.md` for Claude Code
+
+Those files refresh automatically after checkpoints, so you do not need to paste context manually every time.
+
 ## 8. View the timeline
 
 ```bash

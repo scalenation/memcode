@@ -34,6 +34,7 @@ memory recall --query "database choice" --limit 5
 ## Features
 
 - **Automatic checkpoints** — triggered on git commit and branch switch via hooks
+- **Session-aware context** — imports recent local AI chats and turns them into compact breadcrumbs for the next session
 - **Recall** — keyword + recency-ranked search over decisions, tasks, checkpoints
 - **Context pack** — one-command, <500 ms project context block for chat hydration
 - **Timeline** — chronological view of all memory events
@@ -59,7 +60,7 @@ memory recall --query "database choice" --limit 5
 | `memory init [--hooks]` | Initialize local store and optionally install git hooks |
 | `memory checkpoint [--note]` | Create a manual checkpoint |
 | `memory recall --query <text>` | Ranked recall by keyword |
-| `memory context-pack` | Print context block for chat hydration |
+| `memory context-pack` | Print context block for chat hydration, including recent imported AI sessions |
 | `memory timeline` | List recent events |
 | `memory decision add` | Record an architectural decision |
 | `memory task add` | Create a task |
@@ -94,6 +95,11 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributor guide.
 ## Architecture
 
 See [docs/architecture.md](./docs/architecture.md) for a detailed breakdown of the data flow, package boundaries, and extension model.
+
+MemCode’s direction is now explicitly split into:
+
+- Free/local memory: SQLite, checkpoints, transcript hydration, assistant context injection, keyword recall.
+- Pro memory: encrypted cloud sync, hosted semantic recall, and cross-machine continuity on top of the same local store.
 
 ## Security
 

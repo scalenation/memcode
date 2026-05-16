@@ -8,6 +8,7 @@ import {
 import { join, dirname } from 'node:path';
 import { generateContextPack } from '@memcode/core';
 import { resolveProject, findProjectRoot } from '../util';
+import { hydrateProjectContext } from '../context-hydration';
 import pc from 'picocolors';
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ copilotCommand
     const filePaths = agentFilePaths(projectPath, agent);
 
     try {
+      hydrateProjectContext(db, workspace.id, projectPath);
       const contextPack = generateContextPack(db, workspace.id);
       const body = buildInstructionsHeader(workspace.name) + contextPack;
 
@@ -254,6 +256,7 @@ copilotCommand
     }
 
     try {
+      hydrateProjectContext(db, workspace.id, projectPath);
       const contextPack = generateContextPack(db, workspace.id);
       const body = buildInstructionsHeader(workspace.name) + contextPack;
       for (const f of filesToRefresh) {

@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { createCheckpoint, createCheckpointSync, generateContextPack } from '@memcode/core';
 import { resolveProject, fmtDate } from '../util';
 import { hasMemcodeSection, writeMemcodeSection, buildInstructionsHeader } from './copilot';
+import { hydrateProjectContext } from '../context-hydration';
 import pc from 'picocolors';
 
 export const checkpointCommand = new Command('checkpoint')
@@ -39,6 +40,7 @@ export const checkpointCommand = new Command('checkpoint')
       // Auto-refresh all configured AI assistant context files
       if (hasMemcodeSection(projectPath)) {
         try {
+          hydrateProjectContext(db, workspace.id, projectPath);
           const pack = generateContextPack(db, workspace.id);
           writeMemcodeSection(projectPath, buildInstructionsHeader(workspace.name) + pack);
           console.log(pc.dim('  ↳ Refreshed AI assistant context'));

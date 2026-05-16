@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { generateContextPack } from '@memcode/core';
 import { resolveProject } from '../util';
+import { hydrateProjectContext } from '../context-hydration';
 import pc from 'picocolors';
 
 export const contextPackCommand = new Command('context-pack')
@@ -17,9 +18,10 @@ export const contextPackCommand = new Command('context-pack')
       process.exit(1);
     }
 
-    const { db, workspace } = project;
+    const { db, workspace, projectPath } = project;
 
     try {
+      hydrateProjectContext(db, workspace.id, projectPath);
       const pack = generateContextPack(db, workspace.id);
 
       if (options.output) {

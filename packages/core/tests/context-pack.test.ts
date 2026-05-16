@@ -70,6 +70,29 @@ describe('generateContextPack()', () => {
     expect(pack).toContain('Use PostgreSQL');
   });
 
+  it('includes recent AI session breadcrumbs when session history exists', () => {
+    db.prepare(
+      `INSERT INTO sessions (id, workspace_id, editor, agent, started_at, ended_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('sess-1', workspaceId, 'VS Code', 'GitHub Copilot', 1000, 3000);
+
+    db.prepare(
+      `INSERT INTO messages (id, session_id, role, content, token_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('msg-1', 'sess-1', 'user', 'Figure out why OAuth callback fails after login.', 10, 1500);
+
+    db.prepare(
+      `INSERT INTO messages (id, session_id, role, content, token_count, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run('msg-2', 'sess-1', 'assistant', 'Patched redirect URI handling and updated the callback route.', 12, 2500);
+
+    const pack = generateContextPack(db, workspaceId);
+    expect(pack).toContain('Recent AI Sessions');
+    expect(pack).toContain('GitHub Copilot');
+    expect(pack).toContain('User intent: Figure out why OAuth callback fails after login.');
+    expect(pack).toContain('Assistant outcome: Patched redirect URI handling and updated the callback route.');
+  });
+
   it('does not include done tasks in active section', () => {
     const task = createTask(db, { workspaceId, title: 'Done task' });
     db.prepare("UPDATE tasks SET status = 'done' WHERE id = ?").run(task.id);

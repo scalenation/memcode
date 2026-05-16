@@ -8,6 +8,7 @@ import pc from 'picocolors';
 import { pushSync, pullSync, deriveKey } from '@memcode/cloud-client';
 import { findProjectRoot, getMemoryDir, resolveProject } from '../util';
 import { importChatHistory } from '../chat-import';
+import { hydrateProjectContext } from '../context-hydration';
 
 const DEFAULT_ENDPOINT = 'https://www.memcode.pro';
 const AUTH_CONFIG_PATH = join(homedir(), '.config', 'memcode', 'auth.json');
@@ -136,7 +137,7 @@ async function runAutoSync(
 
   if (!quiet) console.log(pc.bold('Syncing memory with cloud…'));
   try {
-    const imported = importChatHistory(db, workspace.id, projectPath);
+    const imported = hydrateProjectContext(db, workspace.id, projectPath);
     await registerWorkspace(auth, workspace.id, projectPath);
     const result = await pushSync(db, {
       endpoint: auth.endpoint,
@@ -308,7 +309,7 @@ syncCommand
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
       // Register workspace with name and machine name (best-effort, non-fatal)
-      const imported = importChatHistory(db, workspace.id, projectPath);
+      const imported = hydrateProjectContext(db, workspace.id, projectPath);
       await registerWorkspace(auth, workspace.id, projectPath);
 
       const result = await pushSync(db, {
