@@ -3,9 +3,17 @@ main = "src/worker.js"
 compatibility_date = "2026-05-15"
 account_id = "ac4c8308ee25757eed7edbf8b47467e4"
 
+routes = [
+	{ pattern = "www.memcode.pro", zone_name = "memcode.pro" },
+	{ pattern = "www.memcode.pro/*", zone_name = "memcode.pro" },
+	{ pattern = "memcode.pro", zone_name = "memcode.pro" },
+	{ pattern = "memcode.pro/*", zone_name = "memcode.pro" }
+]
+
 [assets]
 directory = "./public"
 binding = "ASSETS"
+run_worker_first = true
 
 [triggers]
 crons = ["0 3 * * *"]

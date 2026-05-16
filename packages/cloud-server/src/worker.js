@@ -62,6 +62,13 @@ function json(body, init = {}) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    if (url.hostname === 'memcode.pro') {
+      const redirectUrl = new URL(request.url);
+      redirectUrl.hostname = 'www.memcode.pro';
+      return Response.redirect(redirectUrl.toString(), 301);
+    }
+
     const db = createD1Client(env.DB);
     const workspaceDeleteMatch = matchPath(url.pathname, /^\/v1\/user\/workspaces\/([^/]+)$/);
     const sessionDeleteMatch = matchPath(url.pathname, /^\/v1\/user\/sessions\/([^/]+)$/);
@@ -75,6 +82,9 @@ export default {
 
     try {
       if (request.method === 'GET' && url.pathname === '/') {
+        if (env.ASSETS) {
+          return env.ASSETS.fetch(request);
+        }
         return json({ name: 'MemCode Cloud API', runtime: 'cloudflare-worker', status: 'ok' });
       }
 
