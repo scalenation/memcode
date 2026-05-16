@@ -69,7 +69,7 @@ export function generateContextPack(
        ORDER BY COALESCE(MAX(m.created_at), s.ended_at, s.started_at) DESC
        LIMIT 3`,
     )
-    .all(workspaceId) as Array<Session & { message_count: number | null; last_message_at: number | null }>;
+     .all(workspaceId) as unknown as Array<Session & { message_count: number | null; last_message_at: number | null }>;
 
   const sessionDigests: SessionDigest[] = recentSessions.map((session) => ({
     ...session,

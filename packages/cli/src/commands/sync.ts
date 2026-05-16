@@ -77,6 +77,34 @@ interface AuthConfig {
   encryptionPassphrase: string;
 }
 
+interface SyncContext {
+  auth: AuthConfig;
+  projectPath: string;
+  db: ReturnType<typeof resolveProject>['db'];
+  workspace: ReturnType<typeof resolveProject>['workspace'];
+  encryptionKey: string;
+}
+
+interface PullSyncResultSummary {
+  merged: {
+    sessions: number;
+    messages: number;
+    checkpoints: number;
+    decisions: number;
+    tasks: number;
+  };
+  cursor: string;
+  skippedBlobs?: number;
+}
+
+interface PushSyncResultSummary {
+  checkpointsCount: number;
+  decisionsCount: number;
+  tasksCount: number;
+  brainMilestonesCount: number;
+  cursor: string;
+}
+
 function readAuthConfig(): AuthConfig | null {
   if (!existsSync(AUTH_CONFIG_PATH)) return null;
   try {
@@ -89,6 +117,72 @@ function readAuthConfig(): AuthConfig | null {
 function writeAuthConfig(cfg: AuthConfig): void {
   mkdirSync(join(homedir(), '.config', 'memcode'), { recursive: true });
   writeFileSync(AUTH_CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
+function createSyncContext(path?: string): SyncContext | null {
+  const auth = readAuthConfig();
+  if (!auth) return null;
+  const projectPath = path ?? findProjectRoot();
+  const { db, workspace } = resolveProject(projectPath);
+  return {
+    auth,
+    projectPath,
+    db,
+    workspace,
+    encryptionKey: deriveKey(auth.encryptionPassphrase, workspace.id),
+  };
+}
+
+async function runPullPhase(
+  ctx: SyncContext,
+  options: { quiet?: boolean } = {},
+): Promise<PullSyncResultSummary> {
+  const { quiet = false } = options;
+  const result = await pullSync(ctx.db, {
+    endpoint: ctx.auth.endpoint,
+    apiToken: ctx.auth.apiToken,
+    encryptionKey: ctx.encryptionKey,
+    workspaceId: ctx.workspace.id,
+  });
+
+  if (!quiet) {
+    if (result.merged.sessions === 0 && result.merged.messages === 0 && result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
+      console.log(pc.green('✓'), 'Cloud pull already up to date.');
+    } else {
+      console.log(pc.green('✓'), `Pulled ${pc.cyan(String(result.merged.sessions))} sessions,`, `${pc.cyan(String(result.merged.messages))} messages,`, `${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
+    }
+    if (result.skippedBlobs) {
+      console.log(pc.yellow('!'), `Skipped ${result.skippedBlobs} cloud snapshot${result.skippedBlobs === 1 ? '' : 's'} that could not be decrypted with this workspace key.`);
+    }
+    console.log(pc.dim(`  pull cursor: ${result.cursor}`));
+  }
+
+  return result;
+}
+
+async function runPushPhase(
+  ctx: SyncContext,
+  options: { quiet?: boolean } = {},
+): Promise<{ result: PushSyncResultSummary; imported: { sessions: number; messages: number } }> {
+  const { quiet = false } = options;
+  const imported = hydrateProjectContext(ctx.db, ctx.workspace.id, ctx.projectPath);
+  await registerWorkspace(ctx.auth, ctx.workspace.id, ctx.projectPath);
+  const result = await pushSync(ctx.db, {
+    endpoint: ctx.auth.endpoint,
+    apiToken: ctx.auth.apiToken,
+    encryptionKey: ctx.encryptionKey,
+    workspaceId: ctx.workspace.id,
+  });
+
+  if (!quiet) {
+    console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
+    if (imported.sessions > 0 || imported.messages > 0) {
+      console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
+    }
+    console.log(pc.dim(`  push cursor: ${result.cursor}`));
+  }
+
+  return { result, imported };
 }
 
 export const syncCommand = new Command('sync').description(
@@ -124,39 +218,24 @@ async function runAutoSync(
   options: { quiet?: boolean; exitOnError?: boolean } = {},
 ): Promise<boolean> {
   const { quiet = false, exitOnError = true } = options;
-  const auth = readAuthConfig();
-  if (!auth) {
+  const ctx = createSyncContext(path);
+  if (!ctx) {
     if (!quiet) console.log(noAuthMsg());
     if (exitOnError) process.exit(1);
     return false;
   }
 
-  const projectPath = path ?? findProjectRoot();
-  const { db, workspace } = resolveProject(projectPath);
-  const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
-
-  if (!quiet) console.log(pc.bold('Syncing memory with cloud…'));
+  if (!quiet) console.log(pc.bold('Syncing memory with cloud (pull -> push)…'));
   try {
-    const imported = hydrateProjectContext(db, workspace.id, projectPath);
-    await registerWorkspace(auth, workspace.id, projectPath);
-    const result = await pushSync(db, {
-      endpoint: auth.endpoint,
-      apiToken: auth.apiToken,
-      encryptionKey,
-      workspaceId: workspace.id,
-    });
-    if (!quiet) {
-      console.log(pc.green('✓'), `Synced ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
-      if (imported.sessions > 0 || imported.messages > 0) {
-        console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
-      }
-      console.log(pc.dim(`  cursor: ${result.cursor}`));
-    }
+    await runPullPhase(ctx, { quiet });
+    await runPushPhase(ctx, { quiet });
     return true;
   } catch (err) {
     if (!quiet) console.error(pc.red('Sync failed:'), (err as Error).message);
     if (exitOnError) process.exit(1);
     return false;
+  } finally {
+    ctx.db.close();
   }
 }
 
@@ -296,36 +375,20 @@ syncCommand
   .description('Push summaries and metadata to the cloud (E2E encrypted)')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (options: { path?: string }) => {
-    const auth = readAuthConfig();
-    if (!auth) {
+    const ctx = createSyncContext(options.path);
+    if (!ctx) {
       console.log(noAuthMsg());
       process.exit(1);
     }
 
-    const projectPath = options.path ?? findProjectRoot();
-    const { db, workspace } = resolveProject(projectPath);
-    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
-
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
-      // Register workspace with name and machine name (best-effort, non-fatal)
-      const imported = hydrateProjectContext(db, workspace.id, projectPath);
-      await registerWorkspace(auth, workspace.id, projectPath);
-
-      const result = await pushSync(db, {
-        endpoint: auth.endpoint,
-        apiToken: auth.apiToken,
-        encryptionKey,
-        workspaceId: workspace.id,
-      });
-      console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
-      if (imported.sessions > 0 || imported.messages > 0) {
-        console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
-      }
-      console.log(pc.dim(`  cursor: ${result.cursor}`));
+      await runPushPhase(ctx);
     } catch (err) {
       console.error(pc.red('Push failed:'), (err as Error).message);
       process.exit(1);
+    } finally {
+      ctx.db.close();
     }
   });
 
@@ -336,37 +399,20 @@ syncCommand
   .description('Pull latest memory from the cloud and merge into local DB')
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (options: { path?: string }) => {
-    const auth = readAuthConfig();
-    if (!auth) {
+    const ctx = createSyncContext(options.path);
+    if (!ctx) {
       console.log(noAuthMsg());
       process.exit(1);
     }
 
-    const projectPath = options.path ?? findProjectRoot();
-    const { db, workspace } = resolveProject(projectPath);
-    const encryptionKey = deriveKey(auth.encryptionPassphrase, workspace.id);
-
     console.log(pc.bold('Pulling memory from cloud…'));
     try {
-      const result = await pullSync(db, {
-        endpoint: auth.endpoint,
-        apiToken: auth.apiToken,
-        encryptionKey,
-        workspaceId: workspace.id,
-      });
-
-      if (result.merged.sessions === 0 && result.merged.messages === 0 && result.merged.checkpoints === 0 && result.merged.decisions === 0 && result.merged.tasks === 0) {
-        console.log(pc.green('✓'), 'Already up to date.');
-      } else {
-        console.log(pc.green('✓'), `Merged ${pc.cyan(String(result.merged.sessions))} sessions,`, `${pc.cyan(String(result.merged.messages))} messages,`, `${pc.cyan(String(result.merged.checkpoints))} checkpoints,`, `${pc.cyan(String(result.merged.decisions))} decisions,`, `${pc.cyan(String(result.merged.tasks))} tasks`);
-      }
-      if (result.skippedBlobs) {
-        console.log(pc.yellow('!'), `Skipped ${result.skippedBlobs} cloud snapshot${result.skippedBlobs === 1 ? '' : 's'} that could not be decrypted with this workspace key.`);
-      }
-      console.log(pc.dim(`  cursor: ${result.cursor}`));
+      await runPullPhase(ctx);
     } catch (err) {
       console.error(pc.red('Pull failed:'), (err as Error).message);
       process.exit(1);
+    } finally {
+      ctx.db.close();
     }
   });
 

@@ -66,8 +66,9 @@ memory recall --query "database choice" --limit 5
 | `memory timeline` | List recent events |
 | `memory decision add` | Record an architectural decision |
 | `memory task add` | Create a task |
-| `memory sync push` | Push summaries to cloud (Pro) |
-| `memory sync pull` | Pull summaries from cloud (Pro) |
+| `memory sync` | Universal cloud sync: pull latest cloud memory, then push local state (Pro) |
+| `memory sync push` | Explicit push-only cloud sync (Pro) |
+| `memory sync pull` | Explicit pull-only cloud sync (Pro) |
 | `memory doctor` | Validate setup and hook wiring |
 
 ## VS Code Commands

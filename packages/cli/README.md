@@ -435,6 +435,16 @@ memory doctor [--path <path>]
 
 Encrypted cloud sync across machines. Requires a Pro subscription ($3.99/month, 7-day free trial).
 
+#### `memory sync`
+
+Run the universal sync flow used by background sync and git hooks.
+
+```bash
+memory sync [--path <path>]
+```
+
+This performs a pull-first merge from the cloud and then pushes the current local state back up. Background and hook-driven sync should use this command, not `push` or `pull` directly.
+
 #### `memory sync auth`
 
 Authenticate and save credentials to `~/.config/memcode/auth.json`.
@@ -479,8 +489,8 @@ When initialized with `--hooks`, MemCode installs:
 
 | Hook | What it does |
 |---|---|
-| `post-commit` | Creates a checkpoint with the commit message and file diff summary |
-| `post-checkout` | Creates a checkpoint on branch switch, records the target branch |
+| `post-commit` | Creates a checkpoint with the commit message and file diff summary, then runs `memory sync` |
+| `post-checkout` | Creates a checkpoint on branch switch, records the target branch, then runs `memory sync` |
 
 Hooks are installed to `.git/hooks/`. They are plain shell scripts — inspect them at any time:
 

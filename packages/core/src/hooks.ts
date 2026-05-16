@@ -36,7 +36,7 @@ const HOOK_SCRIPTS: Record<HookName, string> = {
     '# Only fire on branch switch (not file checkout)',
     'if [ "$3" = "1" ]; then',
     '  memory checkpoint --trigger branch-switch 2>/dev/null || true',
-    '  memory sync pull 2>/dev/null || true',
+    '  memory sync 2>/dev/null || true',
     'fi',
   ].join('\n'),
 

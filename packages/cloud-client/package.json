@@ -30,7 +30,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@memcode/core": "^1.0.10"
+    "@memcode/core": "workspace:^1.0.10"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
