@@ -15,6 +15,8 @@
     "cf:dev": "wrangler dev --local",
     "cf:check": "wrangler deploy --dry-run",
     "cf:deploy": "wrangler deploy",
+    "cf:secrets:prepare": "node scripts/prepare-cloudflare-secrets.mjs",
+    "cf:secrets:sync": "pnpm run cf:secrets:prepare && wrangler secret bulk .cloudflare-secrets.env",
     "cf:d1:apply:local": "wrangler d1 execute DB --local --file src/db/schema.d1.sql",
     "cf:d1:apply:remote": "wrangler d1 execute DB --remote --file src/db/schema.d1.sql",
     "cf:whoami": "wrangler whoami",

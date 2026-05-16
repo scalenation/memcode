@@ -1,1 +1,2 @@
 .vercel
+.cloudflare-secrets.env
