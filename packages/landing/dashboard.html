@@ -212,10 +212,15 @@
     .analytics-stat-value { font-size: 1.25rem; font-weight: 800; }
     .analytics-stat-sub { margin-top: 6px; font-size: 0.78rem; color: var(--text-dim); }
     .analytics-list { display: flex; flex-direction: column; gap: 10px; }
+    .usage-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .usage-summary-grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 14px; margin-bottom: 20px; }
+    .usage-inline-stats { display: flex; flex-wrap: wrap; gap: 12px; font-size: 0.8rem; color: var(--text-dim); margin-top: 10px; }
     @media (max-width: 820px) {
       .brain-grid { grid-template-columns: 1fr; }
       .analytics-grid { grid-template-columns: 1fr; }
       .analytics-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .usage-summary-grid { grid-template-columns: 1fr; }
+      .usage-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
@@ -565,19 +570,47 @@
         </div>
       </div>
 
+      <div class="usage-summary-grid">
+        <div class="card">
+          <p class="card-title">Agent Availability</p>
+          <div id="agent-availability-cards" class="usage-metric-grid"></div>
+          <div id="agent-availability-note" class="usage-inline-stats"></div>
+        </div>
+        <div class="card">
+          <p class="card-title">Agent Usage</p>
+          <div id="agent-usage-summary" class="usage-metric-grid"></div>
+        </div>
+      </div>
+
       <div class="card">
-        <p class="card-title">Category Breakdown</p>
+        <p class="card-title">Usage by Category</p>
+        <div id="agent-usage-by-category" class="analytics-category-grid" style="margin-bottom:16px"></div>
+      </div>
+
+      <div class="card">
+        <p class="card-title">Project Memory Breakdown</p>
         <div id="analytics-category-cards" class="analytics-category-grid"></div>
       </div>
 
       <div class="analytics-grid">
         <div class="card">
+          <p class="card-title">Recent Agent Activity</p>
+          <div id="agent-usage-recent" class="analytics-list"></div>
+        </div>
+        <div class="card">
           <p class="card-title">Recent Categorized Memory</p>
           <div id="analytics-recent-items" class="analytics-list"></div>
         </div>
+      </div>
+
+      <div class="analytics-grid">
         <div class="card">
           <p class="card-title">Source Mix</p>
           <div id="analytics-source-breakdown" class="analytics-list"></div>
+        </div>
+        <div class="card">
+          <p class="card-title">Usage by Operation</p>
+          <div id="agent-usage-operations" class="analytics-list"></div>
         </div>
       </div>
     </section>

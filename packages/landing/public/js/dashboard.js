@@ -17,6 +17,7 @@ let profileData = null; // { email, name, subscription }
 let historyData = [];
 let brainProjectData = [];
 let brainPayloadCache = new Map();
+let aiUsageCache = new Map();
 let currentBrainPayload = null;
 let currentBrainProject = null;
 let currentBrainFilter = 'all';
@@ -152,8 +153,18 @@ function renderAiSettingsState(aiSettings) {
   }
 
   status.textContent = aiSettings?.hasOpenRouterKey
-    ? 'OpenRouter key saved. Brain reports and answers will use your selected model when available.'
+    ? buildAiStatusText(aiSettings)
     : 'No OpenRouter key saved yet. Brain outputs will fall back to built-in summaries until you add one.';
+}
+
+function buildAiStatusText(aiSettings) {
+  const availability = aiSettings?.availability;
+  if (!availability) {
+    return 'OpenRouter key saved. Brain reports and answers will use your selected model when available.';
+  }
+
+  const remaining = availability.limitRemaining == null ? 'Unlimited credits' : `${fmtCredits(availability.limitRemaining)} credits remaining`;
+  return `${remaining} · ${fmtCredits(availability.usageMonthly)} used this month · ${fmtCredits(availability.usageDaily)} today.`;
 }
 
 // ── Payment Methods ───────────────────────────────────────────────────────────
@@ -619,6 +630,7 @@ async function loadWorkspaces() {
 
 async function ensureBrainProjects(force = false) {
   if (force) brainPayloadCache = new Map();
+  if (force) aiUsageCache = new Map();
   if (!force && brainProjectData.length > 0) {
     populateBrainProjectSelect(brainProjectData);
     return brainProjectData;
@@ -680,6 +692,21 @@ async function fetchBrainProject(projectId) {
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(body.error ?? 'Failed to load project brain');
   brainPayloadCache.set(projectId, body);
+  return body;
+}
+
+async function fetchAiUsage(projectId) {
+  const cacheKey = projectId || '__all__';
+  if (aiUsageCache.has(cacheKey)) {
+    return aiUsageCache.get(cacheKey);
+  }
+
+  const query = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+  const res = await authFetch(`/v1/user/ai-usage${query}`);
+  const body = await res.json();
+  if (res.status === 402) throw new Error(proRequiredMessage());
+  if (!res.ok) throw new Error(body.error ?? 'Failed to load agent usage');
+  aiUsageCache.set(cacheKey, body);
   return body;
 }
 
@@ -855,9 +882,96 @@ function setBrainFilter(category) {
 }
 
 function renderAnalyticsEmpty(message) {
+  document.getElementById('agent-availability-cards').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">${esc(message)}</div></div>`;
+  document.getElementById('agent-availability-note').innerHTML = '';
+  document.getElementById('agent-usage-summary').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No agent usage recorded yet.</div></div>`;
+  document.getElementById('agent-usage-by-category').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No categorized agent usage recorded yet.</div></div>`;
+  document.getElementById('agent-usage-recent').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No agent activity recorded yet.</div></div>';
+  document.getElementById('agent-usage-operations').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No operation usage recorded yet.</div></div>';
   document.getElementById('analytics-category-cards').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">${esc(message)}</div></div>`;
   document.getElementById('analytics-recent-items').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No categorized memory available yet.</div></div>';
   document.getElementById('analytics-source-breakdown').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No source mix available yet.</div></div>';
+}
+
+function renderAgentUsage(aiUsage) {
+  const availability = aiUsage?.availability;
+  const availabilityCards = [
+    {
+      label: 'Provider',
+      value: 'OpenRouter',
+      sub: aiUsage?.hasOpenRouterKey ? (availability?.label || aiUsage?.model || 'Configured') : 'No key configured',
+    },
+    {
+      label: 'Credits Remaining',
+      value: availability?.limitRemaining == null ? 'Unlimited' : fmtCredits(availability.limitRemaining),
+      sub: availability?.limit == null ? 'No key limit set' : `${fmtCredits(availability.limit)} key limit`,
+    },
+    {
+      label: 'Used Today',
+      value: fmtCredits(availability?.usageDaily ?? 0),
+      sub: `${fmtCredits(availability?.usageMonthly ?? 0)} this month`,
+    },
+    {
+      label: 'BYOK Usage',
+      value: fmtCredits(availability?.byokUsage ?? 0),
+      sub: availability?.includeByokInLimit ? 'Counts toward key limit' : 'Tracked separately',
+    },
+  ];
+  document.getElementById('agent-availability-cards').innerHTML = availabilityCards.map((item) => `
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label">${esc(item.label)}</div>
+      <div class="analytics-stat-value">${esc(item.value)}</div>
+      <div class="analytics-stat-sub">${esc(item.sub)}</div>
+    </div>`).join('');
+
+  document.getElementById('agent-availability-note').innerHTML = aiUsage?.hasOpenRouterKey
+    ? [
+      `Model ${esc(aiUsage.model || 'Unknown')}`,
+      availability?.isFreeTier ? 'Free-tier key' : 'Paid key',
+      availability?.limitReset ? `Reset ${esc(availability.limitReset)}` : 'No automatic reset',
+    ].map((text) => `<span>${text}</span>`).join('')
+    : '<span>Add an OpenRouter key in Profile to see live credit availability.</span>';
+
+  const summary = aiUsage?.summary ?? {};
+  const usageCards = [
+    ['Requests', String(summary.requestCount ?? 0), 'Brain asks and reports'],
+    ['Prompt Tokens', fmtInt(summary.promptTokens ?? 0), 'Input token volume'],
+    ['Completion Tokens', fmtInt(summary.completionTokens ?? 0), 'Output token volume'],
+    ['Total Tokens', fmtInt(summary.totalTokens ?? 0), 'All tracked agent usage'],
+  ];
+  document.getElementById('agent-usage-summary').innerHTML = usageCards.map(([label, value, sub]) => `
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label">${esc(label)}</div>
+      <div class="analytics-stat-value">${esc(value)}</div>
+      <div class="analytics-stat-sub">${esc(sub)}</div>
+    </div>`).join('');
+
+  document.getElementById('agent-usage-by-category').innerHTML = (aiUsage?.byCategory ?? []).map((entry) => `
+    <div class="analytics-stat-card">
+      <div class="analytics-stat-label">${esc(formatCategoryLabel(entry.category))}</div>
+      <div class="analytics-stat-value">${esc(fmtInt(entry.totalTokens))}</div>
+      <div class="analytics-stat-sub">${esc(`${entry.requestCount} request${entry.requestCount === 1 ? '' : 's'} · ${fmtInt(entry.promptTokens)} in · ${fmtInt(entry.completionTokens)} out`)}</div>
+    </div>`).join('');
+
+  document.getElementById('agent-usage-recent').innerHTML = (aiUsage?.recent ?? []).length > 0
+    ? aiUsage.recent.map((entry) => renderBrainItem({
+      title: `${entry.operation === 'report' ? 'Report' : 'Ask'} · ${formatCategoryLabel(entry.category)}`,
+      meta: [entry.reportType, entry.model, entry.createdAt ? fmtDate(entry.createdAt) : null].filter(Boolean).join(' · '),
+      detail: `${fmtInt(entry.totalTokens)} tokens · ${fmtInt(entry.promptTokens)} in · ${fmtInt(entry.completionTokens)} out${entry.responseMs ? ` · ${entry.responseMs} ms` : ''}`,
+      badges: [
+        { label: formatCategoryLabel(entry.category), tone: entry.category },
+        { label: entry.operation },
+      ],
+    })).join('')
+    : '<div class="brain-item"><div class="brain-item-detail">No agent activity recorded yet.</div></div>';
+
+  document.getElementById('agent-usage-operations').innerHTML = (aiUsage?.byOperation ?? []).length > 0
+    ? aiUsage.byOperation.map((entry) => renderBrainItem({
+      title: entry.operation === 'report' ? 'Reports' : 'Asks',
+      meta: `${entry.requestCount} request${entry.requestCount === 1 ? '' : 's'}`,
+      detail: `${fmtInt(entry.totalTokens)} total tokens`,
+    })).join('')
+    : '<div class="brain-item"><div class="brain-item-detail">No operation usage recorded yet.</div></div>';
 }
 
 function renderAnalytics(payload, project) {
@@ -928,13 +1042,17 @@ async function loadAnalytics() {
     }
 
     const projectId = document.getElementById('analytics-workspace').value || projects[0].projectId;
-    const payload = await fetchBrainProject(projectId);
+    const [payload, aiUsage] = await Promise.all([
+      fetchBrainProject(projectId),
+      fetchAiUsage(projectId),
+    ]);
     if (!payload) {
       renderAnalyticsEmpty('This project has no compact brain yet. Run a fresh sync from the CLI.');
       return;
     }
 
     setProjectSelectValue('brain-workspace', projectId);
+    renderAgentUsage(aiUsage);
     renderAnalytics(payload, projects.find(project => project.projectId === projectId) ?? null);
   } catch (err) {
     renderAnalyticsEmpty(err.message ?? 'Failed to load analytics.');
@@ -1222,6 +1340,17 @@ function timeAgo(iso) {
   const d = Math.floor(h / 24);
   if (d < 30) return `${d}d ago`;
   return fmtDate(iso);
+}
+
+function fmtInt(value) {
+  return new Intl.NumberFormat().format(Number(value || 0));
+}
+
+function fmtCredits(value) {
+  const numeric = Number(value || 0);
+  return Number.isInteger(numeric)
+    ? new Intl.NumberFormat().format(numeric)
+    : new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(numeric);
 }
 
 // ── Session History ───────────────────────────────────────────────────────────

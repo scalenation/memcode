@@ -2,6 +2,7 @@ import {
   DEFAULT_OPENROUTER_MODEL,
   decryptSecret,
   completeWithOpenRouter,
+  fetchOpenRouterKeyInfo,
 } from './openrouter.js';
 
 const BRAIN_CATEGORIES = ['decision', 'bugfix', 'feature', 'discovery'];
@@ -86,41 +87,175 @@ export async function latestBrainRow(db, userId, workspaceId) {
   };
 }
 
-export async function generateBrainAnswer(env, db, userId, brain, question, projectName) {
+export async function generateBrainAnswer(env, db, userId, brain, question, projectName, projectId = null) {
   const fallback = answerFromBrain(brain, question);
   const settings = await loadUserAiSettings(db, env, userId);
   if (!settings.apiKey) return fallback;
 
   try {
-    const answer = await completeWithOpenRouter(env, {
+    const startedAt = Date.now();
+    const result = await completeWithOpenRouter(env, {
       apiKey: settings.apiKey,
       model: settings.model,
       systemPrompt: 'You answer questions about a software project using only the provided project brain context. Be concise, grounded, and explicit when the context is incomplete.',
       userPrompt: [`Project: ${projectName}`, `Question: ${question}`, '', buildBrainContext(brain)].join('\n'),
       temperature: 0.2,
     });
-    return { ...fallback, answer };
+    await recordAiUsageEvent(db, {
+      userId,
+      projectId,
+      category: pickUsageCategory(brain, question),
+      operation: 'ask',
+      reportType: null,
+      provider: result.provider,
+      model: result.model,
+      usage: result.usage,
+      responseMs: Date.now() - startedAt,
+      metadata: { questionLength: question.length },
+    });
+    return { ...fallback, answer: result.text };
   } catch {
     return fallback;
   }
 }
 
-export async function generateBrainReport(env, db, userId, brain, type, projectName) {
+export async function generateBrainReport(env, db, userId, brain, type, projectName, projectId = null) {
   const fallback = renderReport(brain, type);
   const settings = await loadUserAiSettings(db, env, userId);
   if (!settings.apiKey) return fallback;
 
   try {
-    return await completeWithOpenRouter(env, {
+    const startedAt = Date.now();
+    const result = await completeWithOpenRouter(env, {
       apiKey: settings.apiKey,
       model: settings.model,
       systemPrompt: 'You generate practical markdown reports for engineering projects. Use only the provided project brain context. Do not invent progress, metrics, or roadmap items.',
       userPrompt: [`Project: ${projectName}`, `Requested report type: ${type}`, '', 'Return markdown only.', '', buildBrainContext(brain)].join('\n'),
       temperature: 0.3,
     });
+    await recordAiUsageEvent(db, {
+      userId,
+      projectId,
+      category: dominantCategory(brain),
+      operation: 'report',
+      reportType: type,
+      provider: result.provider,
+      model: result.model,
+      usage: result.usage,
+      responseMs: Date.now() - startedAt,
+      metadata: { reportType: type },
+    });
+    return result.text;
   } catch {
     return fallback;
   }
+}
+
+export async function loadAiDashboardUsage(db, env, userId, projectId = null) {
+  const settings = await loadUserAiSettings(db, env, userId);
+  const filters = [userId];
+  let projectFilterSql = '';
+  if (projectId) {
+    projectFilterSql = ' AND project_id = ?';
+    filters.push(projectId);
+  }
+
+  const summaryRow = await db.first(
+    `SELECT
+       COUNT(*) AS request_count,
+       COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+       COALESCE(SUM(credits_used), 0) AS credits_used
+     FROM ai_usage_events
+     WHERE user_id = ?${projectFilterSql}`,
+    filters,
+  );
+
+  const categoryRows = await db.all(
+    `SELECT
+       category,
+       COUNT(*) AS request_count,
+       COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+       COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+       COALESCE(SUM(credits_used), 0) AS credits_used
+     FROM ai_usage_events
+     WHERE user_id = ?${projectFilterSql}
+     GROUP BY category
+     ORDER BY total_tokens DESC, category ASC`,
+    filters,
+  );
+
+  const operationRows = await db.all(
+    `SELECT operation, COUNT(*) AS request_count, COALESCE(SUM(total_tokens), 0) AS total_tokens
+     FROM ai_usage_events
+     WHERE user_id = ?${projectFilterSql}
+     GROUP BY operation
+     ORDER BY total_tokens DESC, operation ASC`,
+    filters,
+  );
+
+  const recentRows = await db.all(
+    `SELECT category, operation, report_type, provider, model, prompt_tokens, completion_tokens, total_tokens, credits_used, response_ms, created_at
+     FROM ai_usage_events
+     WHERE user_id = ?${projectFilterSql}
+     ORDER BY created_at DESC
+     LIMIT 12`,
+    filters,
+  );
+
+  let availability = null;
+  if (settings.apiKey) {
+    try {
+      availability = await fetchOpenRouterKeyInfo(env, settings.apiKey);
+    } catch {
+      availability = null;
+    }
+  }
+
+  return {
+    provider: 'openrouter',
+    model: settings.model,
+    hasOpenRouterKey: Boolean(settings.apiKey),
+    availability,
+    summary: {
+      requestCount: Number(summaryRow?.request_count ?? 0),
+      promptTokens: Number(summaryRow?.prompt_tokens ?? 0),
+      completionTokens: Number(summaryRow?.completion_tokens ?? 0),
+      totalTokens: Number(summaryRow?.total_tokens ?? 0),
+      creditsUsed: Number(summaryRow?.credits_used ?? 0),
+    },
+    byCategory: BRAIN_CATEGORIES.map((category) => {
+      const row = categoryRows.rows.find((entry) => entry.category === category);
+      return {
+        category,
+        requestCount: Number(row?.request_count ?? 0),
+        promptTokens: Number(row?.prompt_tokens ?? 0),
+        completionTokens: Number(row?.completion_tokens ?? 0),
+        totalTokens: Number(row?.total_tokens ?? 0),
+        creditsUsed: Number(row?.credits_used ?? 0),
+      };
+    }),
+    byOperation: operationRows.rows.map((row) => ({
+      operation: row.operation,
+      requestCount: Number(row.request_count ?? 0),
+      totalTokens: Number(row.total_tokens ?? 0),
+    })),
+    recent: recentRows.rows.map((row) => ({
+      category: row.category,
+      operation: row.operation,
+      reportType: row.report_type ?? null,
+      provider: row.provider,
+      model: row.model ?? settings.model,
+      promptTokens: Number(row.prompt_tokens ?? 0),
+      completionTokens: Number(row.completion_tokens ?? 0),
+      totalTokens: Number(row.total_tokens ?? 0),
+      creditsUsed: Number(row.credits_used ?? 0),
+      responseMs: Number(row.response_ms ?? 0),
+      createdAt: toIsoString(row.created_at),
+    })),
+  };
 }
 
 export async function compactLatestBrainRows(db, workspaceId) {
@@ -481,6 +616,66 @@ function buildBrainAnalytics(searchIndex) {
     kindCounts,
     recentItems: searchIndex.slice(0, 12),
   };
+}
+
+async function recordAiUsageEvent(db, event) {
+  await db.run(
+    `INSERT INTO ai_usage_events (
+       id, user_id, project_id, category, operation, report_type, provider, model,
+       prompt_tokens, completion_tokens, total_tokens, credits_used, response_ms, metadata, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      crypto.randomUUID(),
+      event.userId,
+      event.projectId,
+      event.category,
+      event.operation,
+      event.reportType,
+      event.provider,
+      event.model,
+      event.usage?.promptTokens ?? 0,
+      event.usage?.completionTokens ?? 0,
+      event.usage?.totalTokens ?? 0,
+      event.usage?.creditsUsed,
+      event.responseMs ?? null,
+      JSON.stringify(event.metadata ?? {}),
+      Date.now(),
+    ],
+  );
+}
+
+function pickUsageCategory(brain, text) {
+  const terms = tokenize(text);
+  const scores = new Map(BRAIN_CATEGORIES.map((category) => [category, 0]));
+  for (const item of brain.searchIndex ?? []) {
+    const score = scoreText(buildBrainSearchText(item), terms);
+    if (score > 0) scores.set(item.category, (scores.get(item.category) ?? 0) + score);
+  }
+
+  let bestCategory = dominantCategory(brain);
+  let bestScore = scores.get(bestCategory) ?? 0;
+  for (const category of BRAIN_CATEGORIES) {
+    const score = scores.get(category) ?? 0;
+    if (score > bestScore) {
+      bestCategory = category;
+      bestScore = score;
+    }
+  }
+  return bestCategory;
+}
+
+function dominantCategory(brain) {
+  const counts = brain.analytics?.categoryCounts ?? {};
+  let bestCategory = 'feature';
+  let bestCount = counts[bestCategory] ?? 0;
+  for (const category of BRAIN_CATEGORIES) {
+    const count = counts[category] ?? 0;
+    if (count > bestCount) {
+      bestCategory = category;
+      bestCount = count;
+    }
+  }
+  return bestCategory;
 }
 
 function categorizeBrainItem(kind, item) {

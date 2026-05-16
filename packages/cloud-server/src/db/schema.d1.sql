@@ -69,6 +69,28 @@ CREATE TABLE IF NOT EXISTS sync_upload_chunks (
 
 CREATE INDEX IF NOT EXISTS sync_upload_chunks_workspace_idx ON sync_upload_chunks(workspace_id, created_at);
 
+CREATE TABLE IF NOT EXISTS ai_usage_events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  project_id TEXT,
+  category TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  report_type TEXT,
+  provider TEXT NOT NULL,
+  model TEXT,
+  prompt_tokens INTEGER,
+  completion_tokens INTEGER,
+  total_tokens INTEGER,
+  credits_used REAL,
+  response_ms INTEGER,
+  metadata TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS ai_usage_events_user_created_idx ON ai_usage_events(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_usage_events_user_project_idx ON ai_usage_events(user_id, project_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_usage_events_user_category_idx ON ai_usage_events(user_id, category, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

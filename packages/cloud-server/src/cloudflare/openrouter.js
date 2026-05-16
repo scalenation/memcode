@@ -1,4 +1,5 @@
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_KEY_URL = 'https://openrouter.ai/api/v1/key';
 const IV_LENGTH = 12;
 
 export const OPENROUTER_MODELS = [
@@ -59,13 +60,72 @@ export async function completeWithOpenRouter(env, input) {
 
   const payload = await response.json();
   const content = payload?.choices?.[0]?.message?.content;
-  if (typeof content === 'string' && content.trim()) return content.trim();
+  if (typeof content === 'string' && content.trim()) {
+    return {
+      text: content.trim(),
+      usage: normalizeOpenRouterUsage(payload?.usage),
+      model: payload?.model ?? input.model,
+      provider: 'openrouter',
+    };
+  }
   if (Array.isArray(content)) {
     const text = content.map((part) => typeof part?.text === 'string' ? part.text : '').join('').trim();
-    if (text) return text;
+    if (text) {
+      return {
+        text,
+        usage: normalizeOpenRouterUsage(payload?.usage),
+        model: payload?.model ?? input.model,
+        provider: 'openrouter',
+      };
+    }
   }
 
   throw new Error('OpenRouter response did not contain any text output');
+}
+
+export async function fetchOpenRouterKeyInfo(env, apiKey) {
+  const response = await fetch(OPENROUTER_KEY_URL, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': env.APP_URL,
+      'X-Title': 'MemCode',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter key lookup failed: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const data = payload?.data ?? {};
+  return {
+    label: data.label ?? null,
+    limit: numberOrNull(data.limit),
+    limitRemaining: numberOrNull(data.limit_remaining),
+    limitReset: data.limit_reset ?? null,
+    usage: numberOrZero(data.usage),
+    usageDaily: numberOrZero(data.usage_daily),
+    usageWeekly: numberOrZero(data.usage_weekly),
+    usageMonthly: numberOrZero(data.usage_monthly),
+    byokUsage: numberOrZero(data.byok_usage),
+    byokUsageDaily: numberOrZero(data.byok_usage_daily),
+    byokUsageWeekly: numberOrZero(data.byok_usage_weekly),
+    byokUsageMonthly: numberOrZero(data.byok_usage_monthly),
+    includeByokInLimit: Boolean(data.include_byok_in_limit),
+    isFreeTier: Boolean(data.is_free_tier),
+  };
+}
+
+function normalizeOpenRouterUsage(usage) {
+  const promptTokens = numberOrZero(usage?.prompt_tokens ?? usage?.input_tokens);
+  const completionTokens = numberOrZero(usage?.completion_tokens ?? usage?.output_tokens);
+  const totalTokens = numberOrZero(usage?.total_tokens ?? (promptTokens + completionTokens));
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    creditsUsed: numberOrNull(usage?.cost ?? usage?.credits ?? usage?.total_cost),
+  };
 }
 
 async function secretKey(jwtSecret) {
@@ -93,4 +153,15 @@ function base64ToBytes(value) {
     bytes[index] = binary.charCodeAt(index);
   }
   return bytes;
+}
+
+function numberOrZero(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function numberOrNull(value) {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }

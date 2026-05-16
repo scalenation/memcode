@@ -10,6 +10,7 @@ import { HttpError, authenticateRequest, requireActiveSubscription, signToken } 
 import {
   DEFAULT_OPENROUTER_MODEL,
   OPENROUTER_MODELS,
+  fetchOpenRouterKeyInfo,
   encryptSecret,
   isSupportedOpenRouterModel,
 } from './cloudflare/openrouter.js';
@@ -17,6 +18,7 @@ import {
   compactLatestBrainRows,
   generateBrainAnswer,
   generateBrainReport,
+  loadAiDashboardUsage,
   latestBrainRow,
   latestProjectBrainRow,
   listProjectGroups,
@@ -157,6 +159,16 @@ export default {
           [user.sub],
         );
 
+        let aiAvailability = null;
+        if (userRow?.openrouter_api_key_encrypted) {
+          try {
+            const apiKey = await decryptSecret(userRow.openrouter_api_key_encrypted, env);
+            aiAvailability = await fetchOpenRouterKeyInfo(env, apiKey);
+          } catch {
+            aiAvailability = null;
+          }
+        }
+
         return json({
           userId: user.sub,
           email: user.email,
@@ -171,8 +183,16 @@ export default {
             hasOpenRouterKey: Boolean(userRow?.openrouter_api_key_encrypted),
             openRouterModel: userRow?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL,
             availableModels: OPENROUTER_MODELS,
+            availability: aiAvailability,
           },
         });
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/user/ai-usage') {
+        const user = await authenticateRequest(request, env, db);
+        await requireActiveSubscription(user.sub, db);
+        const projectId = url.searchParams.get('projectId')?.trim() || null;
+        return json(await loadAiDashboardUsage(db, env, user.sub, projectId));
       }
 
       if (request.method === 'PUT' && url.pathname === '/v1/user/profile') {
@@ -660,7 +680,7 @@ export default {
         if (!q) throw new HttpError(400, { error: 'q query param is required' });
         const row = await latestProjectBrainRow(db, user.sub, brainProjectAskMatch[1]);
         if (!row) throw new HttpError(404, { error: 'Project brain not found' });
-        return json(await generateBrainAnswer(env, db, user.sub, row.brain, q, row.projectName));
+        return json(await generateBrainAnswer(env, db, user.sub, row.brain, q, row.projectName, row.projectId));
       }
 
       if (request.method === 'GET' && brainProjectReportMatch) {
@@ -674,7 +694,7 @@ export default {
           projectName: row.projectName,
           type,
           generatedAt: new Date().toISOString(),
-          markdown: await generateBrainReport(env, db, user.sub, row.brain, type, row.projectName),
+          markdown: await generateBrainReport(env, db, user.sub, row.brain, type, row.projectName, row.projectId),
         });
       }
 
