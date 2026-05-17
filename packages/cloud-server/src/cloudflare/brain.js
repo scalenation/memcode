@@ -126,12 +126,44 @@ export async function generateBrainReport(env, db, userId, brain, type, projectN
 
   try {
     const startedAt = Date.now();
+    const reportSpec = reportPromptFor(type);
+    const research = await completeWithOpenRouter(env, {
+      apiKey: settings.apiKey,
+      model: settings.model,
+      systemPrompt: 'You are a research analyst for software projects. Use only the provided project brain context. Separate observed facts from inferred opportunities, and explicitly call out gaps or missing evidence.',
+      userPrompt: [
+        `Project: ${projectName}`,
+        `Requested report type: ${type}`,
+        `Research goal: ${reportSpec.researchGoal}`,
+        '',
+        'Produce markdown research notes with these headings exactly:',
+        '- Facts',
+        '- Opportunities',
+        '- Risks',
+        '- Gaps',
+        '- Suggested emphasis',
+        '',
+        buildBrainContext(brain),
+      ].join('\n'),
+      temperature: 0.15,
+    });
     const result = await completeWithOpenRouter(env, {
       apiKey: settings.apiKey,
       model: settings.model,
-      systemPrompt: 'You generate practical markdown reports for engineering projects. Use only the provided project brain context. Do not invent progress, metrics, or roadmap items.',
-      userPrompt: [`Project: ${projectName}`, `Requested report type: ${type}`, '', 'Return markdown only.', '', buildBrainContext(brain)].join('\n'),
-      temperature: 0.3,
+      systemPrompt: reportSpec.systemPrompt,
+      userPrompt: [
+        `Project: ${projectName}`,
+        `Requested report type: ${type}`,
+        '',
+        reportSpec.outputPrompt,
+        '',
+        'Project brain context:',
+        buildBrainContext(brain),
+        '',
+        'Research notes:',
+        research.text,
+      ].join('\n'),
+      temperature: reportSpec.temperature,
     });
     await recordAiUsageEvent(db, {
       userId,
@@ -141,9 +173,9 @@ export async function generateBrainReport(env, db, userId, brain, type, projectN
       reportType: type,
       provider: result.provider,
       model: result.model,
-      usage: result.usage,
+      usage: mergeOpenRouterUsage(research.usage, result.usage),
       responseMs: Date.now() - startedAt,
-      metadata: { reportType: type },
+      metadata: { reportType: type, researchPass: true },
     });
     return result.text;
   } catch {
@@ -837,9 +869,14 @@ async function loadUserAiSettings(db, env, userId) {
 }
 
 function buildBrainContext(brain) {
+  const analytics = brain.analytics ?? {};
+  const categoryCounts = analytics.categoryCounts ?? {};
+  const agentTelemetry = brain.agentTelemetry ?? {};
+  const recentSessions = agentTelemetry.recent ?? [];
   return [
     `Summary: ${brain.summary}`,
     `Stats: ${brain.stats.checkpointCount} checkpoints, ${brain.stats.decisionCount} decisions, ${brain.stats.taskCount} tasks, ${brain.stats.openTaskCount} open tasks.`,
+    `Category mix: decisions ${categoryCounts.decision ?? 0}, bugfixes ${categoryCounts.bugfix ?? 0}, features ${categoryCounts.feature ?? 0}, discoveries ${categoryCounts.discovery ?? 0}.`,
     '',
     'Milestones:',
     ...brain.milestones.slice(0, 8).map((item) => `- ${item.title}${item.detail ? ` — ${item.detail}` : ''}`),
@@ -849,7 +886,64 @@ function buildBrainContext(brain) {
     '',
     'Tasks:',
     ...brain.tasks.slice(0, 10).map((item) => `- [${item.status}] ${item.title}${item.description ? `: ${item.description}` : ''}`),
+    '',
+    'Recent searchable memory:',
+    ...(brain.searchIndex ?? []).slice(0, 12).map((item) => `- [${item.category}/${item.kind}] ${item.title}${item.detail ? ` — ${item.detail}` : ''}`),
+    '',
+    'Recent coding-agent activity:',
+    ...recentSessions.slice(0, 8).map((session) => `- ${session.agentLabel}${session.modelLabel ? ` using ${session.modelLabel}` : ''}${session.taskLabel ? ` on ${session.taskLabel}` : ''}${session.category ? ` [${session.category}]` : ''}`),
   ].join('\n');
+}
+
+function reportPromptFor(type) {
+  if (type === 'slides') {
+    return {
+      researchGoal: 'Identify the strongest narrative arc, concrete milestones, risks, and next steps for a presentation deck.',
+      systemPrompt: 'You write crisp markdown slide outlines for software projects. Use only the provided research notes and project brain context. Keep each slide focused, concrete, and presentation-ready. Do not invent customer traction, financials, or delivery dates.',
+      outputPrompt: [
+        'Return markdown only.',
+        'Write 8-10 slides.',
+        'Each slide must have a title and 3-5 bullets.',
+        'Include slides for problem, product, evidence, roadmap, risks, and immediate next steps.',
+        'Mark any inferred point explicitly as an inference.',
+      ].join(' '),
+      temperature: 0.2,
+    };
+  }
+
+  if (type === 'business-plan') {
+    return {
+      researchGoal: 'Assemble an investor-style but evidence-grounded business plan from product progress, delivery signals, risks, and open work.',
+      systemPrompt: 'You write practical business plans for software products. Use only the provided research notes and project brain context. Stay grounded in the evidence. If data is missing, state the gap and give a cautious recommendation instead of inventing numbers.',
+      outputPrompt: [
+        'Return markdown only.',
+        'Include sections for Executive Summary, Problem, Product, Evidence from Delivery, Market Hypotheses, Monetization Options, Go-to-Market, Risks, Operating Plan, and Next 90 Days.',
+        'Whenever data is missing, add a short "Missing evidence" note in that section.',
+      ].join(' '),
+      temperature: 0.28,
+    };
+  }
+
+  return {
+    researchGoal: 'Summarize current project status, execution signal, blockers, and immediate priorities for an engineering audience.',
+    systemPrompt: 'You write concise status reports for software projects. Use only the provided research notes and project brain context. Do not invent progress, metrics, or roadmap items.',
+    outputPrompt: [
+      'Return markdown only.',
+      'Include Summary, What changed, Current focus, Risks, and Next actions sections.',
+      'Keep it tight and concrete.',
+    ].join(' '),
+    temperature: 0.2,
+  };
+}
+
+function mergeOpenRouterUsage(left, right) {
+  if (!left && !right) return undefined;
+  return {
+    promptTokens: (left?.promptTokens ?? 0) + (right?.promptTokens ?? 0),
+    completionTokens: (left?.completionTokens ?? 0) + (right?.completionTokens ?? 0),
+    totalTokens: (left?.totalTokens ?? 0) + (right?.totalTokens ?? 0),
+    creditsUsed: (left?.creditsUsed ?? 0) + (right?.creditsUsed ?? 0),
+  };
 }
 
 function normalizeMeta(meta) {

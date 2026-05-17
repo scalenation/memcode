@@ -21,6 +21,7 @@ let currentBrainPayload = null;
 let currentBrainProject = null;
 let currentBrainFilter = 'all';
 let openRouterModels = [];
+const BRAIN_FILTER_ORDER = ['all', 'decision', 'bugfix', 'feature', 'discovery'];
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
@@ -95,7 +96,7 @@ async function loadProfile() {
   // Profile fields
   document.getElementById('profile-name').value = name ?? '';
   document.getElementById('profile-email').value = email;
-  openRouterModels = profileData.aiSettings?.availableModels ?? [];
+  openRouterModels = sortAiModels(profileData.aiSettings?.availableModels ?? []);
   populateAiModelOptions(openRouterModels, profileData.aiSettings?.openRouterModel);
   renderAiSettingsState(profileData.aiSettings ?? null);
 
@@ -128,17 +129,18 @@ function populateAiModelOptions(models, selectedModel) {
   if (!select) return;
   select.innerHTML = '';
 
-  for (const model of models) {
+  const orderedModels = sortAiModels(models);
+  for (const model of orderedModels) {
     const option = document.createElement('option');
     option.value = model.id;
     option.textContent = `${model.free ? 'Free · ' : ''}${model.label} · ${model.provider}`;
     select.appendChild(option);
   }
 
-  if (selectedModel && models.some(model => model.id === selectedModel)) {
+  if (selectedModel && orderedModels.some(model => model.id === selectedModel)) {
     select.value = selectedModel;
-  } else if (models[0]) {
-    select.value = models[0].id;
+  } else if (orderedModels[0]) {
+    select.value = orderedModels[0].id;
   }
 }
 
@@ -151,9 +153,11 @@ function renderAiSettingsState(aiSettings) {
     select.value = aiSettings.openRouterModel;
   }
 
+  const selectedModel = openRouterModels.find((model) => model.id === select.value || model.id === aiSettings?.openRouterModel);
+  const modelLabel = selectedModel ? `${selectedModel.label} · ${selectedModel.provider}` : 'No model selected';
   status.textContent = aiSettings?.hasOpenRouterKey
-    ? buildAiStatusText(aiSettings)
-    : 'No OpenRouter key saved yet. Brain outputs will fall back to built-in summaries until you add one.';
+    ? `${modelLabel} · ${buildAiStatusText(aiSettings)}`
+    : `${modelLabel} · No OpenRouter key saved yet. Brain outputs will fall back to built-in summaries until you add one.`;
 }
 
 function buildAiStatusText(aiSettings) {
@@ -164,6 +168,17 @@ function buildAiStatusText(aiSettings) {
 
   const remaining = availability.limitRemaining == null ? 'Unlimited credits' : `${fmtCredits(availability.limitRemaining)} credits remaining`;
   return `${remaining} · ${fmtCredits(availability.usageMonthly)} used this month · ${fmtCredits(availability.usageDaily)} today.`;
+}
+
+function sortAiModels(models) {
+  return [...models].sort((left, right) => {
+    if (Boolean(left.free) !== Boolean(right.free)) {
+      return left.free ? -1 : 1;
+    }
+    const providerCompare = String(left.provider ?? '').localeCompare(String(right.provider ?? ''));
+    if (providerCompare !== 0) return providerCompare;
+    return String(left.label ?? left.id ?? '').localeCompare(String(right.label ?? right.id ?? ''));
+  });
 }
 
 // ── Payment Methods ───────────────────────────────────────────────────────────
@@ -500,11 +515,11 @@ document.getElementById('ai-settings-save-btn')?.addEventListener('click', async
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? 'Failed to save AI settings');
     profileData.aiSettings = body.aiSettings;
-    openRouterModels = body.aiSettings?.availableModels ?? openRouterModels;
+    openRouterModels = sortAiModels(body.aiSettings?.availableModels ?? openRouterModels);
     populateAiModelOptions(openRouterModels, body.aiSettings?.openRouterModel);
     renderAiSettingsState(body.aiSettings);
     document.getElementById('ai-openrouter-key').value = '';
-    setMsg(msgEl, 'AI settings saved.', 'success');
+    setMsg(msgEl, body.aiSettings?.hasOpenRouterKey ? 'AI settings saved and validated.' : 'Model preference saved.', 'success');
   } catch (err) {
     setMsg(msgEl, err.message ?? 'Failed to save AI settings.', 'error');
   } finally {
@@ -530,6 +545,8 @@ document.getElementById('ai-settings-clear-btn')?.addEventListener('click', asyn
     const body = await res.json();
     if (!res.ok) throw new Error(body.error ?? 'Failed to clear OpenRouter key');
     profileData.aiSettings = body.aiSettings;
+    openRouterModels = sortAiModels(body.aiSettings?.availableModels ?? openRouterModels);
+    populateAiModelOptions(openRouterModels, body.aiSettings?.openRouterModel);
     renderAiSettingsState(body.aiSettings);
     document.getElementById('ai-openrouter-key').value = '';
     setMsg(msgEl, 'OpenRouter key cleared.', 'success');
@@ -629,7 +646,6 @@ async function loadWorkspaces() {
 
 async function ensureBrainProjects(force = false) {
   if (force) brainPayloadCache = new Map();
-  if (force) aiUsageCache = new Map();
   if (!force && brainProjectData.length > 0) {
     populateBrainProjectSelect(brainProjectData);
     return brainProjectData;
@@ -758,6 +774,7 @@ function renderBrainEmpty(message) {
   document.getElementById('brain-decisions-tasks').innerHTML = '';
   document.getElementById('brain-search-results').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No searchable memory available yet.</div></div>';
   document.getElementById('brain-search-count').textContent = '';
+  renderBrainFilterState([]);
 }
 
 function renderBrain(payload, project) {
@@ -799,6 +816,7 @@ function renderBrain(payload, project) {
   document.getElementById('brain-decisions-tasks').innerHTML = combined.length > 0
     ? combined.map(renderBrainItem).join('')
     : '<div class="brain-item"><div class="brain-item-detail">No decisions or tasks recorded yet.</div></div>';
+  renderBrainFilterState(searchIndex);
 }
 
 function renderBrainItem(item) {
@@ -840,9 +858,10 @@ function renderBrainSearchResults() {
     return buildBrainSearchText(item).includes(query);
   });
 
+  const scopeLabel = currentBrainFilter === 'all' ? 'all memory' : `${formatCategoryLabel(currentBrainFilter)} memory`;
   count.textContent = filtered.length > 0
-    ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'}`
-    : 'No matches';
+    ? `${filtered.length} match${filtered.length === 1 ? '' : 'es'} in ${scopeLabel}`
+    : `No matches in ${scopeLabel}`;
 
   list.innerHTML = filtered.length > 0
     ? filtered.slice(0, 20).map(item => renderBrainItem({
@@ -858,11 +877,35 @@ function renderBrainSearchResults() {
 }
 
 function setBrainFilter(category) {
+  if (!BRAIN_FILTER_ORDER.includes(category)) category = 'all';
   currentBrainFilter = category;
   document.querySelectorAll('[data-brain-filter]').forEach(button => {
     button.classList.toggle('active', button.dataset.brainFilter === category);
   });
   renderBrainSearchResults();
+}
+
+function renderBrainFilterState(items) {
+  const counts = new Map(BRAIN_FILTER_ORDER.filter((category) => category !== 'all').map((category) => [category, 0]));
+  for (const item of items) {
+    if (counts.has(item.category)) {
+      counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
+    }
+  }
+
+  if (currentBrainFilter !== 'all' && (counts.get(currentBrainFilter) ?? 0) === 0) {
+    currentBrainFilter = 'all';
+  }
+
+  document.querySelectorAll('[data-brain-filter]').forEach((button) => {
+    const category = button.dataset.brainFilter;
+    const baseLabel = button.dataset.brainFilterLabel ?? button.textContent.replace(/\s*\(\d+\)$/, '');
+    button.dataset.brainFilterLabel = baseLabel;
+    const total = category === 'all' ? items.length : (counts.get(category) ?? 0);
+    button.textContent = `${baseLabel} (${total})`;
+    button.disabled = category !== 'all' && total === 0;
+    button.classList.toggle('active', category === currentBrainFilter);
+  });
 }
 
 function renderAnalyticsEmpty(message) {
@@ -1086,7 +1129,18 @@ async function generateBrainReport(type) {
   }
 
   const buttons = Array.from(document.querySelectorAll('[data-brain-report]'));
+  const activeButton = buttons.find((button) => button.dataset.brainReport === type);
+  const reportEmpty = document.getElementById('brain-report-empty');
+  const reportOutput = document.getElementById('brain-report');
   buttons.forEach(btn => { btn.disabled = true; });
+  if (reportEmpty && activeButton) {
+    reportEmpty.hidden = false;
+    reportEmpty.textContent = `Researching the project brain and generating ${activeButton.textContent.toLowerCase()}…`;
+  }
+  if (reportOutput) {
+    reportOutput.hidden = true;
+    reportOutput.textContent = '';
+  }
 
   try {
     const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}/report?type=${encodeURIComponent(type)}`);

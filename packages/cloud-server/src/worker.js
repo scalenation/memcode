@@ -10,6 +10,7 @@ import { HttpError, authenticateRequest, requireActiveSubscription, signToken } 
 import {
   DEFAULT_OPENROUTER_MODEL,
   OPENROUTER_MODELS,
+  decryptSecret,
   fetchOpenRouterKeyInfo,
   encryptSecret,
   isSupportedOpenRouterModel,
@@ -239,6 +240,15 @@ export default {
           throw new HttpError(400, { error: 'Unsupported OpenRouter model selection.' });
         }
 
+        let availability = null;
+        if (openRouterApiKey) {
+          try {
+            availability = await fetchOpenRouterKeyInfo(env, openRouterApiKey);
+          } catch (error) {
+            throw new HttpError(400, { error: error?.message ?? 'OpenRouter key validation failed.' });
+          }
+        }
+
         const encryptedKey = openRouterApiKey ? await encryptSecret(openRouterApiKey, env) : null;
         if (clearOpenRouterKey && !encryptedKey) {
           await db.run(
@@ -259,12 +269,20 @@ export default {
           'SELECT openrouter_api_key_encrypted, openrouter_model FROM users WHERE id = ? LIMIT 1',
           [user.sub],
         );
+        if (!availability && row?.openrouter_api_key_encrypted) {
+          try {
+            availability = await fetchOpenRouterKeyInfo(env, await decryptSecret(row.openrouter_api_key_encrypted, env));
+          } catch {
+            availability = null;
+          }
+        }
         return json({
           ok: true,
           aiSettings: {
             hasOpenRouterKey: Boolean(row?.openrouter_api_key_encrypted),
             openRouterModel: row?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL,
             availableModels: OPENROUTER_MODELS,
+            availability,
           },
         });
       }
