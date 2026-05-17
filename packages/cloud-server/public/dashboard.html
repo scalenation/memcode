@@ -233,6 +233,38 @@
     .brain-answer { font-size: 0.84rem; line-height: 1.6; color: var(--text); margin-bottom: 12px; }
     .brain-evidence { display: flex; flex-wrap: wrap; gap: 8px; }
     .brain-evidence-chip { font-size: 0.72rem; border: 1px solid var(--border); border-radius: 999px; padding: 4px 10px; color: var(--text-dim); background: var(--bg); }
+    .brain-workbench { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.95fr); gap: 18px; margin-bottom: 20px; align-items: start; }
+    .brain-preview-card { position: sticky; top: 84px; }
+    .brain-preview-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+    .brain-preview-title { font-size: 1.02rem; font-weight: 700; color: var(--text); }
+    .brain-preview-meta { font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; line-height: 1.45; }
+    .brain-export-actions { justify-content: flex-end; }
+    .brain-preview-empty { font-size: 0.84rem; color: var(--text-dim); min-height: 220px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: rgba(255,255,255,0.015); }
+    .brain-generator-stack { display: flex; flex-direction: column; gap: 14px; }
+    .brain-generator-card { transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease; cursor: pointer; }
+    .brain-generator-card:hover { border-color: rgba(108,99,255,0.26); }
+    .brain-generator-card.active { border-color: rgba(108,99,255,0.42); box-shadow: 0 0 0 1px rgba(108,99,255,0.18); transform: translateY(-1px); }
+    .brain-generator-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+    .brain-generator-copy { font-size: 0.8rem; color: var(--text-dim); line-height: 1.45; }
+    .brain-generator-label { display: block; font-size: 0.76rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); margin-bottom: 8px; }
+    .brain-generator-input { width: 100%; min-height: 104px; resize: vertical; padding: 12px 14px; font-size: 0.88rem; line-height: 1.55; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); outline: none; }
+    .brain-generator-input:focus { border-color: var(--accent); }
+    .brain-generator-meta { font-size: 0.76rem; color: var(--text-dim); margin-top: 8px; line-height: 1.5; }
+    .markdown-preview { display: flex; flex-direction: column; gap: 14px; }
+    .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 0; color: var(--text); }
+    .markdown-preview h1 { font-size: 1.45rem; }
+    .markdown-preview h2 { font-size: 1.16rem; }
+    .markdown-preview h3 { font-size: 0.98rem; }
+    .markdown-preview p { margin: 0; font-size: 0.9rem; color: var(--text-dim); }
+    .markdown-preview ul { margin: 0; padding-left: 20px; color: var(--text-dim); }
+    .markdown-preview li { margin: 6px 0; }
+    .slides-preview-deck { display: flex; flex-direction: column; gap: 18px; }
+    .slide-preview-card { aspect-ratio: 16 / 9; min-height: 280px; border-radius: 22px; border: 1px solid rgba(125,211,252,0.18); background: radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 38%), linear-gradient(145deg, #0f172a 0%, #111827 48%, #172554 100%); padding: 24px 26px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02); }
+    .slide-preview-eyebrow { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(191,219,254,0.86); }
+    .slide-preview-title { font-size: 1.5rem; font-weight: 800; line-height: 1.18; color: #eff6ff; margin: 14px 0 10px; max-width: 85%; }
+    .slide-preview-subtitle { font-size: 0.92rem; color: rgba(191,219,254,0.82); line-height: 1.45; max-width: 78%; }
+    .slide-preview-bullets { margin: 16px 0 0; padding-left: 18px; color: rgba(226,232,240,0.95); display: grid; gap: 10px; font-size: 0.96rem; line-height: 1.45; }
+    .slide-preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.78rem; color: rgba(191,219,254,0.72); }
     .brain-search-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
     .brain-search-wrap { flex: 1; min-width: 240px; display: flex; align-items: center; gap: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 12px; }
     .brain-search-wrap svg { color: var(--text-dim); flex-shrink: 0; }
@@ -272,6 +304,8 @@
       .analytics-span-4, .analytics-span-5, .analytics-span-6, .analytics-span-7, .analytics-span-8, .analytics-span-12 { grid-column: span 1; }
       .analytics-span-12 { grid-column: 1 / -1; }
       .usage-summary-grid { grid-template-columns: 1fr; }
+      .brain-workbench { grid-template-columns: 1fr; }
+      .brain-preview-card { position: static; }
     }
     @media (max-width: 820px) {
       .brain-grid { grid-template-columns: 1fr; }
@@ -279,6 +313,9 @@
       .usage-summary-grid { grid-template-columns: 1fr; }
       .usage-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .notification-stack { right: 14px; left: 14px; width: auto; }
+      .brain-generator-head, .brain-preview-toolbar { flex-direction: column; }
+      .slide-preview-title { max-width: 100%; font-size: 1.28rem; }
+      .slide-preview-subtitle { max-width: 100%; }
     }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
@@ -573,11 +610,6 @@
           </div>
           <div id="brain-summary-content" hidden>
             <div id="brain-summary" class="brain-summary"></div>
-            <div class="brain-actions">
-              <button class="btn btn-secondary btn-sm" data-brain-report="status">Generate status</button>
-              <button class="btn btn-secondary btn-sm" data-brain-report="slides">Generate slides</button>
-              <button class="btn btn-secondary btn-sm" data-brain-report="business-plan">Generate business plan</button>
-            </div>
           </div>
         </div>
 
@@ -596,10 +628,60 @@
         </div>
       </div>
 
-      <div class="card">
-        <p class="card-title">Report</p>
-        <div id="brain-report-empty" style="font-size:0.84rem;color:var(--text-dim)">Generate a status brief, slide outline, or business plan from the current project brain.</div>
-        <pre id="brain-report" class="brain-report" hidden></pre>
+      <div class="brain-workbench">
+        <div class="card brain-preview-card">
+          <div class="brain-preview-toolbar">
+            <div>
+              <p class="card-title">Preview</p>
+              <div id="brain-preview-title" class="brain-preview-title">Summary Preview</div>
+              <div id="brain-preview-meta" class="brain-preview-meta">Generate a summary, slide deck, or business plan to preview it here with export controls.</div>
+            </div>
+            <div id="brain-export-actions" class="brain-actions brain-export-actions"></div>
+          </div>
+          <div id="brain-report-empty" class="brain-preview-empty">Generate a summary, slide deck, or business plan from the current project brain.</div>
+          <div id="brain-report" class="brain-report-preview" hidden></div>
+        </div>
+
+        <div class="brain-generator-stack">
+          <div class="card brain-generator-card active" data-generation-type="status">
+            <div class="brain-generator-head">
+              <div>
+                <p class="card-title">Summary</p>
+                <div class="brain-generator-copy">Generate a markdown status summary focused on execution, blockers, risk, and near-term work.</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-brain-report="status">Generate summary</button>
+            </div>
+            <label class="brain-generator-label" for="brain-prompt-status">Prompt</label>
+            <textarea id="brain-prompt-status" class="brain-generator-input" placeholder="Emphasize blockers, roadmap confidence, release readiness, technical debt, or any other angle for the summary."></textarea>
+            <div class="brain-generator-meta">Exports as markdown, PDF, or DOCX after generation.</div>
+          </div>
+
+          <div class="card brain-generator-card" data-generation-type="slides">
+            <div class="brain-generator-head">
+              <div>
+                <p class="card-title">Slides</p>
+                <div class="brain-generator-copy">Generate a visually structured slide deck with strong narrative flow, evidence, risks, and next steps.</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-brain-report="slides">Generate slides</button>
+            </div>
+            <label class="brain-generator-label" for="brain-prompt-slides">Prompt</label>
+            <textarea id="brain-prompt-slides" class="brain-generator-input" placeholder="Describe the presentation angle: investor pitch, roadmap review, stakeholder update, team kickoff, launch narrative, or executive briefing."></textarea>
+            <div class="brain-generator-meta">Exports as PDF or PPTX, and can upload directly to Google Slides when Google integration is available.</div>
+          </div>
+
+          <div class="card brain-generator-card" data-generation-type="business-plan">
+            <div class="brain-generator-head">
+              <div>
+                <p class="card-title">Business Plan</p>
+                <div class="brain-generator-copy">Generate a deeper markdown plan covering positioning, operating assumptions, monetization, GTM, and the next 90 days.</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" data-brain-report="business-plan">Generate business plan</button>
+            </div>
+            <label class="brain-generator-label" for="brain-prompt-business-plan">Prompt</label>
+            <textarea id="brain-prompt-business-plan" class="brain-generator-input" placeholder="Steer the plan toward fundraising, product strategy, market entry, operational planning, differentiation, or pricing assumptions."></textarea>
+            <div class="brain-generator-meta">Exports as markdown, PDF, or DOCX after generation.</div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -754,6 +836,10 @@
 </div>
 
 <script src="https://js.stripe.com/v3/"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
 <div id="notification-stack" class="notification-stack" aria-live="polite" aria-atomic="false"></div>
 <script src="/js/dashboard.js"></script>
 </body>

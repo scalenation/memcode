@@ -23,10 +23,40 @@ let currentBrainFilter = 'all';
 let openRouterModels = [];
 const BRAIN_FILTER_ORDER = ['all', 'decision', 'bugfix', 'feature', 'discovery'];
 const BRAIN_ANSWER_EMPTY_TEXT = 'Ask a question about the project to see grounded context from the compact brain.';
-const BRAIN_REPORT_EMPTY_TEXT = 'Generate a status brief, slide outline, or business plan from the current project brain.';
+const BRAIN_REPORT_EMPTY_TEXT = 'Generate a summary, slide deck, or business plan from the current project brain.';
 const ACTIVITY_LIMIT = 12;
+const GENERATION_TYPES = {
+  status: {
+    label: 'Summary',
+    promptId: 'brain-prompt-status',
+    exportKind: 'report',
+    empty: 'Generate a summary to preview it here as a markdown document with export options.',
+    previewHint: 'Markdown summary document with PDF and DOCX exports.',
+  },
+  slides: {
+    label: 'Slides',
+    promptId: 'brain-prompt-slides',
+    exportKind: 'slides',
+    empty: 'Generate slides to preview the deck here with PDF, PPTX, and Google Slides options.',
+    previewHint: 'Presentation-style slide deck preview with direct export actions.',
+  },
+  'business-plan': {
+    label: 'Business Plan',
+    promptId: 'brain-prompt-business-plan',
+    exportKind: 'report',
+    empty: 'Generate a business plan to preview it here as a markdown document with export options.',
+    previewHint: 'Long-form markdown business plan with PDF and DOCX exports.',
+  },
+};
 let activityEvents = [];
 let toastCounter = 0;
+let generatedArtifacts = {
+  status: null,
+  slides: null,
+  'business-plan': null,
+};
+let activeGenerationType = 'status';
+let googleSlidesClientId = null;
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
@@ -104,6 +134,7 @@ async function loadProfile() {
   openRouterModels = sortAiModels(profileData.aiSettings?.availableModels ?? []);
   populateAiModelOptions(openRouterModels, profileData.aiSettings?.openRouterModel);
   renderAiSettingsState(profileData.aiSettings ?? null);
+  googleSlidesClientId = profileData.integrations?.googleClientId ?? null;
 
   // Show "Set CLI Password" card for OAuth/checkout accounts that have no password yet
   if (profileData.hasPassword === false) {
@@ -746,7 +777,28 @@ document.getElementById('activity-clear-btn')?.addEventListener('click', () => {
   renderActivityFeed();
 });
 
+document.querySelectorAll('[data-generation-type]').forEach((card) => {
+  card.addEventListener('click', (event) => {
+    if (event.target.closest('button, textarea')) return;
+    setActiveGenerationType(card.dataset.generationType);
+  });
+});
+
+document.querySelectorAll('.brain-generator-input').forEach((input) => {
+  input.addEventListener('focus', () => {
+    const card = input.closest('[data-generation-type]');
+    if (card?.dataset.generationType) setActiveGenerationType(card.dataset.generationType);
+  });
+});
+
+document.getElementById('brain-export-actions')?.addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-export-action]');
+  if (!button) return;
+  await handleGenerationExport(button.dataset.exportAction);
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
+renderGenerationPreview();
 loadProfile();
 
 // ── Overview workspace stats ──────────────────────────────────────────────────
@@ -926,10 +978,8 @@ function resetBrainOutputs() {
   document.getElementById('brain-answer-content').hidden = true;
   document.getElementById('brain-answer').textContent = '';
   document.getElementById('brain-evidence').innerHTML = '';
-  document.getElementById('brain-report-empty').hidden = false;
-  document.getElementById('brain-report-empty').textContent = BRAIN_REPORT_EMPTY_TEXT;
-  document.getElementById('brain-report').hidden = true;
-  document.getElementById('brain-report').textContent = '';
+  generatedArtifacts = { status: null, slides: null, 'business-plan': null };
+  renderGenerationPreview();
 }
 
 function renderBrainEmpty(message) {
@@ -1284,6 +1334,9 @@ async function generateBrainReport(type) {
     return;
   }
 
+  const config = GENERATION_TYPES[type] ?? GENERATION_TYPES.status;
+  const prompt = document.getElementById(config.promptId)?.value?.trim() ?? '';
+  setActiveGenerationType(type);
   const buttons = Array.from(document.querySelectorAll('[data-brain-report]'));
   const activeButton = buttons.find((button) => button.dataset.brainReport === type);
   const reportEmpty = document.getElementById('brain-report-empty');
@@ -1304,27 +1357,35 @@ async function generateBrainReport(type) {
   }
   if (reportOutput) {
     reportOutput.hidden = true;
-    reportOutput.textContent = '';
+    reportOutput.innerHTML = '';
   }
 
   try {
-    const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}/report?type=${encodeURIComponent(type)}`);
+    const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}/report`, {
+      method: 'POST',
+      body: JSON.stringify({ type, prompt }),
+    });
     const body = await res.json();
     if (res.status === 402) throw new Error(proRequiredMessage());
     if (!res.ok) throw new Error(body.error ?? 'Failed to generate report');
-    document.getElementById('brain-report-empty').hidden = true;
-    document.getElementById('brain-report').hidden = false;
-    document.getElementById('brain-report').textContent = body.markdown;
+    generatedArtifacts[type] = {
+      type,
+      label: config.label,
+      projectId: body.projectId ?? projectId,
+      projectName: body.projectName ?? currentBrainProject?.projectName ?? currentBrainPayload?.projectName ?? 'Project',
+      generatedAt: body.generatedAt ?? new Date().toISOString(),
+      markdown: body.markdown,
+      prompt,
+      slides: type === 'slides' ? parseSlidesMarkdown(body.markdown) : null,
+    };
+    renderGenerationPreview();
     finishTask(task, {
       type: 'success',
       title: `${reportLabel} ready`,
       message: `${reportLabel} finished successfully and is ready to review.`,
     });
   } catch (err) {
-    if (reportEmpty) {
-      reportEmpty.hidden = false;
-      reportEmpty.textContent = BRAIN_REPORT_EMPTY_TEXT;
-    }
+    renderGenerationPreview();
     finishTask(task, {
       type: 'error',
       title: `${reportLabel} failed`,
@@ -1335,6 +1396,500 @@ async function generateBrainReport(type) {
       if (btn !== activeButton) btn.disabled = false;
     });
   }
+}
+
+function setActiveGenerationType(type) {
+  if (!GENERATION_TYPES[type]) type = 'status';
+  activeGenerationType = type;
+  document.querySelectorAll('[data-generation-type]').forEach((card) => {
+    card.classList.toggle('active', card.dataset.generationType === type);
+  });
+  renderGenerationPreview();
+}
+
+function renderGenerationPreview() {
+  const config = GENERATION_TYPES[activeGenerationType] ?? GENERATION_TYPES.status;
+  const artifact = generatedArtifacts[activeGenerationType];
+  const titleEl = document.getElementById('brain-preview-title');
+  const metaEl = document.getElementById('brain-preview-meta');
+  const emptyEl = document.getElementById('brain-report-empty');
+  const outputEl = document.getElementById('brain-report');
+  const exportEl = document.getElementById('brain-export-actions');
+
+  if (titleEl) titleEl.textContent = `${config.label} Preview`;
+  if (metaEl) {
+    metaEl.textContent = artifact
+      ? `${config.previewHint} Generated ${timeAgo(artifact.generatedAt)}${artifact.prompt ? ' from your custom prompt.' : '.'}`
+      : config.previewHint;
+  }
+
+  if (!artifact) {
+    if (emptyEl) {
+      emptyEl.hidden = false;
+      emptyEl.textContent = config.empty;
+    }
+    if (outputEl) {
+      outputEl.hidden = true;
+      outputEl.innerHTML = '';
+    }
+    if (exportEl) exportEl.innerHTML = '';
+    return;
+  }
+
+  if (emptyEl) emptyEl.hidden = true;
+  if (outputEl) {
+    outputEl.hidden = false;
+    outputEl.innerHTML = config.exportKind === 'slides'
+      ? renderSlidesPreview(artifact)
+      : renderMarkdownPreview(artifact.markdown);
+  }
+  if (exportEl) exportEl.innerHTML = renderGenerationExportActions(config);
+}
+
+function renderGenerationExportActions(config) {
+  if (config.exportKind === 'slides') {
+    return [
+      '<button class="btn btn-secondary btn-sm" data-export-action="slides-google">Upload to Google Slides</button>',
+      '<button class="btn btn-secondary btn-sm" data-export-action="slides-pdf">Download PDF</button>',
+      '<button class="btn btn-secondary btn-sm" data-export-action="slides-pptx">Download PPTX</button>',
+    ].join('');
+  }
+
+  return [
+    '<button class="btn btn-secondary btn-sm" data-export-action="report-md">Download MD</button>',
+    '<button class="btn btn-secondary btn-sm" data-export-action="report-docx">Download DOCX</button>',
+    '<button class="btn btn-secondary btn-sm" data-export-action="report-pdf">Download PDF</button>',
+  ].join('');
+}
+
+function renderMarkdownPreview(markdown) {
+  const blocks = parseMarkdownBlocks(markdown);
+  return `<article class="markdown-preview">${blocks.map(renderMarkdownBlock).join('')}</article>`;
+}
+
+function renderMarkdownBlock(block) {
+  if (block.type === 'heading') {
+    const level = Math.min(Math.max(block.level, 1), 3);
+    return `<h${level}>${esc(block.text)}</h${level}>`;
+  }
+  if (block.type === 'list') {
+    return `<ul>${block.items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+  }
+  return `<p>${esc(block.text)}</p>`;
+}
+
+function parseMarkdownBlocks(markdown) {
+  const blocks = [];
+  const lines = String(markdown || '').replace(/\r/g, '').split('\n');
+  let paragraph = [];
+  let listItems = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length > 0) {
+      blocks.push({ type: 'paragraph', text: paragraph.join(' ') });
+      paragraph = [];
+    }
+  };
+  const flushList = () => {
+    if (listItems.length > 0) {
+      blocks.push({ type: 'list', items: [...listItems] });
+      listItems = [];
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: 'heading', level: headingMatch[1].length, text: headingMatch[2].trim() });
+      continue;
+    }
+
+    const listMatch = line.match(/^[-*+]\s+(.*)$/);
+    if (listMatch) {
+      flushParagraph();
+      listItems.push(listMatch[1].trim());
+      continue;
+    }
+
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+  return blocks;
+}
+
+function parseSlidesMarkdown(markdown) {
+  const blocks = parseMarkdownBlocks(markdown);
+  const slides = [];
+  let current = null;
+
+  const ensureSlide = () => {
+    if (!current) current = { title: 'Overview', subtitle: '', bullets: [] };
+    return current;
+  };
+  const pushCurrent = () => {
+    if (!current) return;
+    slides.push({
+      title: current.title || 'Untitled slide',
+      subtitle: current.subtitle || '',
+      bullets: current.bullets.filter(Boolean).slice(0, 6),
+    });
+    current = null;
+  };
+
+  for (const block of blocks) {
+    if (block.type === 'heading') {
+      pushCurrent();
+      current = { title: block.text, subtitle: '', bullets: [] };
+      continue;
+    }
+
+    const slide = ensureSlide();
+    if (block.type === 'paragraph') {
+      if (!slide.subtitle) slide.subtitle = block.text;
+      else slide.bullets.push(block.text);
+      continue;
+    }
+
+    if (block.type === 'list') {
+      slide.bullets.push(...block.items);
+    }
+  }
+
+  pushCurrent();
+  return slides.length > 0 ? slides : [{ title: 'Overview', subtitle: '', bullets: ['No slide content generated yet.'] }];
+}
+
+function renderSlidesPreview(artifact) {
+  const slides = artifact.slides ?? parseSlidesMarkdown(artifact.markdown);
+  return `<div class="slides-preview-deck">${slides.map((slide, index) => `
+    <section class="slide-preview-card">
+      <div>
+        <div class="slide-preview-eyebrow">Slide ${index + 1}</div>
+        <div class="slide-preview-title">${esc(slide.title)}</div>
+        ${slide.subtitle ? `<div class="slide-preview-subtitle">${esc(slide.subtitle)}</div>` : ''}
+        ${slide.bullets.length > 0 ? `<ul class="slide-preview-bullets">${slide.bullets.map((bullet) => `<li>${esc(bullet)}</li>`).join('')}</ul>` : ''}
+      </div>
+      <div class="slide-preview-footer">
+        <span>${esc(artifact.projectName || 'Project deck')}</span>
+        <span>${esc(GENERATION_TYPES.slides.label)}</span>
+      </div>
+    </section>`).join('')}</div>`;
+}
+
+async function handleGenerationExport(action) {
+  const artifact = generatedArtifacts[activeGenerationType];
+  if (!artifact) {
+    showNotice('Generate content first before exporting it.', 'error');
+    return;
+  }
+
+  const task = startTask({
+    title: 'Preparing export',
+    message: `Preparing ${GENERATION_TYPES[activeGenerationType].label.toLowerCase()} export in the background.`,
+  });
+
+  try {
+    if (action === 'report-md') await downloadReportMarkdown(artifact);
+    if (action === 'report-docx') await downloadReportDocx(artifact);
+    if (action === 'report-pdf') await downloadReportPdf(artifact);
+    if (action === 'slides-pptx') await downloadSlidesPptx(artifact);
+    if (action === 'slides-pdf') await downloadSlidesPdf(artifact);
+    if (action === 'slides-google') await uploadSlidesToGoogle(artifact);
+
+    finishTask(task, {
+      type: 'success',
+      title: 'Export ready',
+      message: action === 'slides-google'
+        ? 'Slide deck uploaded to Google Slides successfully.'
+        : 'Your export has been prepared and downloaded.',
+    });
+  } catch (error) {
+    finishTask(task, {
+      type: 'error',
+      title: 'Export failed',
+      message: error?.message ?? 'Failed to export generated content.',
+    });
+  }
+}
+
+async function downloadReportMarkdown(artifact) {
+  const blob = new Blob([artifact.markdown], { type: 'text/markdown;charset=utf-8' });
+  downloadBlob(blob, `${artifactFileBase(artifact)}.md`);
+}
+
+async function downloadReportDocx(artifact) {
+  const docxLib = window.docx;
+  if (!docxLib?.Document || !docxLib?.Packer) {
+    throw new Error('DOCX export is not available because the document library did not load.');
+  }
+
+  const blocks = parseMarkdownBlocks(artifact.markdown);
+  const children = [
+    new docxLib.Paragraph({ text: artifact.label || 'Generated document', heading: docxLib.HeadingLevel.TITLE }),
+  ];
+
+  for (const block of blocks) {
+    if (block.type === 'heading') {
+      children.push(new docxLib.Paragraph({
+        text: block.text,
+        heading: block.level === 1 ? docxLib.HeadingLevel.HEADING_1 : block.level === 2 ? docxLib.HeadingLevel.HEADING_2 : docxLib.HeadingLevel.HEADING_3,
+      }));
+      continue;
+    }
+    if (block.type === 'list') {
+      block.items.forEach((item) => {
+        children.push(new docxLib.Paragraph({ text: item, bullet: { level: 0 } }));
+      });
+      continue;
+    }
+    children.push(new docxLib.Paragraph({ text: block.text }));
+  }
+
+  const doc = new docxLib.Document({ sections: [{ children }] });
+  const blob = await docxLib.Packer.toBlob(doc);
+  downloadBlob(blob, `${artifactFileBase(artifact)}.docx`);
+}
+
+async function downloadReportPdf(artifact) {
+  const jsPDF = window.jspdf?.jsPDF;
+  if (!jsPDF) throw new Error('PDF export is not available because the PDF library did not load.');
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const maxWidth = pageWidth - 96;
+  let y = 54;
+
+  const ensureRoom = (needed) => {
+    if (y + needed <= pageHeight - 48) return;
+    pdf.addPage();
+    y = 54;
+  };
+
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(18);
+  pdf.text(artifact.label || 'Generated document', 48, y);
+  y += 28;
+
+  for (const block of parseMarkdownBlocks(artifact.markdown)) {
+    if (block.type === 'heading') {
+      const fontSize = block.level === 1 ? 18 : block.level === 2 ? 15 : 13;
+      ensureRoom(fontSize + 16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(fontSize);
+      pdf.text(block.text, 48, y);
+      y += fontSize + 10;
+      continue;
+    }
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(11);
+    const lines = block.type === 'list'
+      ? block.items.flatMap((item) => pdf.splitTextToSize(`• ${item}`, maxWidth - 16))
+      : pdf.splitTextToSize(block.text, maxWidth);
+    ensureRoom(lines.length * 15 + 12);
+    pdf.text(lines, 48, y);
+    y += lines.length * 15 + 10;
+  }
+
+  pdf.save(`${artifactFileBase(artifact)}.pdf`);
+}
+
+async function downloadSlidesPptx(artifact) {
+  const PptxGenJS = window.PptxGenJS;
+  if (!PptxGenJS) throw new Error('PPTX export is not available because the slide library did not load.');
+  const deck = artifact.slides ?? parseSlidesMarkdown(artifact.markdown);
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE';
+  pptx.author = 'MemCode';
+  pptx.subject = artifact.label || 'Slide deck';
+  pptx.company = 'MemCode';
+
+  deck.forEach((slideData, index) => {
+    const slide = pptx.addSlide();
+    slide.background = { color: '0F172A' };
+    slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 7.5, fill: { color: '0F172A' }, line: { color: '0F172A' } });
+    slide.addShape(pptx.ShapeType.roundRect, { x: 0.48, y: 0.46, w: 12.37, h: 6.48, rectRadius: 0.14, fill: { color: '111827', transparency: 4 }, line: { color: '25324A', transparency: 12 } });
+    slide.addText(`Slide ${index + 1}`, { x: 0.76, y: 0.54, w: 1.4, h: 0.3, fontSize: 10, color: '93C5FD', bold: true, charSpace: 1.1 });
+    slide.addText(slideData.title, { x: 0.76, y: 1.02, w: 11.3, h: 0.82, fontSize: 24, color: 'FFFFFF', bold: true, fit: 'shrink' });
+    if (slideData.subtitle) {
+      slide.addText(slideData.subtitle, { x: 0.76, y: 1.88, w: 10.7, h: 0.56, fontSize: 12, color: 'BFDBFE', fit: 'shrink' });
+    }
+    const bulletText = (slideData.bullets ?? []).map((bullet) => `• ${bullet}`).join('\n');
+    if (bulletText) {
+      slide.addText(bulletText, { x: 0.96, y: 2.66, w: 11.2, h: 2.98, fontSize: 18, color: 'E2E8F0', breakLine: false, valign: 'top', fit: 'shrink' });
+    }
+    slide.addText(artifact.projectName || 'MemCode', { x: 10.6, y: 6.6, w: 1.8, h: 0.2, fontSize: 10, color: '93C5FD', align: 'right' });
+  });
+
+  await pptx.writeFile({ fileName: `${artifactFileBase(artifact)}.pptx` });
+}
+
+async function downloadSlidesPdf(artifact) {
+  const jsPDF = window.jspdf?.jsPDF;
+  if (!jsPDF) throw new Error('PDF export is not available because the PDF library did not load.');
+  const slides = artifact.slides ?? parseSlidesMarkdown(artifact.markdown);
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+
+  slides.forEach((slide, index) => {
+    if (index > 0) pdf.addPage();
+    pdf.setFillColor(15, 23, 42);
+    pdf.rect(0, 0, pageWidth, pageHeight, 'F');
+    pdf.setFillColor(17, 24, 39);
+    pdf.roundedRect(26, 24, pageWidth - 52, pageHeight - 48, 18, 18, 'F');
+    pdf.setTextColor(147, 197, 253);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(10);
+    pdf.text(`Slide ${index + 1}`, 44, 44);
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(24);
+    pdf.text(pdf.splitTextToSize(slide.title, pageWidth - 120), 44, 88);
+    let y = 130;
+    if (slide.subtitle) {
+      pdf.setTextColor(191, 219, 254);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(12);
+      const subtitleLines = pdf.splitTextToSize(slide.subtitle, pageWidth - 140);
+      pdf.text(subtitleLines, 44, y);
+      y += subtitleLines.length * 15 + 18;
+    }
+    pdf.setTextColor(226, 232, 240);
+    pdf.setFontSize(16);
+    (slide.bullets ?? []).forEach((bullet) => {
+      const lines = pdf.splitTextToSize(`• ${bullet}`, pageWidth - 150);
+      pdf.text(lines, 58, y);
+      y += lines.length * 19 + 8;
+    });
+    pdf.setTextColor(147, 197, 253);
+    pdf.setFontSize(10);
+    pdf.text(artifact.projectName || 'MemCode', pageWidth - 44, pageHeight - 32, { align: 'right' });
+  });
+
+  pdf.save(`${artifactFileBase(artifact)}.pdf`);
+}
+
+async function uploadSlidesToGoogle(artifact) {
+  if (!googleSlidesClientId) {
+    throw new Error('Google Slides upload is not configured for this deployment.');
+  }
+  if (!window.google?.accounts?.oauth2) {
+    throw new Error('Google identity services did not load. Refresh the page and try again.');
+  }
+
+  const accessToken = await requestGoogleSlidesAccessToken();
+  const slides = artifact.slides ?? parseSlidesMarkdown(artifact.markdown);
+
+  const createResponse = await fetch('https://slides.googleapis.com/v1/presentations', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ title: artifactExportTitle(artifact) }),
+  });
+  const presentation = await createResponse.json();
+  if (!createResponse.ok) {
+    throw new Error(presentation.error?.message ?? 'Failed to create Google Slides presentation.');
+  }
+
+  const requests = [];
+  const defaultSlideId = presentation.slides?.[0]?.objectId;
+  if (defaultSlideId) {
+    requests.push({ deleteObject: { objectId: defaultSlideId } });
+  }
+
+  slides.forEach((slide, index) => {
+    const slideId = `slide_${index}`;
+    const titleId = `slide_${index}_title`;
+    const bodyId = `slide_${index}_body`;
+    const bodyText = [slide.subtitle, ...(slide.bullets ?? []).map((bullet) => `• ${bullet}`)].filter(Boolean).join('\n');
+
+    requests.push({
+      createSlide: {
+        objectId: slideId,
+        insertionIndex: index,
+        slideLayoutReference: { predefinedLayout: 'TITLE_AND_BODY' },
+        placeholderIdMappings: [
+          { layoutPlaceholder: { type: 'TITLE', index: 0 }, objectId: titleId },
+          { layoutPlaceholder: { type: 'BODY', index: 0 }, objectId: bodyId },
+        ],
+      },
+    });
+    requests.push({ insertText: { objectId: titleId, insertionIndex: 0, text: slide.title } });
+    requests.push({ insertText: { objectId: bodyId, insertionIndex: 0, text: bodyText || ' ' } });
+  });
+
+  const batchRes = await fetch(`https://slides.googleapis.com/v1/presentations/${presentation.presentationId}:batchUpdate`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ requests }),
+  });
+  const batchBody = await batchRes.json();
+  if (!batchRes.ok) {
+    throw new Error(batchBody.error?.message ?? 'Failed to populate Google Slides presentation.');
+  }
+
+  window.open(`https://docs.google.com/presentation/d/${presentation.presentationId}/edit`, '_blank', 'noopener');
+}
+
+function requestGoogleSlidesAccessToken() {
+  return new Promise((resolve, reject) => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: googleSlidesClientId,
+      scope: 'https://www.googleapis.com/auth/presentations https://www.googleapis.com/auth/drive.file',
+      prompt: 'consent',
+      callback: (response) => {
+        if (response?.error) {
+          reject(new Error(response.error_description || response.error));
+          return;
+        }
+        resolve(response.access_token);
+      },
+    });
+    client.requestAccessToken();
+  });
+}
+
+function artifactFileBase(artifact) {
+  return sanitizeFileName(`${artifact.projectName || 'memcode'}-${artifact.type}`);
+}
+
+function artifactExportTitle(artifact) {
+  return `${artifact.projectName || 'MemCode'} ${artifact.label || artifact.type}`;
+}
+
+function sanitizeFileName(value) {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'memcode-export';
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function renderWorkspaces(workspaces) {

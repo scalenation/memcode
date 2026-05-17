@@ -191,6 +191,9 @@ export default {
             availableModels,
             availability: aiAvailability,
           },
+          integrations: {
+            googleClientId: env.GOOGLE_CLIENT_ID ?? null,
+          },
         });
       }
 
@@ -724,10 +727,12 @@ export default {
         return json(await generateBrainAnswer(env, db, user.sub, row.brain, q, row.projectName, row.projectId));
       }
 
-      if (request.method === 'GET' && brainProjectReportMatch) {
+      if ((request.method === 'GET' || request.method === 'POST') && brainProjectReportMatch) {
         const user = await authenticateRequest(request, env, db);
         await requireActiveSubscription(user.sub, db);
-        const type = url.searchParams.get('type') ?? 'status';
+        const body = request.method === 'POST' ? await readJson(request) : null;
+        const type = request.method === 'POST' ? (body?.type ?? 'status') : (url.searchParams.get('type') ?? 'status');
+        const prompt = request.method === 'POST' ? (typeof body?.prompt === 'string' ? body.prompt : '') : (url.searchParams.get('prompt') ?? '');
         const row = await latestProjectBrainRow(db, user.sub, brainProjectReportMatch[1]);
         if (!row) throw new HttpError(404, { error: 'Project brain not found' });
         return json({
@@ -735,7 +740,7 @@ export default {
           projectName: row.projectName,
           type,
           generatedAt: new Date().toISOString(),
-          markdown: await generateBrainReport(env, db, user.sub, row.brain, type, row.projectName, row.projectId),
+          markdown: await generateBrainReport(env, db, user.sub, row.brain, type, row.projectName, row.projectId, prompt),
         });
       }
 
@@ -757,17 +762,19 @@ export default {
         return json(await generateBrainAnswer(env, db, user.sub, row.brain, q, row.workspaceId));
       }
 
-      if (request.method === 'GET' && brainWorkspaceReportMatch) {
+      if ((request.method === 'GET' || request.method === 'POST') && brainWorkspaceReportMatch) {
         const user = await authenticateRequest(request, env, db);
         await requireActiveSubscription(user.sub, db);
-        const type = url.searchParams.get('type') ?? 'status';
+        const body = request.method === 'POST' ? await readJson(request) : null;
+        const type = request.method === 'POST' ? (body?.type ?? 'status') : (url.searchParams.get('type') ?? 'status');
+        const prompt = request.method === 'POST' ? (typeof body?.prompt === 'string' ? body.prompt : '') : (url.searchParams.get('prompt') ?? '');
         const row = await latestBrainRow(db, user.sub, brainWorkspaceReportMatch[1]);
         if (!row) throw new HttpError(404, { error: 'Project brain not found' });
         return json({
           workspaceId: row.workspaceId,
           type,
           generatedAt: new Date().toISOString(),
-          markdown: await generateBrainReport(env, db, user.sub, row.brain, type, row.workspaceId),
+          markdown: await generateBrainReport(env, db, user.sub, row.brain, type, row.workspaceId, null, prompt),
         });
       }
 

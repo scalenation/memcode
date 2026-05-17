@@ -119,8 +119,9 @@ export async function generateBrainAnswer(env, db, userId, brain, question, proj
   }
 }
 
-export async function generateBrainReport(env, db, userId, brain, type, projectName, projectId = null) {
-  const fallback = renderReport(brain, type);
+export async function generateBrainReport(env, db, userId, brain, type, projectName, projectId = null, customPrompt = '') {
+  const normalizedPrompt = normalizeGenerationPrompt(customPrompt);
+  const fallback = renderReport(brain, type, normalizedPrompt);
   const settings = await loadUserAiSettings(db, env, userId);
   if (!settings.apiKey) return fallback;
 
@@ -135,6 +136,7 @@ export async function generateBrainReport(env, db, userId, brain, type, projectN
         `Project: ${projectName}`,
         `Requested report type: ${type}`,
         `Research goal: ${reportSpec.researchGoal}`,
+        normalizedPrompt ? `Additional user direction: ${normalizedPrompt}` : null,
         '',
         'Produce markdown research notes with these headings exactly:',
         '- Facts',
@@ -154,6 +156,7 @@ export async function generateBrainReport(env, db, userId, brain, type, projectN
       userPrompt: [
         `Project: ${projectName}`,
         `Requested report type: ${type}`,
+        normalizedPrompt ? `Additional user direction: ${normalizedPrompt}` : null,
         '',
         reportSpec.outputPrompt,
         '',
@@ -175,7 +178,7 @@ export async function generateBrainReport(env, db, userId, brain, type, projectN
       model: result.model,
       usage: mergeOpenRouterUsage(research.usage, result.usage),
       responseMs: Date.now() - startedAt,
-      metadata: { reportType: type, researchPass: true },
+      metadata: { reportType: type, researchPass: true, customPrompt: Boolean(normalizedPrompt) },
     });
     return result.text;
   } catch {
@@ -423,10 +426,12 @@ function answerFromBrain(brain, question) {
   return { answer: answerParts.join(' '), evidence };
 }
 
-function renderReport(brain, type) {
+function renderReport(brain, type, customPrompt = '') {
+  const promptSection = customPrompt ? ['', '## Requested emphasis', customPrompt, ''] : [];
   if (type === 'slides') {
     return [
       `# ${brain.workspaceId} Slide Outline`,
+      ...promptSection,
       '',
       '## 1. Executive Summary',
       `- ${brain.summary}`,
@@ -444,6 +449,7 @@ function renderReport(brain, type) {
   if (type === 'business-plan') {
     return [
       '# Business Plan Draft',
+      ...promptSection,
       '',
       '## Executive Summary',
       brain.summary,
@@ -460,6 +466,7 @@ function renderReport(brain, type) {
   }
   return [
     '# Project Status',
+    ...promptSection,
     '',
     '## Summary',
     brain.summary,
@@ -899,11 +906,12 @@ function reportPromptFor(type) {
   if (type === 'slides') {
     return {
       researchGoal: 'Identify the strongest narrative arc, concrete milestones, risks, and next steps for a presentation deck.',
-      systemPrompt: 'You write crisp markdown slide outlines for software projects. Use only the provided research notes and project brain context. Keep each slide focused, concrete, and presentation-ready. Do not invent customer traction, financials, or delivery dates.',
+      systemPrompt: 'You write crisp markdown slide decks for software projects. Use only the provided research notes and project brain context. Keep each slide focused, concrete, and presentation-ready. Do not invent customer traction, financials, or delivery dates.',
       outputPrompt: [
         'Return markdown only.',
         'Write 8-10 slides.',
-        'Each slide must have a title and 3-5 bullets.',
+        'Format the deck so each slide begins with a markdown heading line starting with # followed by the slide title.',
+        'Under each slide heading, include an optional short paragraph subtitle and then 3-5 bullet points.',
         'Include slides for problem, product, evidence, roadmap, risks, and immediate next steps.',
         'Mark any inferred point explicitly as an inference.',
       ].join(' '),
@@ -944,6 +952,11 @@ function mergeOpenRouterUsage(left, right) {
     totalTokens: (left?.totalTokens ?? 0) + (right?.totalTokens ?? 0),
     creditsUsed: (left?.creditsUsed ?? 0) + (right?.creditsUsed ?? 0),
   };
+}
+
+function normalizeGenerationPrompt(prompt) {
+  if (typeof prompt !== 'string') return '';
+  return prompt.trim().slice(0, 4000);
 }
 
 function normalizeMeta(meta) {
