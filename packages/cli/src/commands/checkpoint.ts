@@ -1,8 +1,6 @@
 import { Command } from 'commander';
-import { createCheckpoint } from '@memcode/core';
+import { createCheckpoint, writeAgentContextFiles } from '@memcode/core';
 import { resolveProject, fmtDate } from '../util';
-import { hasMemcodeSection } from './copilot';
-import { refreshConfiguredAssistantContext } from '../assistant-context';
 import pc from 'picocolors';
 
 export const checkpointCommand = new Command('checkpoint')
@@ -37,13 +35,13 @@ export const checkpointCommand = new Command('checkpoint')
       console.log(`  Summary : ${cp.summary_short}`);
       console.log(`  At      : ${fmtDate(cp.created_at)}`);
 
-      // Auto-refresh all configured AI assistant context files
-      if (hasMemcodeSection(projectPath)) {
-        try {
-          refreshConfiguredAssistantContext(db, workspace, projectPath);
-          console.log(pc.dim('  ↳ Refreshed AI assistant context'));
-        } catch { /* non-fatal */ }
-      }
+      // Auto-refresh all agent context files with enriched context
+      try {
+        const result = writeAgentContextFiles(db, workspace.id, projectPath);
+        if (result.written.length > 0) {
+          console.log(pc.dim(`  ↳ Context refreshed → ${result.written.join(', ')}`));
+        }
+      } catch { /* non-fatal */ }
     } catch (err: unknown) {
       console.error(pc.red('Error creating checkpoint:'), err instanceof Error ? err.message : String(err));
       process.exit(1);

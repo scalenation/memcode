@@ -40,6 +40,9 @@ const COMMAND_LOADERS: Record<string, CommandLoader> = {
   assume: async () => (await import('./commands/assume')).assumeCommand,
   index: async () => (await import('./commands/index-cmd')).indexCommand,
   eval: async () => (await import('./commands/eval')).evalCommand,
+  // ── Auto-context ─────────────────────────────────────────────────────────────
+  watch: async () => (await import('./commands/watch')).watchCommand,
+  context: async () => (await import('./commands/context')).contextCommand,
 };
 
 program

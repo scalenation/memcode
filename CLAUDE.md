@@ -13,20 +13,20 @@
 - Use `memory task add --title "<task>"` to track new work items.
 - Use `memory decision add --title "<decision>" --rationale "<why>"` to record architectural choices.
 # Project Memory Context — MemCode
-> Generated 2026-05-17T14:34:59.846Z
+> Generated 2026-05-17T15:34:00.767Z
 
 ## Current State
 - **Branch**: `master`
-- **Commit**: `6ea7531dd15f`
-- **Last checkpoint**: Committed: "feat(dashboard): add generation studio and exports" on master
+- **Commit**: `9c90e1af5c7b`
+- **Last checkpoint**: Committed: "feat(orchestration): add run engine, assumptions, repo index, model rout" on master
 
 ## Key Decisions
 - **Use MemCode locally first**: Fast onboarding and no cloud dependency
 
 ## Recent Activity
+- 5/17/2026 `[post-commit]` Committed: "feat(orchestration): add run engine, assumptions, repo index, model rout" on master
+- 5/17/2026 `[pre-commit]` Pre-commit: 21 files staged on master
 - 5/17/2026 `[post-commit]` Committed: "feat(dashboard): add generation studio and exports" on master
 - 5/17/2026 `[pre-commit]` Pre-commit: 10 files staged on master
-- 5/17/2026 `[post-commit]` Committed: "feat(dashboard): add live activity feedback" on master
-- 5/17/2026 `[pre-commit]` Pre-commit: 8 files staged on master
 
 <!-- memcode:end -->

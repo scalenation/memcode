@@ -364,6 +364,22 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
       CLI
     </button>
+    <button class="nav-item" data-section="runs">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Runs
+    </button>
+    <button class="nav-item" data-section="assumptions">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Assumptions
+    </button>
+    <button class="nav-item" data-section="repo-index">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M14 2v4"/><path d="M14 10v4"/><path d="M14 18v4"/></svg>
+      Repo Index
+    </button>
+    <button class="nav-item" data-section="evals">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      Evals
+    </button>
     <div class="sidebar-spacer"></div>
     <hr class="sidebar-divider" />
     <button class="nav-item" id="signout-sidebar">
@@ -832,6 +848,99 @@
         </p>
       </div>
     </section>
+
+    <!-- ── Runs ─────────────────────────────────────────────────────── -->
+    <section id="section-runs" class="section">
+      <h1 class="section-title">Runs</h1>
+      <p class="section-subtitle">Orchestrated agent runs — plan, approve, execute, rollback.</p>
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <strong>Recent runs</strong>
+          <select id="runs-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>
+        </div>
+        <div id="runs-list">
+          <p style="color:var(--text-dim);font-size:0.85rem">Select a workspace above to see its runs.</p>
+        </div>
+      </div>
+      <div id="run-detail" hidden>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <button id="run-detail-back" class="btn btn-secondary" style="font-size:0.78rem">← Back</button>
+            <h2 id="run-detail-title" style="margin:0;font-size:1rem"></h2>
+            <span id="run-detail-status" class="badge"></span>
+          </div>
+          <div id="run-detail-meta" style="font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
+
+          <div style="margin-bottom:12px">
+            <strong style="font-size:0.85rem">Plan options</strong>
+            <div id="run-plan-options" style="margin-top:8px"></div>
+          </div>
+
+          <div>
+            <strong style="font-size:0.85rem">Steps</strong>
+            <div id="run-steps-list" style="margin-top:8px"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Assumptions ──────────────────────────────────────────────── -->
+    <section id="section-assumptions" class="section">
+      <h1 class="section-title">Assumptions</h1>
+      <p class="section-subtitle">Active knowledge the agent has learned about your codebase.</p>
+      <div class="card" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <strong>Assumptions</strong>
+          <select id="assumptions-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>
+        </div>
+        <div id="assumptions-list">
+          <p style="color:var(--text-dim);font-size:0.85rem">Select a workspace above.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Repo Index ────────────────────────────────────────────────── -->
+    <section id="section-repo-index" class="section">
+      <h1 class="section-title">Repo Index</h1>
+      <p class="section-subtitle">Auto-maintained catalog of components, endpoints, tests and conventions.</p>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <select id="index-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>
+          <select id="index-kind-filter" class="input" style="width:140px;font-size:0.8rem">
+            <option value="">All kinds</option>
+            <option value="component">component</option>
+            <option value="endpoint">endpoint</option>
+            <option value="test">test</option>
+            <option value="convention">convention</option>
+            <option value="module">module</option>
+            <option value="schema">schema</option>
+          </select>
+        </div>
+        <div id="index-list">
+          <p style="color:var(--text-dim);font-size:0.85rem">Select a workspace above.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Evals ─────────────────────────────────────────────────────── -->
+    <section id="section-evals" class="section">
+      <h1 class="section-title">Evals</h1>
+      <p class="section-subtitle">Benchmark tasks and pass-rate tracking across agent versions.</p>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <strong>Eval tasks</strong>
+          <select id="evals-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>
+        </div>
+        <div id="evals-task-list">
+          <p style="color:var(--text-dim);font-size:0.85rem">Select a workspace above.</p>
+        </div>
+        <div id="evals-results-section" hidden style="margin-top:16px">
+          <strong style="font-size:0.85rem">Results for: <span id="evals-task-label"></span></strong>
+          <div id="evals-results-list" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 

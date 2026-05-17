@@ -41,6 +41,14 @@ export type {
 export { isEnabled, requireFeature, ProFeatureError } from './feature-gate';
 export type { FeatureFlag } from './feature-gate';
 
+// ── Agent context writer ───────────────────────────────────────────────────────
+export {
+  buildAgentContextBlock,
+  writeAgentContextFiles,
+  clearAgentContextFiles,
+} from './agent-context';
+export type { AgentContextResult } from './agent-context';
+
 // ── Orchestration ──────────────────────────────────────────────────────────────
 export {
   createRun,
