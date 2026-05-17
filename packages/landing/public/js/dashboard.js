@@ -22,6 +22,11 @@ let currentBrainProject = null;
 let currentBrainFilter = 'all';
 let openRouterModels = [];
 const BRAIN_FILTER_ORDER = ['all', 'decision', 'bugfix', 'feature', 'discovery'];
+const BRAIN_ANSWER_EMPTY_TEXT = 'Ask a question about the project to see grounded context from the compact brain.';
+const BRAIN_REPORT_EMPTY_TEXT = 'Generate a status brief, slide outline, or business plan from the current project brain.';
+const ACTIVITY_LIMIT = 12;
+let activityEvents = [];
+let toastCounter = 0;
 
 // ── Auth fetch ────────────────────────────────────────────────────────────────
 async function authFetch(path, opts = {}) {
@@ -572,14 +577,174 @@ function statusBadge(status) {
 function setMsg(el, msg, type) {
   el.textContent = msg;
   el.className = 'form-msg' + (type ? ` ${type}` : '');
+  if (msg && type) {
+    showNotice(msg, type === 'error' ? 'error' : 'success', {
+      title: type === 'error' ? 'Action failed' : 'Action completed',
+      duration: type === 'error' ? 7000 : 4500,
+    });
+  }
 }
-function showNotice(msg, type) {
+function showNotice(msg, type = 'info', options = {}) {
+  const {
+    title = defaultNoticeTitle(type),
+    duration = type === 'error' ? 7000 : 5000,
+    persist = type === 'loading',
+    skipToast = false,
+    skipFeed = false,
+    skipBanner = false,
+  } = options;
   const el = document.getElementById('global-notice');
-  el.textContent = msg;
-  el.className = `notice-bar ${type} visible`;
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.classList.remove('visible'); }, 5000);
+  if (!skipBanner && el) {
+    el.innerHTML = renderNoticeMarkup({ title, message: msg, type });
+    el.className = `notice-bar ${type} visible`;
+    clearTimeout(el._t);
+    if (!persist && duration > 0) {
+      el._t = setTimeout(() => { el.classList.remove('visible'); }, duration);
+    }
+  }
+  if (!skipFeed) {
+    recordActivity({ title, message: msg, type });
+  }
+  if (!skipToast) {
+    return createToast({ title, message: msg, type, duration: persist ? 0 : duration });
+  }
+  return null;
 }
+
+function defaultNoticeTitle(type) {
+  if (type === 'error') return 'Something failed';
+  if (type === 'success') return 'Completed';
+  if (type === 'loading') return 'Working';
+  return 'Notice';
+}
+
+function renderNoticeMarkup({ title, message, type }) {
+  return `
+    ${renderStatusGlyph(type)}
+    <div class="notice-copy">
+      <div class="notice-title">${esc(title)}</div>
+      <div class="notice-message">${esc(message)}</div>
+    </div>`;
+}
+
+function renderStatusGlyph(type) {
+  if (type === 'loading') return '<span class="spinner" aria-hidden="true"></span>';
+  return '<span class="status-dot-solid" aria-hidden="true"></span>';
+}
+
+function createToast({ title, message, type, duration }) {
+  const stack = document.getElementById('notification-stack');
+  if (!stack) return null;
+
+  const id = `toast-${++toastCounter}`;
+  const toast = document.createElement('div');
+  toast.className = `notification-toast ${type}`;
+  toast.dataset.toastId = id;
+  toast.innerHTML = `
+    <div class="notification-toast-header">
+      ${renderStatusGlyph(type)}
+      <div class="notification-toast-copy">
+        <div class="notification-toast-title">${esc(title)}</div>
+        <div class="notification-toast-message">${esc(message)}</div>
+      </div>
+    </div>`;
+  stack.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('visible'));
+
+  if (duration > 0) {
+    toast._dismissTimer = setTimeout(() => dismissToast(id), duration);
+  }
+  return id;
+}
+
+function dismissToast(id) {
+  const toast = document.querySelector(`[data-toast-id="${id}"]`);
+  if (!toast) return;
+  clearTimeout(toast._dismissTimer);
+  toast.classList.remove('visible');
+  setTimeout(() => toast.remove(), 180);
+}
+
+function recordActivity(event) {
+  activityEvents.unshift({
+    id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    title: event.title,
+    message: event.message,
+    type: event.type,
+    createdAt: Date.now(),
+  });
+  activityEvents = activityEvents.slice(0, ACTIVITY_LIMIT);
+  renderActivityFeed();
+}
+
+function renderActivityFeed() {
+  const panel = document.getElementById('activity-feed');
+  const list = document.getElementById('activity-feed-list');
+  if (!panel || !list) return;
+
+  if (activityEvents.length === 0) {
+    panel.hidden = true;
+    panel.classList.remove('visible');
+    list.innerHTML = '<div class="activity-feed-empty">No activity yet.</div>';
+    return;
+  }
+
+  panel.hidden = false;
+  panel.classList.add('visible');
+  list.innerHTML = activityEvents.map((event) => `
+    <div class="activity-feed-item ${esc(event.type)}">
+      ${renderStatusGlyph(event.type)}
+      <div class="activity-feed-body">
+        <div class="activity-feed-item-title">${esc(event.title)}</div>
+        <div class="activity-feed-item-message">${esc(event.message)}</div>
+      </div>
+      <div class="activity-feed-item-time">${esc(formatActivityTime(event.createdAt))}</div>
+    </div>`).join('');
+}
+
+function formatActivityTime(timestamp) {
+  const diff = Date.now() - timestamp;
+  if (diff < 15000) return 'just now';
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  return new Date(timestamp).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+
+function setButtonBusy(button, busyLabel) {
+  if (!button) return;
+  if (!button.dataset.idleHtml) button.dataset.idleHtml = button.innerHTML;
+  button.disabled = true;
+  button.classList.add('is-busy');
+  button.innerHTML = `<span class="btn-content"><span class="spinner" aria-hidden="true"></span><span>${esc(busyLabel)}</span></span>`;
+}
+
+function resetButtonBusy(button) {
+  if (!button) return;
+  if (button.dataset.idleHtml) button.innerHTML = button.dataset.idleHtml;
+  button.disabled = false;
+  button.classList.remove('is-busy');
+}
+
+function startTask({ button, busyLabel, title, message }) {
+  if (button && busyLabel) setButtonBusy(button, busyLabel);
+  const toastId = showNotice(message, 'loading', { title, duration: 0, persist: true });
+  return { button, toastId };
+}
+
+function finishTask(task, { type, title, message }) {
+  if (task?.toastId) dismissToast(task.toastId);
+  if (task?.button) resetButtonBusy(task.button);
+  showNotice(message, type, { title });
+}
+
+function renderInlineLoading(text) {
+  return `<span class="inline-feedback"><span class="spinner" aria-hidden="true"></span><span>${esc(text)}</span></span>`;
+}
+
+document.getElementById('activity-clear-btn')?.addEventListener('click', () => {
+  activityEvents = [];
+  renderActivityFeed();
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadProfile();
@@ -757,10 +922,12 @@ async function loadBrain() {
 
 function resetBrainOutputs() {
   document.getElementById('brain-answer-empty').hidden = false;
+  document.getElementById('brain-answer-empty').textContent = BRAIN_ANSWER_EMPTY_TEXT;
   document.getElementById('brain-answer-content').hidden = true;
   document.getElementById('brain-answer').textContent = '';
   document.getElementById('brain-evidence').innerHTML = '';
   document.getElementById('brain-report-empty').hidden = false;
+  document.getElementById('brain-report-empty').textContent = BRAIN_REPORT_EMPTY_TEXT;
   document.getElementById('brain-report').hidden = true;
   document.getElementById('brain-report').textContent = '';
 }
@@ -1071,8 +1238,17 @@ async function askBrain() {
   }
 
   const btn = document.getElementById('brain-ask-btn');
-  btn.disabled = true;
-  btn.textContent = 'Asking…';
+  const answerEmpty = document.getElementById('brain-answer-empty');
+  const answerContent = document.getElementById('brain-answer-content');
+  answerEmpty.hidden = false;
+  answerEmpty.innerHTML = renderInlineLoading('Searching project memory and composing an answer…');
+  answerContent.hidden = true;
+  const task = startTask({
+    button: btn,
+    busyLabel: 'Asking…',
+    title: 'Asking project brain',
+    message: 'Searching compact memory and generating a grounded answer in the background.',
+  });
 
   try {
     const res = await authFetch(`/v1/brain/projects/${encodeURIComponent(projectId)}/ask?q=${encodeURIComponent(question)}`);
@@ -1085,11 +1261,19 @@ async function askBrain() {
     document.getElementById('brain-evidence').innerHTML = (body.evidence ?? []).map(item => `
       <span class="brain-evidence-chip">${esc(item.category ?? item.kind)} · ${esc(item.kind)}: ${esc(item.title)}</span>
     `).join('');
+    finishTask(task, {
+      type: 'success',
+      title: 'Brain answer ready',
+      message: 'The project brain returned a grounded answer with supporting evidence.',
+    });
   } catch (err) {
-    showNotice(err.message ?? 'Failed to query project brain.', 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Ask';
+    answerEmpty.hidden = false;
+    answerEmpty.textContent = BRAIN_ANSWER_EMPTY_TEXT;
+    finishTask(task, {
+      type: 'error',
+      title: 'Brain question failed',
+      message: err.message ?? 'Failed to query project brain.',
+    });
   }
 }
 
@@ -1104,10 +1288,19 @@ async function generateBrainReport(type) {
   const activeButton = buttons.find((button) => button.dataset.brainReport === type);
   const reportEmpty = document.getElementById('brain-report-empty');
   const reportOutput = document.getElementById('brain-report');
-  buttons.forEach(btn => { btn.disabled = true; });
+  buttons.forEach(btn => {
+    if (btn !== activeButton) btn.disabled = true;
+  });
+  const reportLabel = activeButton?.textContent?.trim() || 'report';
+  const task = startTask({
+    button: activeButton,
+    busyLabel: 'Generating…',
+    title: reportLabel,
+    message: `${reportLabel} is being generated from the synced brain context in the background.`,
+  });
   if (reportEmpty && activeButton) {
     reportEmpty.hidden = false;
-    reportEmpty.textContent = `Researching the project brain and generating ${activeButton.textContent.toLowerCase()}…`;
+    reportEmpty.innerHTML = renderInlineLoading(`Researching the project brain and generating ${reportLabel.toLowerCase()}…`);
   }
   if (reportOutput) {
     reportOutput.hidden = true;
@@ -1122,10 +1315,25 @@ async function generateBrainReport(type) {
     document.getElementById('brain-report-empty').hidden = true;
     document.getElementById('brain-report').hidden = false;
     document.getElementById('brain-report').textContent = body.markdown;
+    finishTask(task, {
+      type: 'success',
+      title: `${reportLabel} ready`,
+      message: `${reportLabel} finished successfully and is ready to review.`,
+    });
   } catch (err) {
-    showNotice(err.message ?? 'Failed to generate report.', 'error');
+    if (reportEmpty) {
+      reportEmpty.hidden = false;
+      reportEmpty.textContent = BRAIN_REPORT_EMPTY_TEXT;
+    }
+    finishTask(task, {
+      type: 'error',
+      title: `${reportLabel} failed`,
+      message: err.message ?? 'Failed to generate report.',
+    });
   } finally {
-    buttons.forEach(btn => { btn.disabled = false; });
+    buttons.forEach((btn) => {
+      if (btn !== activeButton) btn.disabled = false;
+    });
   }
 }
 

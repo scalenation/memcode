@@ -67,10 +67,53 @@
     .form-msg.success { color: #34d399; display: block; }
     .skeleton { background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 6px; }
     @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-    .notice-bar { border-radius: var(--radius-sm); padding: 12px 16px; font-size: 0.85rem; margin-bottom: 20px; display: none; }
-    .notice-bar.visible { display: block; }
+    .feedback-shell { display: grid; gap: 16px; margin-bottom: 24px; }
+    .notice-bar { border-radius: var(--radius-sm); padding: 12px 16px; font-size: 0.85rem; display: none; align-items: flex-start; gap: 12px; }
+    .notice-bar.visible { display: flex; }
     .notice-bar.error   { background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); color: var(--red); }
-    .notice-bar.success { background: rgba(52,211,153,0.08);  border: 1px solid rgba(52,211,153,0.25);  color: #34d399; }
+    .notice-bar.success { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.25); color: #34d399; }
+    .notice-bar.info    { background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.22); color: #93c5fd; }
+    .notice-bar.loading { background: rgba(125,211,252,0.08); border: 1px solid rgba(125,211,252,0.22); color: #7dd3fc; }
+    .notice-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .notice-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+    .notice-message { font-size: 0.88rem; line-height: 1.45; color: var(--text); }
+    .notice-bar.error .notice-message,
+    .notice-bar.success .notice-message,
+    .notice-bar.info .notice-message,
+    .notice-bar.loading .notice-message { color: inherit; }
+    .spinner { width: 14px; height: 14px; border-radius: 999px; border: 2px solid currentColor; border-top-color: transparent; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+    .status-dot-solid { width: 12px; height: 12px; border-radius: 999px; background: currentColor; flex-shrink: 0; margin-top: 2px; }
+    .activity-feed { display: none; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .activity-feed.visible { display: block; }
+    .activity-feed-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+    .activity-feed-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+    .activity-feed-subtitle { font-size: 0.82rem; color: var(--text-dim); margin-top: 2px; }
+    .activity-feed-list { display: flex; flex-direction: column; gap: 10px; max-height: 260px; overflow: auto; }
+    .activity-feed-empty { font-size: 0.84rem; color: var(--text-dim); padding: 2px 0; }
+    .activity-feed-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+    .activity-feed-item.loading { border-color: rgba(125,211,252,0.22); }
+    .activity-feed-item.success { border-color: rgba(52,211,153,0.18); }
+    .activity-feed-item.error { border-color: rgba(248,113,113,0.18); }
+    .activity-feed-item.info { border-color: rgba(96,165,250,0.18); }
+    .activity-feed-body { min-width: 0; }
+    .activity-feed-item-title { font-size: 0.8rem; font-weight: 650; color: var(--text); margin-bottom: 2px; }
+    .activity-feed-item-message { font-size: 0.78rem; color: var(--text-dim); line-height: 1.45; }
+    .activity-feed-item-time { font-size: 0.72rem; color: var(--text-dim); white-space: nowrap; }
+    .notification-stack { position: fixed; right: 20px; bottom: 20px; width: min(380px, calc(100vw - 28px)); display: flex; flex-direction: column; gap: 10px; z-index: 90; pointer-events: none; }
+    .notification-toast { pointer-events: auto; background: rgba(9,12,18,0.94); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; box-shadow: 0 22px 60px rgba(0,0,0,0.32); opacity: 0; transform: translateY(8px); transition: opacity 0.18s ease, transform 0.18s ease; }
+    .notification-toast.visible { opacity: 1; transform: translateY(0); }
+    .notification-toast.error { border-color: rgba(248,113,113,0.3); }
+    .notification-toast.success { border-color: rgba(52,211,153,0.28); }
+    .notification-toast.info { border-color: rgba(96,165,250,0.26); }
+    .notification-toast.loading { border-color: rgba(125,211,252,0.26); }
+    .notification-toast-header { display: flex; align-items: flex-start; gap: 10px; }
+    .notification-toast-copy { min-width: 0; }
+    .notification-toast-title { font-size: 0.8rem; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+    .notification-toast-message { font-size: 0.78rem; line-height: 1.45; color: var(--text-dim); }
+    .btn.is-busy { opacity: 0.9; }
+    .btn-content { display: inline-flex; align-items: center; gap: 8px; }
+    .inline-feedback { display: inline-flex; align-items: center; gap: 8px; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .upgrade-box { background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.03)); border: 1px dashed rgba(108,99,255,0.3); border-radius: var(--radius-sm); padding: 20px 24px; text-align: center; }
     .upgrade-box p { color: var(--text-dim); font-size: 0.88rem; margin: 0 0 14px; }
     .cli-block { font-family: var(--mono); font-size: 0.88rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; color: var(--text-dim); margin-top: 10px; }
@@ -235,6 +278,7 @@
       .analytics-grid { grid-template-columns: 1fr; }
       .usage-summary-grid { grid-template-columns: 1fr; }
       .usage-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .notification-stack { right: 14px; left: 14px; width: auto; }
     }
   </style>
   <script>window.STRIPE_PK = 'pk_live_51TV5WkV05zXA6RxuzcvnlTU4sfPdVb5DLwZy9AGY5XyRDrXQnFUUp2BvkT8ytQNOKUSuxwPeUJcK4L6A8YUJK4BW00qfQWwi0q';</script>
@@ -292,7 +336,21 @@
   </aside>
 
   <main class="main-content">
-    <div id="global-notice" class="notice-bar"></div>
+    <div class="feedback-shell">
+      <div id="global-notice" class="notice-bar" aria-live="polite"></div>
+      <section id="activity-feed" class="activity-feed" hidden>
+        <div class="activity-feed-header">
+          <div>
+            <div class="activity-feed-title">Activity</div>
+            <div class="activity-feed-subtitle">Live updates for generation, saves, deletes, and other dashboard actions.</div>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="activity-clear-btn">Clear</button>
+        </div>
+        <div id="activity-feed-list" class="activity-feed-list">
+          <div class="activity-feed-empty">No activity yet.</div>
+        </div>
+      </section>
+    </div>
 
     <!-- Overview -->
     <section id="section-overview" class="section active">
@@ -696,6 +754,7 @@
 </div>
 
 <script src="https://js.stripe.com/v3/"></script>
+<div id="notification-stack" class="notification-stack" aria-live="polite" aria-atomic="false"></div>
 <script src="/js/dashboard.js"></script>
 </body>
 </html>
