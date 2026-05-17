@@ -35,6 +35,11 @@ const COMMAND_LOADERS: Record<string, CommandLoader> = {
   service: async () => (await import('./commands/service')).serviceCommand,
   doctor: async () => (await import('./commands/doctor')).doctorCommand,
   copilot: async () => (await import('./commands/copilot')).copilotCommand,
+  // ── Orchestration ────────────────────────────────────────────────────────────
+  run: async () => (await import('./commands/run')).runCommand,
+  assume: async () => (await import('./commands/assume')).assumeCommand,
+  index: async () => (await import('./commands/index-cmd')).indexCommand,
+  eval: async () => (await import('./commands/eval')).evalCommand,
 };
 
 program

@@ -40,6 +40,73 @@ export type {
 } from './providers';
 export { isEnabled, requireFeature, ProFeatureError } from './feature-gate';
 export type { FeatureFlag } from './feature-gate';
+
+// ── Orchestration ──────────────────────────────────────────────────────────────
+export {
+  createRun,
+  getActiveRun,
+  getRun,
+  listRuns,
+  startRun,
+  setPlan,
+  approveRun,
+  pauseRun,
+  resumeRun,
+  finishRun,
+  cancelRun,
+  rollbackRun,
+  addRunStep,
+  finishRunStep,
+  listRunSteps,
+  addRunEvent,
+  listRunEvents,
+  addRunArtifact,
+  listRunArtifacts,
+  buildPlanOptions,
+  createRunWorktree,
+  stashBeforeRun,
+} from './run';
+export type { CreateRunOptions, AddStepOptions, PlanOption } from './run';
+
+// ── Assumptions ────────────────────────────────────────────────────────────────
+export {
+  setAssumption,
+  listAssumptions,
+  getAssumption,
+  invalidateAssumption,
+  removeAssumption,
+  clearAssumptions,
+  formatAssumptionsForContext,
+} from './assumptions';
+export type { SetAssumptionOptions } from './assumptions';
+
+// ── Repo Index ─────────────────────────────────────────────────────────────────
+export {
+  upsertIndexEntry,
+  listIndexEntries,
+  removeIndexEntry,
+  clearIndex,
+  buildRepoIndex,
+  formatIndexForContext,
+} from './repo-index';
+export type { IndexOptions, IndexStats } from './repo-index';
+
+// ── Model Router ───────────────────────────────────────────────────────────────
+export { ModelRouter, defaultRouter } from './model-router';
+export type { ModelRoute, RoutingResult, RouterConfig, ModelTier } from './model-router';
+
+// ── Evals ──────────────────────────────────────────────────────────────────────
+export {
+  createEvalTask,
+  listEvalTasks,
+  archiveEvalTask,
+  recordEvalResult,
+  listEvalResults,
+  evalSummary,
+} from './evals';
+export type { CreateEvalTaskOptions, RecordEvalResultOptions } from './evals';
+
+// ── Schema types ───────────────────────────────────────────────────────────────
 export type {
   Workspace,
   Session,
@@ -53,4 +120,18 @@ export type {
   DecisionStatus,
   TaskStatus,
   TaskPriority,
+  Run,
+  RunStep,
+  RunEvent,
+  RunArtifact,
+  RunStatus,
+  RunPhase,
+  RunPolicy,
+  StepStatus,
+  Assumption,
+  AssumptionSource,
+  RepoIndexEntry,
+  RepoIndexKind,
+  EvalTask,
+  EvalResult,
 } from './schema';

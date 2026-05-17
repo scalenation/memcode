@@ -112,3 +112,117 @@ CREATE TABLE IF NOT EXISTS magic_link_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS magic_link_tokens_token_idx ON magic_link_tokens(token);
+-- ── Orchestration tables ──────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS runs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  policy_json TEXT,
+  git_branch TEXT,
+  git_sha_before TEXT,
+  git_stash_ref TEXT,
+  git_worktree TEXT,
+  plan_json TEXT,
+  selected_option INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  finished_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS runs_workspace_status_idx ON runs(workspace_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS run_steps (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  phase TEXT NOT NULL,
+  label TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  input_json TEXT,
+  output_json TEXT,
+  model TEXT,
+  cost_usd REAL,
+  seq INTEGER NOT NULL DEFAULT 0,
+  started_at INTEGER,
+  finished_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS run_steps_run_idx ON run_steps(run_id, seq);
+
+CREATE TABLE IF NOT EXISTS run_events (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  step_id TEXT,
+  type TEXT NOT NULL,
+  payload_json TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS run_events_run_idx ON run_events(run_id, created_at);
+
+CREATE TABLE IF NOT EXISTS run_artifacts (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  step_id TEXT,
+  kind TEXT NOT NULL,
+  label TEXT,
+  content TEXT,
+  path TEXT,
+  metadata_json TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS run_artifacts_run_idx ON run_artifacts(run_id);
+
+CREATE TABLE IF NOT EXISTS assumptions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'user',
+  stale INTEGER NOT NULL DEFAULT 0,
+  run_id TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(workspace_id, key)
+);
+
+CREATE INDEX IF NOT EXISTS assumptions_workspace_idx ON assumptions(workspace_id, stale);
+
+CREATE TABLE IF NOT EXISTS repo_index (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  path TEXT NOT NULL,
+  label TEXT NOT NULL,
+  metadata_json TEXT,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(workspace_id, kind, path)
+);
+
+CREATE INDEX IF NOT EXISTS repo_index_workspace_kind_idx ON repo_index(workspace_id, kind);
+
+CREATE TABLE IF NOT EXISTS eval_tasks (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  acceptance_json TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS eval_results (
+  id TEXT PRIMARY KEY,
+  eval_task_id TEXT NOT NULL REFERENCES eval_tasks(id) ON DELETE CASCADE,
+  run_id TEXT,
+  agent TEXT NOT NULL,
+  model TEXT,
+  passed INTEGER,
+  score REAL,
+  notes TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS eval_results_task_idx ON eval_results(eval_task_id, created_at DESC);

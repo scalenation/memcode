@@ -98,6 +98,18 @@ function navigateTo(sectionId) {
   if (sectionId === 'analytics') {
     loadAnalytics();
   }
+  if (sectionId === 'runs') {
+    populateOrchWorkspaceSelect('runs-workspace-filter', loadRuns);
+  }
+  if (sectionId === 'assumptions') {
+    populateOrchWorkspaceSelect('assumptions-workspace-filter', loadAssumptions);
+  }
+  if (sectionId === 'repo-index') {
+    populateOrchWorkspaceSelect('index-workspace-filter', loadRepoIndex);
+  }
+  if (sectionId === 'evals') {
+    populateOrchWorkspaceSelect('evals-workspace-filter', loadEvals);
+  }
 }
 
 // ── Load profile ──────────────────────────────────────────────────────────────
@@ -2317,3 +2329,209 @@ document.querySelectorAll('[data-brain-report]').forEach(btn => {
     generateBrainReport(btn.dataset.brainReport);
   });
 });
+
+// ── Orchestration helpers ─────────────────────────────────────────────────────
+
+function orchStatusBadge(status) {
+  const colors = { done: '#22c55e', failed: '#ef4444', cancelled: '#f59e0b', 'rolled-back': '#f59e0b', executing: '#3b82f6', 'awaiting-approval': '#a855f7', paused: '#f59e0b', pending: '#6b7280' };
+  const color = colors[status] ?? '#6b7280';
+  return `<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:0.72rem;background:${color}22;color:${color};font-weight:600">${escapeHtml(status)}</span>`;
+}
+
+async function populateOrchWorkspaceSelect(selectId, callback) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  if (sel.dataset.loaded) { callback && callback(); return; }
+  const res = await authFetch('/v1/user/workspaces');
+  if (!res.ok) return;
+  const { workspaces } = await res.json();
+  sel.innerHTML = '<option value="">— select workspace —</option>' + (workspaces || []).map(w => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name || w.id.slice(0, 16))}</option>`).join('');
+  sel.dataset.loaded = '1';
+  sel.addEventListener('change', () => callback && callback());
+  if (workspaces?.length === 1) { sel.value = workspaces[0].id; callback && callback(); }
+}
+
+// ── Runs ──────────────────────────────────────────────────────────────────────
+
+async function loadRuns() {
+  const workspaceId = document.getElementById('runs-workspace-filter')?.value;
+  const el = document.getElementById('runs-list');
+  if (!el || !workspaceId) return;
+  el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">Loading…</p>';
+  const res = await authFetch(`/v1/runs?workspace_id=${encodeURIComponent(workspaceId)}&limit=30`);
+  if (!res.ok) { el.innerHTML = '<p style="color:var(--danger)">Failed to load runs.</p>'; return; }
+  const { runs } = await res.json();
+  if (!runs?.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No runs yet. Start one with <code>memory run start "task"</code></p>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+    <thead><tr style="text-align:left;border-bottom:1px solid var(--border)"><th style="padding:6px 8px">Status</th><th style="padding:6px 8px">Title</th><th style="padding:6px 8px">Branch</th><th style="padding:6px 8px">Created</th></tr></thead>
+    <tbody>
+      ${runs.map(r => `<tr class="run-row" data-run-id="${escapeHtml(r.id)}" style="cursor:pointer;border-bottom:1px solid var(--border-subtle)" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background=''">
+        <td style="padding:6px 8px">${orchStatusBadge(r.status)}</td>
+        <td style="padding:6px 8px;font-weight:500">${escapeHtml((r.title || '').slice(0, 60))}</td>
+        <td style="padding:6px 8px;color:var(--text-dim)">${escapeHtml(r.git_branch || '')}</td>
+        <td style="padding:6px 8px;color:var(--text-dim)">${new Date(r.created_at).toLocaleDateString()}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table>`;
+  el.querySelectorAll('.run-row').forEach(row => {
+    row.addEventListener('click', () => loadRunDetail(row.dataset.runId));
+  });
+}
+
+async function loadRunDetail(runId) {
+  const detail = document.getElementById('run-detail');
+  const listEl = document.getElementById('runs-list');
+  if (!detail) return;
+  detail.hidden = false;
+  if (listEl) listEl.closest('.card').style.display = 'none';
+
+  const [runRes, stepsRes] = await Promise.all([
+    authFetch(`/v1/runs/${runId}`),
+    authFetch(`/v1/runs/${runId}/steps`),
+  ]);
+  if (!runRes.ok) { detail.innerHTML = '<p style="color:var(--danger)">Run not found.</p>'; return; }
+  const { run } = await runRes.json();
+  const { steps } = stepsRes.ok ? await stepsRes.json() : { steps: [] };
+
+  document.getElementById('run-detail-title').textContent = run.title || run.id.slice(0, 16);
+  document.getElementById('run-detail-status').innerHTML = orchStatusBadge(run.status);
+  document.getElementById('run-detail-meta').innerHTML =
+    `ID: ${escapeHtml(run.id.slice(0, 16))} &nbsp;·&nbsp; Created: ${new Date(run.created_at).toLocaleString()}${run.git_branch ? ' &nbsp;·&nbsp; Branch: ' + escapeHtml(run.git_branch) : ''}`;
+
+  const planEl = document.getElementById('run-plan-options');
+  if (planEl) {
+    if (run.plan_json) {
+      try {
+        const plans = JSON.parse(run.plan_json);
+        planEl.innerHTML = plans.map(p => `<div style="padding:8px;border:1px solid var(--border);border-radius:6px;margin-bottom:6px${run.selected_option === p.index ? ';border-color:#22c55e' : ''}">
+          <strong>Option ${p.index}: ${escapeHtml(p.title)}</strong>
+          ${run.selected_option === p.index ? ' <span style="color:#22c55e;font-size:0.75rem">✓ selected</span>' : ''}
+          <div style="font-size:0.78rem;color:var(--text-dim);margin-top:4px">Risk: ${escapeHtml(p.riskLevel)} · Files: ~${p.estimatedFiles}</div>
+        </div>`).join('');
+      } catch { planEl.textContent = 'No plan data.'; }
+    } else { planEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem">No plan yet.</p>'; }
+  }
+
+  const stepsEl = document.getElementById('run-steps-list');
+  if (stepsEl) {
+    if (steps?.length) {
+      stepsEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:4px 8px;text-align:left">Status</th><th style="padding:4px 8px;text-align:left">Phase</th><th style="padding:4px 8px;text-align:left">Label</th><th style="padding:4px 8px;text-align:left">Model</th></tr></thead>
+        <tbody>${steps.map(s => `<tr style="border-bottom:1px solid var(--border-subtle)">
+          <td style="padding:4px 8px">${orchStatusBadge(s.status)}</td>
+          <td style="padding:4px 8px;color:var(--text-dim)">${escapeHtml(s.phase)}</td>
+          <td style="padding:4px 8px">${escapeHtml(s.label)}</td>
+          <td style="padding:4px 8px;color:var(--text-dim);font-size:0.75rem">${escapeHtml(s.model || '')}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+    } else { stepsEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem">No steps recorded yet.</p>'; }
+  }
+}
+
+document.getElementById('run-detail-back')?.addEventListener('click', () => {
+  document.getElementById('run-detail').hidden = true;
+  const card = document.getElementById('runs-list')?.closest('.card');
+  if (card) card.style.display = '';
+  loadRuns();
+});
+
+document.getElementById('runs-workspace-filter')?.addEventListener('change', loadRuns);
+
+// ── Assumptions ───────────────────────────────────────────────────────────────
+
+async function loadAssumptions() {
+  const workspaceId = document.getElementById('assumptions-workspace-filter')?.value;
+  const el = document.getElementById('assumptions-list');
+  if (!el || !workspaceId) return;
+  el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">Loading…</p>';
+  const res = await authFetch(`/v1/assumptions?workspace_id=${encodeURIComponent(workspaceId)}`);
+  if (!res.ok) { el.innerHTML = '<p style="color:var(--danger)">Failed to load.</p>'; return; }
+  const { assumptions } = await res.json();
+  if (!assumptions?.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No assumptions yet. Use <code>memory assume add</code> to record codebase knowledge.</p>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+    <thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:6px 8px;text-align:left">Key</th><th style="padding:6px 8px;text-align:left">Value</th><th style="padding:6px 8px;text-align:left">Source</th><th style="padding:6px 8px;text-align:left">Updated</th></tr></thead>
+    <tbody>${assumptions.map(a => `<tr style="border-bottom:1px solid var(--border-subtle)${a.stale ? ';opacity:0.5' : ''}">
+      <td style="padding:6px 8px;font-weight:500">${escapeHtml(a.key)}${a.stale ? ' <em style="font-size:0.72rem;color:var(--text-dim)">(stale)</em>' : ''}</td>
+      <td style="padding:6px 8px">${escapeHtml((a.value || '').slice(0, 100))}</td>
+      <td style="padding:6px 8px;color:var(--text-dim)">${escapeHtml(a.source)}</td>
+      <td style="padding:6px 8px;color:var(--text-dim)">${new Date(a.updated_at).toLocaleDateString()}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+document.getElementById('assumptions-workspace-filter')?.addEventListener('change', loadAssumptions);
+
+// ── Repo Index ────────────────────────────────────────────────────────────────
+
+async function loadRepoIndex() {
+  const workspaceId = document.getElementById('index-workspace-filter')?.value;
+  const kind = document.getElementById('index-kind-filter')?.value;
+  const el = document.getElementById('index-list');
+  if (!el || !workspaceId) return;
+  el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">Loading…</p>';
+  const qs = new URLSearchParams({ workspace_id: workspaceId });
+  if (kind) qs.set('kind', kind);
+  const res = await authFetch(`/v1/index?${qs}`);
+  if (!res.ok) { el.innerHTML = '<p style="color:var(--danger)">Failed to load.</p>'; return; }
+  const { entries } = await res.json();
+  if (!entries?.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No index entries yet. Run <code>memory index scan</code> locally.</p>'; return; }
+  const byKind = {};
+  for (const e of entries) (byKind[e.kind] ??= []).push(e);
+  el.innerHTML = Object.entries(byKind).map(([k, list]) =>
+    `<div style="margin-bottom:14px"><strong style="font-size:0.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim)">${escapeHtml(k)} (${list.length})</strong>
+    <div style="margin-top:6px;font-size:0.8rem">
+      ${list.map(e => `<div style="padding:4px 0;display:flex;gap:12px;border-bottom:1px solid var(--border-subtle)"><span style="flex:0 0 280px;color:var(--text-dim);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.path)}</span><span>${escapeHtml(e.label)}</span></div>`).join('')}
+    </div></div>`
+  ).join('');
+}
+
+document.getElementById('index-workspace-filter')?.addEventListener('change', loadRepoIndex);
+document.getElementById('index-kind-filter')?.addEventListener('change', loadRepoIndex);
+
+// ── Evals ─────────────────────────────────────────────────────────────────────
+
+async function loadEvals() {
+  const workspaceId = document.getElementById('evals-workspace-filter')?.value;
+  const el = document.getElementById('evals-task-list');
+  if (!el || !workspaceId) return;
+  el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">Loading…</p>';
+  const res = await authFetch(`/v1/evals/tasks?workspace_id=${encodeURIComponent(workspaceId)}`);
+  if (!res.ok) { el.innerHTML = '<p style="color:var(--danger)">Failed to load.</p>'; return; }
+  const { tasks } = await res.json();
+  if (!tasks?.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No eval tasks yet. Add one with <code>memory eval add</code>.</p>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+    <thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:6px 8px;text-align:left">Title</th><th style="padding:6px 8px;text-align:left">Description</th><th style="padding:6px 8px;text-align:left">Created</th><th style="padding:6px 8px"></th></tr></thead>
+    <tbody>${tasks.map(t => `<tr style="border-bottom:1px solid var(--border-subtle)">
+      <td style="padding:6px 8px;font-weight:500">${escapeHtml(t.title)}</td>
+      <td style="padding:6px 8px;color:var(--text-dim)">${escapeHtml((t.description || '').slice(0, 80))}</td>
+      <td style="padding:6px 8px;color:var(--text-dim)">${new Date(t.created_at).toLocaleDateString()}</td>
+      <td style="padding:6px 8px"><button class="btn btn-secondary" style="font-size:0.72rem;padding:2px 8px" onclick="loadEvalResults('${escapeHtml(t.id)}','${escapeHtml(t.title.replace(/'/g,''))}')">Results</button></td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+async function loadEvalResults(taskId, title) {
+  const section = document.getElementById('evals-results-section');
+  const label = document.getElementById('evals-task-label');
+  const el = document.getElementById('evals-results-list');
+  if (!section || !el) return;
+  section.hidden = false;
+  if (label) label.textContent = title;
+  el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem">Loading…</p>';
+  const res = await authFetch(`/v1/evals/results?eval_task_id=${encodeURIComponent(taskId)}`);
+  if (!res.ok) { el.innerHTML = '<p style="color:var(--danger)">Failed to load results.</p>'; return; }
+  const { results } = await res.json();
+  if (!results?.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem">No results recorded yet.</p>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+    <thead><tr style="border-bottom:1px solid var(--border)"><th style="padding:4px 8px;text-align:left">Agent</th><th style="padding:4px 8px;text-align:left">Model</th><th style="padding:4px 8px;text-align:left">Passed</th><th style="padding:4px 8px;text-align:left">Score</th><th style="padding:4px 8px;text-align:left">Notes</th></tr></thead>
+    <tbody>${results.map(r => `<tr style="border-bottom:1px solid var(--border-subtle)">
+      <td style="padding:4px 8px">${escapeHtml(r.agent)}</td>
+      <td style="padding:4px 8px;color:var(--text-dim)">${escapeHtml(r.model || '')}</td>
+      <td style="padding:4px 8px">${r.passed === 1 ? '<span style="color:#22c55e">✓</span>' : r.passed === 0 ? '<span style="color:#ef4444">✗</span>' : '—'}</td>
+      <td style="padding:4px 8px">${r.score != null ? r.score.toFixed(2) : '—'}</td>
+      <td style="padding:4px 8px;color:var(--text-dim)">${escapeHtml((r.notes || '').slice(0, 80))}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+document.getElementById('evals-workspace-filter')?.addEventListener('change', loadEvals);

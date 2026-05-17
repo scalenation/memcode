@@ -1035,6 +1035,263 @@ export default {
 
         return json({ received: true });
       }
+
+      // ── Orchestration: Runs ────────────────────────────────────────────────
+
+      if (request.method === 'GET' && url.pathname === '/v1/runs') {
+        const user = await authenticateRequest(request, env, db);
+        const workspaceId = url.searchParams.get('workspace_id');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspace_id required' });
+        const limit = Math.min(Number(url.searchParams.get('limit') ?? '50'), 200);
+        const rows = await db.all(
+          'SELECT * FROM runs WHERE workspace_id = ? ORDER BY created_at DESC LIMIT ?',
+          [workspaceId, limit],
+        );
+        return json({ runs: rows.results ?? rows });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/runs') {
+        const user = await authenticateRequest(request, env, db);
+        const body = await readJson(request);
+        const { workspace_id, title, policy_json } = body;
+        if (!workspace_id || !title) throw new HttpError(400, { error: 'workspace_id and title required' });
+        const id = crypto.randomUUID();
+        const now = Date.now();
+        await db.run(
+          'INSERT INTO runs (id, workspace_id, title, status, policy_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, workspace_id, title, 'pending', policy_json ? JSON.stringify(policy_json) : null, now, now],
+        );
+        const run = await db.first('SELECT * FROM runs WHERE id = ? LIMIT 1', [id]);
+        return json({ run }, { status: 201 });
+      }
+
+      const runIdMatch = matchPath(url.pathname, /^\/v1\/runs\/([^/]+)$/);
+      if (runIdMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const runId = runIdMatch[1];
+        if (request.method === 'GET') {
+          const run = await db.first('SELECT * FROM runs WHERE id = ? LIMIT 1', [runId]);
+          if (!run) throw new HttpError(404, { error: 'Run not found' });
+          return json({ run });
+        }
+        if (request.method === 'PATCH') {
+          const body = await readJson(request);
+          const allowed = ['status', 'plan_json', 'selected_option', 'git_branch', 'git_sha_before', 'finished_at'];
+          const sets = [];
+          const vals = [];
+          for (const key of allowed) {
+            if (key in body) { sets.push(`${key} = ?`); vals.push(body[key]); }
+          }
+          if (sets.length === 0) throw new HttpError(400, { error: 'No valid fields to update' });
+          sets.push('updated_at = ?'); vals.push(Date.now()); vals.push(runId);
+          await db.run(`UPDATE runs SET ${sets.join(', ')} WHERE id = ?`, vals);
+          const run = await db.first('SELECT * FROM runs WHERE id = ? LIMIT 1', [runId]);
+          return json({ run });
+        }
+      }
+
+      const runStepsMatch = matchPath(url.pathname, /^\/v1\/runs\/([^/]+)\/steps$/);
+      if (runStepsMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const runId = runStepsMatch[1];
+        if (request.method === 'GET') {
+          const rows = await db.all('SELECT * FROM run_steps WHERE run_id = ? ORDER BY seq', [runId]);
+          return json({ steps: rows.results ?? rows });
+        }
+        if (request.method === 'POST') {
+          const body = await readJson(request);
+          const id = crypto.randomUUID();
+          const seqRow = await db.first('SELECT COALESCE(MAX(seq),0)+1 AS next FROM run_steps WHERE run_id = ?', [runId]);
+          const seq = seqRow?.next ?? 1;
+          await db.run(
+            'INSERT INTO run_steps (id, run_id, phase, label, status, seq, started_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [id, runId, body.phase ?? 'custom', body.label ?? '', body.status ?? 'running', seq, Date.now()],
+          );
+          const step = await db.first('SELECT * FROM run_steps WHERE id = ? LIMIT 1', [id]);
+          return json({ step }, { status: 201 });
+        }
+      }
+
+      const runEventsMatch = matchPath(url.pathname, /^\/v1\/runs\/([^/]+)\/events$/);
+      if (runEventsMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const runId = runEventsMatch[1];
+        if (request.method === 'GET') {
+          const rows = await db.all('SELECT * FROM run_events WHERE run_id = ? ORDER BY created_at', [runId]);
+          return json({ events: rows.results ?? rows });
+        }
+        if (request.method === 'POST') {
+          const body = await readJson(request);
+          const id = crypto.randomUUID();
+          await db.run(
+            'INSERT INTO run_events (id, run_id, step_id, type, payload_json, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [id, runId, body.step_id ?? null, body.type ?? 'info', body.payload_json ?? null, Date.now()],
+          );
+          return json({ id }, { status: 201 });
+        }
+      }
+
+      const runArtifactsMatch = matchPath(url.pathname, /^\/v1\/runs\/([^/]+)\/artifacts$/);
+      if (runArtifactsMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const runId = runArtifactsMatch[1];
+        if (request.method === 'GET') {
+          const rows = await db.all('SELECT * FROM run_artifacts WHERE run_id = ? ORDER BY created_at', [runId]);
+          return json({ artifacts: rows.results ?? rows });
+        }
+        if (request.method === 'POST') {
+          const body = await readJson(request);
+          const id = crypto.randomUUID();
+          await db.run(
+            'INSERT INTO run_artifacts (id, run_id, step_id, kind, label, content, path, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, runId, body.step_id ?? null, body.kind ?? 'output', body.label ?? null, body.content ?? null, body.path ?? null, body.metadata_json ?? null, Date.now()],
+          );
+          return json({ id }, { status: 201 });
+        }
+      }
+
+      // ── Orchestration: Assumptions ─────────────────────────────────────────
+
+      if (request.method === 'GET' && url.pathname === '/v1/assumptions') {
+        const user = await authenticateRequest(request, env, db);
+        const workspaceId = url.searchParams.get('workspace_id');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspace_id required' });
+        const includeStale = url.searchParams.get('all') === '1';
+        const rows = await db.all(
+          `SELECT * FROM assumptions WHERE workspace_id = ?${includeStale ? '' : ' AND stale = 0'} ORDER BY updated_at DESC`,
+          [workspaceId],
+        );
+        return json({ assumptions: rows.results ?? rows });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/assumptions') {
+        const user = await authenticateRequest(request, env, db);
+        const body = await readJson(request);
+        const { workspace_id, key, value, source } = body;
+        if (!workspace_id || !key || !value) throw new HttpError(400, { error: 'workspace_id, key, value required' });
+        const id = crypto.randomUUID();
+        const now = Date.now();
+        await db.run(
+          `INSERT INTO assumptions (id, workspace_id, key, value, source, stale, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+           ON CONFLICT(workspace_id, key) DO UPDATE SET value = excluded.value, source = excluded.source, stale = 0, updated_at = excluded.updated_at`,
+          [id, workspace_id, key, value, source ?? 'user', now, now],
+        );
+        const row = await db.first('SELECT * FROM assumptions WHERE workspace_id = ? AND key = ? LIMIT 1', [workspace_id, key]);
+        return json({ assumption: row }, { status: 201 });
+      }
+
+      const assumptionIdMatch = matchPath(url.pathname, /^\/v1\/assumptions\/([^/]+)$/);
+      if (assumptionIdMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const aId = assumptionIdMatch[1];
+        if (request.method === 'DELETE') {
+          await db.run('DELETE FROM assumptions WHERE id = ?', [aId]);
+          return json({ deleted: true });
+        }
+        if (request.method === 'PATCH') {
+          const body = await readJson(request);
+          if (body.stale !== undefined) {
+            await db.run('UPDATE assumptions SET stale = ?, updated_at = ? WHERE id = ?', [body.stale ? 1 : 0, Date.now(), aId]);
+          }
+          const row = await db.first('SELECT * FROM assumptions WHERE id = ? LIMIT 1', [aId]);
+          return json({ assumption: row });
+        }
+      }
+
+      // ── Orchestration: Repo Index ──────────────────────────────────────────
+
+      if (request.method === 'GET' && url.pathname === '/v1/index') {
+        const user = await authenticateRequest(request, env, db);
+        const workspaceId = url.searchParams.get('workspace_id');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspace_id required' });
+        const kind = url.searchParams.get('kind');
+        const rows = await db.all(
+          `SELECT * FROM repo_index WHERE workspace_id = ?${kind ? ' AND kind = ?' : ''} ORDER BY kind, path`,
+          kind ? [workspaceId, kind] : [workspaceId],
+        );
+        return json({ entries: rows.results ?? rows });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/index') {
+        const user = await authenticateRequest(request, env, db);
+        const body = await readJson(request);
+        const { workspace_id, entries } = body;
+        if (!workspace_id || !Array.isArray(entries)) throw new HttpError(400, { error: 'workspace_id and entries[] required' });
+        const now = Date.now();
+        for (const e of entries) {
+          const id = crypto.randomUUID();
+          await db.run(
+            `INSERT INTO repo_index (id, workspace_id, kind, path, label, metadata_json, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(workspace_id, kind, path) DO UPDATE SET label = excluded.label, metadata_json = excluded.metadata_json, updated_at = excluded.updated_at`,
+            [id, workspace_id, e.kind, e.path, e.label ?? e.path, e.metadata_json ?? null, now],
+          );
+        }
+        return json({ upserted: entries.length }, { status: 201 });
+      }
+
+      if (request.method === 'DELETE' && url.pathname === '/v1/index') {
+        const user = await authenticateRequest(request, env, db);
+        const workspaceId = url.searchParams.get('workspace_id');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspace_id required' });
+        const kind = url.searchParams.get('kind');
+        await db.run(
+          `DELETE FROM repo_index WHERE workspace_id = ?${kind ? ' AND kind = ?' : ''}`,
+          kind ? [workspaceId, kind] : [workspaceId],
+        );
+        return json({ deleted: true });
+      }
+
+      // ── Orchestration: Evals ───────────────────────────────────────────────
+
+      if (request.method === 'GET' && url.pathname === '/v1/evals/tasks') {
+        const user = await authenticateRequest(request, env, db);
+        const workspaceId = url.searchParams.get('workspace_id');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspace_id required' });
+        const all = url.searchParams.get('all') === '1';
+        const rows = await db.all(
+          `SELECT * FROM eval_tasks WHERE workspace_id = ?${all ? '' : " AND status = 'active'"} ORDER BY created_at DESC`,
+          [workspaceId],
+        );
+        return json({ tasks: rows.results ?? rows });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/evals/tasks') {
+        const user = await authenticateRequest(request, env, db);
+        const body = await readJson(request);
+        const { workspace_id, title, description, acceptance } = body;
+        if (!workspace_id || !title || !description) throw new HttpError(400, { error: 'workspace_id, title, description required' });
+        const id = crypto.randomUUID();
+        await db.run(
+          'INSERT INTO eval_tasks (id, workspace_id, title, description, acceptance_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [id, workspace_id, title, description, acceptance ? JSON.stringify(acceptance) : null, 'active', Date.now()],
+        );
+        const task = await db.first('SELECT * FROM eval_tasks WHERE id = ? LIMIT 1', [id]);
+        return json({ task }, { status: 201 });
+      }
+
+      if (request.method === 'GET' && url.pathname === '/v1/evals/results') {
+        const user = await authenticateRequest(request, env, db);
+        const evalTaskId = url.searchParams.get('eval_task_id');
+        if (!evalTaskId) throw new HttpError(400, { error: 'eval_task_id required' });
+        const rows = await db.all('SELECT * FROM eval_results WHERE eval_task_id = ? ORDER BY created_at DESC', [evalTaskId]);
+        return json({ results: rows.results ?? rows });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/evals/results') {
+        const user = await authenticateRequest(request, env, db);
+        const body = await readJson(request);
+        const { eval_task_id, agent, model, passed, score, notes, run_id } = body;
+        if (!eval_task_id || !agent) throw new HttpError(400, { error: 'eval_task_id and agent required' });
+        const id = crypto.randomUUID();
+        await db.run(
+          'INSERT INTO eval_results (id, eval_task_id, run_id, agent, model, passed, score, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, eval_task_id, run_id ?? null, agent, model ?? null, passed != null ? (passed ? 1 : 0) : null, score ?? null, notes ?? null, Date.now()],
+        );
+        return json({ id }, { status: 201 });
+      }
+
     } catch (error) {
       if (error instanceof HttpError) {
         return json(error.body, { status: error.status });
