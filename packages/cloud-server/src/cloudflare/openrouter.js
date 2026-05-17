@@ -1,5 +1,6 @@
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_KEY_URL = 'https://openrouter.ai/api/v1/key';
+const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const IV_LENGTH = 12;
 
 export const OPENROUTER_MODELS = [
@@ -14,8 +15,29 @@ export const OPENROUTER_MODELS = [
 
 export const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS[0].id;
 
-export function isSupportedOpenRouterModel(model) {
-  return OPENROUTER_MODELS.some((option) => option.id === model);
+export function isSupportedOpenRouterModel(model, availableModels = OPENROUTER_MODELS) {
+  return availableModels.some((option) => option.id === model);
+}
+
+export function buildAvailableOpenRouterModels(liveModels = []) {
+  const merged = new Map();
+  for (const model of [...OPENROUTER_MODELS, ...liveModels]) {
+    if (!model?.id) continue;
+    const existing = merged.get(model.id);
+    merged.set(model.id, {
+      id: model.id,
+      label: model.label ?? existing?.label ?? model.id,
+      provider: model.provider ?? existing?.provider ?? inferProviderFromModelId(model.id),
+      free: typeof model.free === 'boolean' ? model.free : existing?.free ?? false,
+    });
+  }
+
+  return [...merged.values()].sort((left, right) => {
+    if (Boolean(left.free) !== Boolean(right.free)) return left.free ? -1 : 1;
+    const providerCompare = String(left.provider ?? '').localeCompare(String(right.provider ?? ''));
+    if (providerCompare !== 0) return providerCompare;
+    return String(left.label ?? left.id).localeCompare(String(right.label ?? right.id));
+  });
 }
 
 export async function encryptSecret(plaintext, env) {
@@ -116,6 +138,24 @@ export async function fetchOpenRouterKeyInfo(env, apiKey) {
   };
 }
 
+export async function fetchOpenRouterModels(env, apiKey) {
+  const response = await fetch(OPENROUTER_MODELS_URL, {
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': env.APP_URL,
+      'X-Title': 'MemCode',
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter model lookup failed: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const models = Array.isArray(payload?.data) ? payload.data : [];
+  return buildAvailableOpenRouterModels(models.map(normalizeOpenRouterModel).filter(Boolean));
+}
+
 function normalizeOpenRouterUsage(usage) {
   const promptTokens = numberOrZero(usage?.prompt_tokens ?? usage?.input_tokens);
   const completionTokens = numberOrZero(usage?.completion_tokens ?? usage?.output_tokens);
@@ -164,4 +204,43 @@ function numberOrNull(value) {
   if (value == null) return null;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : null;
+}
+
+function normalizeOpenRouterModel(model) {
+  const id = typeof model?.id === 'string' ? model.id.trim() : '';
+  if (!id) return null;
+
+  return {
+    id,
+    label: typeof model?.name === 'string' && model.name.trim() ? model.name.trim() : humanizeModelId(id),
+    provider: inferProviderFromModelId(id),
+    free: isFreeOpenRouterModel(model),
+  };
+}
+
+function isFreeOpenRouterModel(model) {
+  const promptPrice = numberOrNull(model?.pricing?.prompt);
+  const completionPrice = numberOrNull(model?.pricing?.completion);
+  const requestPrice = numberOrNull(model?.pricing?.request);
+  if (promptPrice == null && completionPrice == null && requestPrice == null) {
+    return /:free$/i.test(String(model?.id ?? ''));
+  }
+  return (promptPrice ?? 0) === 0 && (completionPrice ?? 0) === 0 && (requestPrice ?? 0) === 0;
+}
+
+function inferProviderFromModelId(modelId) {
+  const provider = String(modelId).split('/')[0] ?? '';
+  if (!provider) return 'OpenRouter';
+  return provider
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function humanizeModelId(modelId) {
+  const tail = String(modelId).split('/').pop() ?? modelId;
+  return tail
+    .replace(/[:_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }

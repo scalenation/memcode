@@ -8,10 +8,12 @@ import {
 } from './cloudflare/blob-storage.js';
 import { HttpError, authenticateRequest, requireActiveSubscription, signToken } from './cloudflare/auth.js';
 import {
+  buildAvailableOpenRouterModels,
   DEFAULT_OPENROUTER_MODEL,
   OPENROUTER_MODELS,
   decryptSecret,
   fetchOpenRouterKeyInfo,
+  fetchOpenRouterModels,
   encryptSecret,
   isSupportedOpenRouterModel,
 } from './cloudflare/openrouter.js';
@@ -161,12 +163,15 @@ export default {
         );
 
         let aiAvailability = null;
+        let availableModels = OPENROUTER_MODELS;
         if (userRow?.openrouter_api_key_encrypted) {
           try {
             const apiKey = await decryptSecret(userRow.openrouter_api_key_encrypted, env);
             aiAvailability = await fetchOpenRouterKeyInfo(env, apiKey);
+            availableModels = await fetchOpenRouterModels(env, apiKey);
           } catch {
             aiAvailability = null;
+            availableModels = buildAvailableOpenRouterModels();
           }
         }
 
@@ -183,7 +188,7 @@ export default {
           aiSettings: {
             hasOpenRouterKey: Boolean(userRow?.openrouter_api_key_encrypted),
             openRouterModel: userRow?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL,
-            availableModels: OPENROUTER_MODELS,
+            availableModels,
             availability: aiAvailability,
           },
         });
@@ -235,18 +240,33 @@ export default {
           ? body.openRouterModel.trim()
           : DEFAULT_OPENROUTER_MODEL;
         const clearOpenRouterKey = Boolean(body.clearOpenRouterKey);
-
-        if (!isSupportedOpenRouterModel(openRouterModel)) {
-          throw new HttpError(400, { error: 'Unsupported OpenRouter model selection.' });
-        }
+        let availableModels = buildAvailableOpenRouterModels();
 
         let availability = null;
         if (openRouterApiKey) {
           try {
             availability = await fetchOpenRouterKeyInfo(env, openRouterApiKey);
+            availableModels = await fetchOpenRouterModels(env, openRouterApiKey);
           } catch (error) {
             throw new HttpError(400, { error: error?.message ?? 'OpenRouter key validation failed.' });
           }
+        } else if (!clearOpenRouterKey) {
+          const existingRow = await db.first(
+            'SELECT openrouter_api_key_encrypted FROM users WHERE id = ? LIMIT 1',
+            [user.sub],
+          );
+          if (existingRow?.openrouter_api_key_encrypted) {
+            try {
+              const savedApiKey = await decryptSecret(existingRow.openrouter_api_key_encrypted, env);
+              availableModels = await fetchOpenRouterModels(env, savedApiKey);
+            } catch {
+              availableModels = buildAvailableOpenRouterModels();
+            }
+          }
+        }
+
+        if (!isSupportedOpenRouterModel(openRouterModel, availableModels)) {
+          throw new HttpError(400, { error: 'Unsupported OpenRouter model selection.' });
         }
 
         const encryptedKey = openRouterApiKey ? await encryptSecret(openRouterApiKey, env) : null;
@@ -271,9 +291,12 @@ export default {
         );
         if (!availability && row?.openrouter_api_key_encrypted) {
           try {
-            availability = await fetchOpenRouterKeyInfo(env, await decryptSecret(row.openrouter_api_key_encrypted, env));
+            const savedApiKey = await decryptSecret(row.openrouter_api_key_encrypted, env);
+            availability = await fetchOpenRouterKeyInfo(env, savedApiKey);
+            availableModels = await fetchOpenRouterModels(env, savedApiKey);
           } catch {
             availability = null;
+            availableModels = buildAvailableOpenRouterModels();
           }
         }
         return json({
@@ -281,7 +304,7 @@ export default {
           aiSettings: {
             hasOpenRouterKey: Boolean(row?.openrouter_api_key_encrypted),
             openRouterModel: row?.openrouter_model ?? DEFAULT_OPENROUTER_MODEL,
-            availableModels: OPENROUTER_MODELS,
+            availableModels,
             availability,
           },
         });

@@ -1207,7 +1207,7 @@ function renderWorkspaces(workspaces) {
   }
 }
 
-document.getElementById('ws-list').addEventListener('click', async (e) => {
+document.getElementById('ws-list')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const action = btn.dataset.action;
@@ -1310,7 +1310,7 @@ function renderSessions(sessions) {
   }
 }
 
-document.getElementById('sessions-list').addEventListener('click', async (e) => {
+document.getElementById('sessions-list')?.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-action="revoke-session"]');
   if (!btn) return;
   const sessId = btn.dataset.sess;
