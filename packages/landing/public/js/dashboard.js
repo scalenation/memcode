@@ -913,10 +913,8 @@ function renderAnalyticsEmpty(message) {
   document.getElementById('agent-availability-note').innerHTML = '';
   document.getElementById('agent-usage-summary').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No synced coding-agent usage recorded yet.</div></div>`;
   document.getElementById('agent-usage-by-category').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">No categorized coding-agent usage recorded yet.</div></div>`;
-  document.getElementById('agent-usage-recent').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No recent coding-agent sessions recorded yet.</div></div>';
   document.getElementById('agent-usage-operations').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No model usage recorded yet.</div></div>';
   document.getElementById('analytics-category-cards').innerHTML = `<div class="analytics-stat-card" style="grid-column:1 / -1"><div class="analytics-stat-sub">${esc(message)}</div></div>`;
-  document.getElementById('analytics-recent-items').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No categorized memory available yet.</div></div>';
   document.getElementById('analytics-source-breakdown').innerHTML = '<div class="brain-item"><div class="brain-item-detail">No source mix available yet.</div></div>';
 }
 
@@ -925,8 +923,6 @@ function renderAgentUsage(agentTelemetry) {
   const byAgent = agentTelemetry?.byAgent ?? [];
   const byModel = agentTelemetry?.byModel ?? [];
   const byCategory = agentTelemetry?.byCategory ?? [];
-  const recent = agentTelemetry?.recent ?? [];
-
   const availabilityCards = [
     {
       label: 'Detected Agents',
@@ -982,18 +978,6 @@ function renderAgentUsage(agentTelemetry) {
       <div class="analytics-stat-sub">${esc(`${entry.sessionCount} session${entry.sessionCount === 1 ? '' : 's'} · ${fmtInt(entry.messageCount)} messages`)}</div>
     </div>`).join('');
 
-  document.getElementById('agent-usage-recent').innerHTML = recent.length > 0
-    ? recent.map((entry) => renderBrainItem({
-      title: entry.taskLabel || `${entry.agent} session`,
-      meta: [entry.agent, entry.model || 'Model unavailable', entry.lastMessageAt ? fmtDate(entry.lastMessageAt) : null].filter(Boolean).join(' · '),
-      detail: `${fmtInt(entry.estimatedTokens)} estimated tokens · ${fmtInt(entry.messageCount)} messages`,
-      badges: [
-        { label: formatCategoryLabel(entry.category), tone: entry.category },
-        { label: entry.provider || 'Provider unknown' },
-      ],
-    })).join('')
-    : '<div class="brain-item"><div class="brain-item-detail">No recent coding-agent sessions recorded yet.</div></div>';
-
   document.getElementById('agent-usage-operations').innerHTML = byModel.length > 0
     ? byModel.map((entry) => renderBrainItem({
       title: entry.model || 'Model unavailable',
@@ -1023,18 +1007,6 @@ function renderAnalytics(payload, project) {
         <div class="analytics-stat-sub">${esc(`${share}% of searchable memory`)} </div>
       </div>`;
   }).join('');
-
-  document.getElementById('analytics-recent-items').innerHTML = (analytics.recentItems ?? []).length > 0
-    ? analytics.recentItems.map(item => renderBrainItem({
-      title: item.title,
-      meta: [project?.projectName || payload.projectName || payload.brain.workspaceId, item.kind, item.sortAt ? fmtDate(item.sortAt) : null].filter(Boolean).join(' · '),
-      detail: item.detail || 'No detail recorded.',
-      badges: [
-        { label: formatCategoryLabel(item.category), tone: item.category },
-        { label: item.kind },
-      ],
-    })).join('')
-    : '<div class="brain-item"><div class="brain-item-detail">No categorized memory available yet.</div></div>';
 
   const sourceKinds = [
     ['milestone', 'Milestones'],
