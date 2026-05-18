@@ -380,6 +380,10 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
       Evals
     </button>
+    <button class="nav-item" data-section="sessions">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      Sessions
+    </button>
     <div class="sidebar-spacer"></div>
     <hr class="sidebar-divider" />
     <button class="nav-item" id="signout-sidebar">
@@ -876,9 +880,16 @@
             <div id="run-plan-options" style="margin-top:8px"></div>
           </div>
 
-          <div>
+          <div style="margin-bottom:12px">
             <strong style="font-size:0.85rem">Steps</strong>
             <div id="run-steps-list" style="margin-top:8px"></div>
+          </div>
+
+          <div id="run-rollback-section" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
+            <button id="run-rollback-btn" class="btn" style="background:#c0392b;color:#fff;font-size:0.82rem;padding:7px 16px">
+              Rollback run
+            </button>
+            <span style="font-size:0.78rem;color:var(--text-dim);margin-left:10px">Marks this run as rolled_back. Apply <code>git stash pop</code> with the stash ref manually if needed.</span>
           </div>
         </div>
       </div>
@@ -937,6 +948,36 @@
         <div id="evals-results-section" hidden style="margin-top:16px">
           <strong style="font-size:0.85rem">Results for: <span id="evals-task-label"></span></strong>
           <div id="evals-results-list" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Agent Sessions ──────────────────────────────────────────── -->
+    <section id="section-sessions" class="section">
+      <div class="page-header">
+        <h1 class="page-title">Agent Sessions</h1>
+        <p class="page-subtitle">Live coding agent working sessions and handoff snapshots</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
+          <select id="sessions-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>
+          <select id="sessions-status-filter" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.85rem">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="idle">Idle</option>
+            <option value="ended">Ended</option>
+          </select>
+          <button class="btn btn-secondary" id="sessions-refresh-btn" style="font-size:0.8rem;padding:6px 12px">Refresh</button>
+        </div>
+        <div id="sessions-list"><p style="color:var(--text-dim);font-size:0.85rem">Select a workspace to see sessions.</p></div>
+      </div>
+      <div id="session-snapshot-panel" hidden style="margin-top:16px">
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <button id="session-snapshot-back" class="btn btn-secondary" style="font-size:0.78rem">← Back</button>
+            <h3 style="font-size:0.95rem;margin:0">Snapshot — <span id="session-snapshot-label"></span></h3>
+          </div>
+          <pre id="session-snapshot-content" style="font-size:0.78rem;white-space:pre-wrap;word-break:break-all;max-height:420px;overflow-y:auto;background:var(--surface-alt,#1a1a2e);padding:12px;border-radius:6px;margin:0"></pre>
         </div>
       </div>
     </section>

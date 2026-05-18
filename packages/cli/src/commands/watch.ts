@@ -16,7 +16,7 @@ import { Command } from 'commander';
 import { existsSync, writeFileSync, readFileSync, unlinkSync, watch as fsWatch } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import { openDb, getOrCreateWorkspace, buildRepoIndex, writeAgentContextFiles } from '@memcode/core';
+import { openDb, getOrCreateWorkspace, buildRepoIndex, writeAgentContextFiles, writeSnapshot, reapStaleSessions } from '@memcode/core';
 import { findProjectRoot, getDbPath, getMemoryDir, reconcileWorkspaceIdentity } from '../util';
 import pc from 'picocolors';
 
@@ -131,6 +131,7 @@ watchCommand
 
     const cleanup = () => {
       try { if (existsSync(pidFile)) unlinkSync(pidFile); } catch {}
+      clearInterval(inactivityTimer);
       process.exit(0);
     };
     process.on('SIGTERM', cleanup);
@@ -140,6 +141,9 @@ watchCommand
 
     let debounce: ReturnType<typeof setTimeout> | null = null;
     const changedFiles = new Set<string>();
+    let lastChangeAt = Date.now();
+    let snapshotGeneratedAt = 0;
+    const INACTIVITY_MS = 2 * 60 * 1000; // 2 minutes
 
     const refresh = () => {
       const db = openDb(dbPath);
@@ -160,6 +164,11 @@ watchCommand
         const result = writeAgentContextFiles(db, workspace.id, projectPath);
         const timestamp = new Date().toISOString().slice(11, 19);
         console.log(`  [${timestamp}] Context refreshed → ${result.written.join(', ')}`);
+
+        // Always write updated snapshot
+        try {
+          writeSnapshot(db, workspace.id, projectPath, memoryDir);
+        } catch {}
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(pc.red('!'), `Refresh error: ${msg}`);
@@ -167,6 +176,20 @@ watchCommand
         db.close();
       }
     };
+
+    // Inactivity check: if no changes for INACTIVITY_MS, generate a "session end" snapshot
+    const inactivityTimer = setInterval(() => {
+      if (Date.now() - lastChangeAt >= INACTIVITY_MS && Date.now() - snapshotGeneratedAt >= INACTIVITY_MS) {
+        snapshotGeneratedAt = Date.now();
+        const db = openDb(dbPath);
+        try {
+          const workspace = reconcileWorkspaceIdentity(db, projectPath, getOrCreateWorkspace(db, projectPath));
+          reapStaleSessions(db, workspace.id);
+          writeSnapshot(db, workspace.id, projectPath, memoryDir);
+          console.log(pc.dim(`  [${new Date().toISOString().slice(11, 19)}] Inactivity snapshot written`));
+        } catch {} finally { db.close(); }
+      }
+    }, 30_000);
 
     // Watch the project directory recursively using Node's built-in fs.watch
     try {
@@ -177,6 +200,7 @@ watchCommand
         if (parts.some(p => IGNORED_DIRS.has(p))) return;
 
         changedFiles.add(filename);
+        lastChangeAt = Date.now();
         if (debounce) clearTimeout(debounce);
         debounce = setTimeout(refresh, DEBOUNCE_MS);
       });

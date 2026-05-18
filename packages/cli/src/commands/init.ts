@@ -13,6 +13,7 @@ import {
   installGitHooks,
   buildRepoIndex,
   writeAgentContextFiles,
+  writeSnapshot,
 } from '@memcode/core';
 import { findProjectRoot, getDbPath, getMemoryDir, reconcileWorkspaceIdentity } from '../util';
 import pc from 'picocolors';
@@ -125,6 +126,15 @@ export const initCommand = new Command('init')
       }
     }
 
+    // 8. Write initial snapshot
+    try {
+      writeSnapshot(db, workspace.id, projectPath, memoryDir);
+      console.log(pc.green('✓'), `Initial snapshot written to .memory/`);
+    } catch {}
+
+    // 9. Write MCP server config files for Claude and Cursor
+    writeMcpConfigs(projectPath);
+
     db.close();
 
     console.log('');
@@ -132,9 +142,82 @@ export const initCommand = new Command('init')
     console.log('');
     console.log('  Your coding agents now have full project context.');
     console.log(`  Keep it fresh:  ${pc.cyan('memory watch start')}  — auto-updates on every file change`);
+    console.log(`  MCP server:     ${pc.cyan('memory mcp')}  — connect Claude/Cursor for live state queries`);
     console.log(`  Cloud sync:     ${pc.cyan('memory sync auth')}  then  ${pc.cyan('memory sync start')}  (Pro)`);
     console.log(`  Checkpoint:     ${pc.cyan('memory checkpoint --note "description"')}  — snapshot current state`);
     console.log('');
     console.log(`  Context is written to your agent config files automatically.`);
     console.log(`  Run ${pc.cyan('memory context refresh')} any time to force-update all agent files.`);
   });
+
+// ── MCP config helpers ────────────────────────────────────────────────────────
+
+/**
+ * Write MCP server configs for all supported agents (Claude, Cursor, Windsurf).
+ * These tell the agent to launch `memory mcp` as a stdio MCP server.
+ * Skips silently if the file already exists to avoid overwriting customizations.
+ */
+function writeMcpConfigs(projectPath: string): void {
+  const mcpEntry = {
+    command: 'memory',
+    args: ['mcp', '--path', projectPath],
+    env: {},
+  };
+
+  // Claude Code: .claude/settings.json → mcpServers.memcode
+  const claudeDir = join(projectPath, '.claude');
+  const claudeSettings = join(claudeDir, 'settings.json');
+  try {
+    let settings: Record<string, unknown> = {};
+    if (existsSync(claudeSettings)) {
+      settings = JSON.parse(readFileSync(claudeSettings, 'utf-8')) as Record<string, unknown>;
+    } else {
+      mkdirSync(claudeDir, { recursive: true });
+    }
+    const mcpServers = (settings['mcpServers'] ?? {}) as Record<string, unknown>;
+    if (!mcpServers['memcode']) {
+      mcpServers['memcode'] = mcpEntry;
+      settings['mcpServers'] = mcpServers;
+      writeFileSync(claudeSettings, JSON.stringify(settings, null, 2), 'utf-8');
+      console.log(pc.green('✓'), 'MCP server registered in .claude/settings.json');
+    }
+  } catch {}
+
+  // Cursor: .cursor/mcp.json → mcpServers.memcode
+  const cursorDir = join(projectPath, '.cursor');
+  const cursorMcp = join(cursorDir, 'mcp.json');
+  try {
+    let settings: Record<string, unknown> = {};
+    if (existsSync(cursorMcp)) {
+      settings = JSON.parse(readFileSync(cursorMcp, 'utf-8')) as Record<string, unknown>;
+    } else {
+      mkdirSync(cursorDir, { recursive: true });
+    }
+    const mcpServers = (settings['mcpServers'] ?? {}) as Record<string, unknown>;
+    if (!mcpServers['memcode']) {
+      mcpServers['memcode'] = mcpEntry;
+      settings['mcpServers'] = mcpServers;
+      writeFileSync(cursorMcp, JSON.stringify(settings, null, 2), 'utf-8');
+      console.log(pc.green('✓'), 'MCP server registered in .cursor/mcp.json');
+    }
+  } catch {}
+
+  // Windsurf: .windsurf/mcp.json
+  const windsurfDir = join(projectPath, '.windsurf');
+  const windsurfMcp = join(windsurfDir, 'mcp.json');
+  try {
+    let settings: Record<string, unknown> = {};
+    if (existsSync(windsurfMcp)) {
+      settings = JSON.parse(readFileSync(windsurfMcp, 'utf-8')) as Record<string, unknown>;
+    } else {
+      mkdirSync(windsurfDir, { recursive: true });
+    }
+    const mcpServers = (settings['mcpServers'] ?? {}) as Record<string, unknown>;
+    if (!mcpServers['memcode']) {
+      mcpServers['memcode'] = mcpEntry;
+      settings['mcpServers'] = mcpServers;
+      writeFileSync(windsurfMcp, JSON.stringify(settings, null, 2), 'utf-8');
+      console.log(pc.green('✓'), 'MCP server registered in .windsurf/mcp.json');
+    }
+  } catch {}
+}

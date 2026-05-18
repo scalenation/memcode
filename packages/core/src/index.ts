@@ -142,4 +142,25 @@ export type {
   RepoIndexKind,
   EvalTask,
   EvalResult,
+  AgentSession,
 } from './schema';
+
+export {
+  writeSnapshot,
+  buildSnapshot,
+  readSnapshot,
+  renderSnapshotMarkdown,
+  type ProjectSnapshot,
+} from './snapshot';
+
+export {
+  startAgentSession,
+  heartbeatSession,
+  updateSessionGoal,
+  endAgentSession,
+  getActiveSession,
+  listAgentSessions,
+  getAgentSession,
+  reapStaleSessions,
+  rollbackSession,
+} from './agent-session';

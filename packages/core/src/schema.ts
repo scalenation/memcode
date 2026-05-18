@@ -241,3 +241,19 @@ export interface EvalResult {
   notes?: string;
   created_at: number;
 }
+
+export interface AgentSession {
+  id: string;
+  workspace_id: string;
+  run_id?: string;
+  agent: string;
+  status: 'active' | 'idle' | 'ended';
+  goal?: string;
+  stash_ref?: string;
+  files_changed?: string;  // JSON array
+  blocker?: string;
+  started_at: number;
+  last_heartbeat_at: number;
+  ended_at?: number;
+  snapshot_json?: string;
+}

@@ -110,6 +110,9 @@ function navigateTo(sectionId) {
   if (sectionId === 'evals') {
     populateOrchWorkspaceSelect('evals-workspace-filter', loadEvals);
   }
+  if (sectionId === 'sessions') {
+    populateOrchWorkspaceSelect('sessions-workspace-filter', loadSessions);
+  }
 }
 
 // ── Load profile ──────────────────────────────────────────────────────────────
@@ -2426,6 +2429,14 @@ async function loadRunDetail(runId) {
       </table>`;
     } else { stepsEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.82rem">No steps recorded yet.</p>'; }
   }
+
+  // Rollback button
+  const rollbackBtn = document.getElementById('run-rollback-btn');
+  if (rollbackBtn) {
+    rollbackBtn.onclick = () => rollbackRun(run.id, run.title);
+    const rollbackSection = document.getElementById('run-rollback-section');
+    if (rollbackSection) rollbackSection.hidden = ['rolled_back', 'cancelled'].includes(run.status);
+  }
 }
 
 document.getElementById('run-detail-back')?.addEventListener('click', () => {
@@ -2535,3 +2546,71 @@ async function loadEvalResults(taskId, title) {
 }
 
 document.getElementById('evals-workspace-filter')?.addEventListener('change', loadEvals);
+
+// ── Agent Sessions ────────────────────────────────────────────────────────────
+
+async function loadSessions() {
+  const workspaceId = document.getElementById('sessions-workspace-filter')?.value;
+  const el = document.getElementById('sessions-list');
+  if (!el || !workspaceId) return;
+  el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">Loading…</p>';
+  const status = document.getElementById('sessions-status-filter')?.value || '';
+  const url = `/v1/agent-sessions?workspace_id=${encodeURIComponent(workspaceId)}${status ? `&status=${encodeURIComponent(status)}` : ''}`;
+  const res = await authFetch(url);
+  if (!res.ok) { el.innerHTML = '<p style="color:var(--danger)">Failed to load sessions.</p>'; return; }
+  const { sessions } = await res.json();
+  if (!sessions?.length) { el.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem">No sessions yet.</p>'; return; }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:6px 8px;text-align:left">Status</th>
+      <th style="padding:6px 8px;text-align:left">Agent</th>
+      <th style="padding:6px 8px;text-align:left">Goal</th>
+      <th style="padding:6px 8px;text-align:left">Blocker</th>
+      <th style="padding:6px 8px;text-align:left">Started</th>
+      <th style="padding:6px 8px"></th>
+    </tr></thead>
+    <tbody>${sessions.map(s => `<tr style="border-bottom:1px solid var(--border-subtle)">
+      <td style="padding:6px 8px">${orchStatusBadge(s.status)}</td>
+      <td style="padding:6px 8px">${escapeHtml(s.agent || '')}</td>
+      <td style="padding:6px 8px;color:var(--text-dim)">${escapeHtml((s.goal || '').slice(0, 60))}</td>
+      <td style="padding:6px 8px;color:#f59e0b;font-size:0.78rem">${escapeHtml((s.blocker || '').slice(0, 50))}</td>
+      <td style="padding:6px 8px;color:var(--text-dim)">${new Date(s.started_at).toLocaleString()}</td>
+      <td style="padding:6px 8px">${s.snapshot_json ? `<button class="btn btn-secondary" style="font-size:0.72rem;padding:2px 8px" onclick="showSessionSnapshot('${escapeHtml(s.id)}','${escapeHtml(s.agent || s.id)}')">Snapshot</button>` : ''}</td>
+    </tr>`).join('')}</tbody>
+  </table>`;
+}
+
+function showSessionSnapshot(sessionId, label) {
+  const panel = document.getElementById('session-snapshot-panel');
+  const content = document.getElementById('session-snapshot-content');
+  const labelEl = document.getElementById('session-snapshot-label');
+  if (!panel || !content) return;
+  panel.hidden = false;
+  if (labelEl) labelEl.textContent = label;
+  content.textContent = 'Loading…';
+  authFetch(`/v1/agent-sessions/${encodeURIComponent(sessionId)}`).then(r => r.json()).then(({ session }) => {
+    try {
+      const snap = typeof session.snapshot_json === 'string' ? JSON.parse(session.snapshot_json) : session.snapshot_json;
+      content.textContent = JSON.stringify(snap, null, 2);
+    } catch {
+      content.textContent = session.snapshot_json || '(empty)';
+    }
+  }).catch(() => { content.textContent = 'Failed to load snapshot.'; });
+}
+
+document.getElementById('session-snapshot-back')?.addEventListener('click', () => {
+  document.getElementById('session-snapshot-panel').hidden = true;
+});
+document.getElementById('sessions-workspace-filter')?.addEventListener('change', loadSessions);
+document.getElementById('sessions-status-filter')?.addEventListener('change', loadSessions);
+document.getElementById('sessions-refresh-btn')?.addEventListener('click', loadSessions);
+
+// ── Rollback ─────────────────────────────────────────────────────────────────
+
+async function rollbackRun(runId, title) {
+  if (!confirm(`Mark run "${title || runId.slice(0,16)}" as rolled_back?`)) return;
+  const res = await authFetch(`/v1/runs/${encodeURIComponent(runId)}/rollback`, { method: 'POST' });
+  if (!res.ok) { showNotice('Rollback failed.', 'error'); return; }
+  showNotice('Run marked as rolled_back.', 'success');
+  loadRunDetail(runId);
+}

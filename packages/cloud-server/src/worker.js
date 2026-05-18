@@ -1292,6 +1292,77 @@ export default {
         return json({ id }, { status: 201 });
       }
 
+      // ── Agent Sessions ────────────────────────────────────────────────────
+
+      if (request.method === 'GET' && url.pathname === '/v1/agent-sessions') {
+        const user = await authenticateRequest(request, env, db);
+        const workspaceId = url.searchParams.get('workspace_id');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspace_id required' });
+        const status = url.searchParams.get('status');
+        const rows = await db.all(
+          `SELECT * FROM agent_sessions WHERE workspace_id = ?${status ? ' AND status = ?' : ''} ORDER BY started_at DESC LIMIT 50`,
+          status ? [workspaceId, status] : [workspaceId],
+        );
+        return json({ sessions: rows.results ?? rows });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/v1/agent-sessions') {
+        const user = await authenticateRequest(request, env, db);
+        const body = await readJson(request);
+        const { workspace_id, agent, goal, run_id } = body;
+        if (!workspace_id) throw new HttpError(400, { error: 'workspace_id required' });
+        const id = crypto.randomUUID();
+        const now = Date.now();
+        await db.run(
+          `INSERT INTO agent_sessions (id, workspace_id, run_id, agent, status, goal, started_at, last_heartbeat_at)
+           VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
+          [id, workspace_id, run_id ?? null, agent ?? 'unknown', goal ?? null, now, now],
+        );
+        const session = await db.first('SELECT * FROM agent_sessions WHERE id = ? LIMIT 1', [id]);
+        return json({ session }, { status: 201 });
+      }
+
+      const agentSessionIdMatch = matchPath(url.pathname, /^\/v1\/agent-sessions\/([^/]+)$/);
+      if (agentSessionIdMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const sessionId = agentSessionIdMatch[1];
+        if (request.method === 'GET') {
+          const session = await db.first('SELECT * FROM agent_sessions WHERE id = ? LIMIT 1', [sessionId]);
+          if (!session) throw new HttpError(404, { error: 'Agent session not found' });
+          return json({ session });
+        }
+        if (request.method === 'PATCH') {
+          const body = await readJson(request);
+          const allowed = ['status', 'goal', 'blocker', 'files_changed_json', 'stash_ref', 'snapshot_json', 'ended_at'];
+          const sets = [];
+          const vals = [];
+          for (const key of allowed) {
+            if (key in body) { sets.push(`${key} = ?`); vals.push(body[key]); }
+          }
+          sets.push('last_heartbeat_at = ?'); vals.push(Date.now());
+          if (sets.length === 1) throw new HttpError(400, { error: 'No valid fields' });
+          vals.push(sessionId);
+          await db.run(`UPDATE agent_sessions SET ${sets.join(', ')} WHERE id = ?`, vals);
+          const session = await db.first('SELECT * FROM agent_sessions WHERE id = ? LIMIT 1', [sessionId]);
+          return json({ session });
+        }
+      }
+
+      // ── Rollback ──────────────────────────────────────────────────────────
+
+      const runRollbackMatch = matchPath(url.pathname, /^\/v1\/runs\/([^/]+)\/rollback$/);
+      if (request.method === 'POST' && runRollbackMatch) {
+        const user = await authenticateRequest(request, env, db);
+        const runId = runRollbackMatch[1];
+        const run = await db.first('SELECT * FROM runs WHERE id = ? LIMIT 1', [runId]);
+        if (!run) throw new HttpError(404, { error: 'Run not found' });
+        await db.run(
+          `UPDATE runs SET status = 'rolled_back', updated_at = ? WHERE id = ?`,
+          [Date.now(), runId],
+        );
+        return json({ ok: true, runId, note: 'Run marked as rolled_back. Apply git stash manually using stash_ref if present.' });
+      }
+
     } catch (error) {
       if (error instanceof HttpError) {
         return json(error.body, { status: error.status });

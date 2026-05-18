@@ -243,6 +243,53 @@ CREATE TABLE IF NOT EXISTS eval_results (
   created_at   INTEGER NOT NULL
 );
 
+-- ── Agent Sessions ────────────────────────────────────────────────────────────
+-- Tracks live coding agent working sessions (distinct from AI chat sessions).
+-- Each entry represents a developer+agent pair working on the project.
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id                TEXT    PRIMARY KEY,
+  workspace_id      TEXT    NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  run_id            TEXT    REFERENCES runs(id),
+  agent             TEXT,
+  status            TEXT    NOT NULL DEFAULT 'active'
+                            CHECK(status IN ('active','idle','ended')),
+  goal              TEXT,
+  stash_ref         TEXT,
+  files_changed     TEXT,
+  blocker           TEXT,
+  started_at        INTEGER NOT NULL,
+  last_heartbeat_at INTEGER NOT NULL,
+  ended_at          INTEGER,
+  snapshot_json     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_workspace
+  ON agent_sessions(workspace_id, started_at DESC);
+    `,
+  },
+  {
+    name: '004_agent_sessions',
+    sql: `
+-- Idempotent: adds agent_sessions table if it doesn't exist (for pre-existing DBs
+-- that already have tables from 003 but not this table).
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id                TEXT    PRIMARY KEY,
+  workspace_id      TEXT    NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  run_id            TEXT    REFERENCES runs(id),
+  agent             TEXT,
+  status            TEXT    NOT NULL DEFAULT 'active'
+                            CHECK(status IN ('active','idle','ended')),
+  goal              TEXT,
+  stash_ref         TEXT,
+  files_changed     TEXT,
+  blocker           TEXT,
+  started_at        INTEGER NOT NULL,
+  last_heartbeat_at INTEGER NOT NULL,
+  ended_at          INTEGER,
+  snapshot_json     TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_workspace
+  ON agent_sessions(workspace_id, started_at DESC);
+
 -- ── Indexes ───────────────────────────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_runs_workspace_created
   ON runs(workspace_id, created_at DESC);

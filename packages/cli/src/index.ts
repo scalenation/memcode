@@ -43,6 +43,8 @@ const COMMAND_LOADERS: Record<string, CommandLoader> = {
   // ── Auto-context ─────────────────────────────────────────────────────────────
   watch: async () => (await import('./commands/watch')).watchCommand,
   context: async () => (await import('./commands/context')).contextCommand,
+  // ── MCP Server ───────────────────────────────────────────────────────────────
+  mcp: async () => (await import('./commands/mcp')).mcpCommand,
 };
 
 program
