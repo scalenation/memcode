@@ -116,6 +116,7 @@
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .upgrade-box { background: linear-gradient(135deg, rgba(108,99,255,0.08), rgba(108,99,255,0.03)); border: 1px dashed rgba(108,99,255,0.3); border-radius: var(--radius-sm); padding: 20px 24px; text-align: center; }
     .upgrade-box p { color: var(--text-dim); font-size: 0.88rem; margin: 0 0 14px; }
+    .settings-group-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-dim); margin: 24px 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
     .cli-block { font-family: var(--mono); font-size: 0.88rem; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; color: var(--text-dim); margin-top: 10px; }
     .cli-block span { color: var(--accent-2); }
     .pm-table { display: flex; flex-direction: column; gap: 6px; }
@@ -344,48 +345,28 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       History
     </button>
-    <button class="nav-item" data-section="brain">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3.5a3.5 3.5 0 0 0-3.5 3.5v1A2.5 2.5 0 0 0 3 10.5v1A2.5 2.5 0 0 0 5.5 14v1A3.5 3.5 0 0 0 9 18.5h.5A2.5 2.5 0 0 0 12 21a2.5 2.5 0 0 0 2.5-2.5h.5a3.5 3.5 0 0 0 3.5-3.5v-1A2.5 2.5 0 0 0 21 11.5v-1A2.5 2.5 0 0 0 18.5 8v-1A3.5 3.5 0 0 0 15 3.5h-.5A2.5 2.5 0 0 0 12 1a2.5 2.5 0 0 0-2.5 2.5H9Z"/></svg>
-      Brain
-    </button>
-    <button class="nav-item" data-section="analytics">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19V3"/></svg>
-      Analytics
-    </button>
-    <button class="nav-item" data-section="profile">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-      Profile
-    </button>
-    <button class="nav-item" data-section="billing">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-      Billing
-    </button>
-    <button class="nav-item" data-section="cli">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-      CLI
-    </button>
     <button class="nav-item" data-section="runs">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       Runs
-    </button>
-    <button class="nav-item" data-section="assumptions">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      Assumptions
-    </button>
-    <button class="nav-item" data-section="repo-index">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M14 2v4"/><path d="M14 10v4"/><path d="M14 18v4"/></svg>
-      Repo Index
-    </button>
-    <button class="nav-item" data-section="evals">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-      Evals
     </button>
     <button class="nav-item" data-section="sessions">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
       Sessions
     </button>
+    <button class="nav-item" data-section="evals">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      Evals
+    </button>
+    <button class="nav-item" data-section="brain">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3.5a3.5 3.5 0 0 0-3.5 3.5v1A2.5 2.5 0 0 0 3 10.5v1A2.5 2.5 0 0 0 5.5 14v1A3.5 3.5 0 0 0 9 18.5h.5A2.5 2.5 0 0 0 12 21a2.5 2.5 0 0 0 2.5-2.5h.5a3.5 3.5 0 0 0 3.5-3.5v-1A2.5 2.5 0 0 0 21 11.5v-1A2.5 2.5 0 0 0 18.5 8v-1A3.5 3.5 0 0 0 15 3.5h-.5A2.5 2.5 0 0 0 12 1a2.5 2.5 0 0 0-2.5 2.5H9Z"/></svg>
+      Brain
+    </button>
     <div class="sidebar-spacer"></div>
     <hr class="sidebar-divider" />
+    <button class="nav-item" data-section="settings">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
+      Settings
+    </button>
     <button class="nav-item" id="signout-sidebar">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Sign out
@@ -450,8 +431,11 @@
     </section>
 
     <!-- Profile -->
-    <section id="section-profile" class="section">
-      <h1 class="section-title">Profile</h1>
+    <!-- ── Settings (Account + Billing + CLI) ──────────────────── -->
+    <section id="section-settings" class="section">
+      <h1 class="section-title">Settings</h1>
+
+      <p class="settings-group-title">Account</p>
       <div class="card">
         <p class="card-title">Account Information</p>
         <div class="field">
@@ -506,6 +490,8 @@
         </div>
         <div id="cli-pw-msg" class="form-msg"></div>
       </div>
+
+      <p class="settings-group-title">AI</p>
       <div class="card">
         <p class="card-title">AI Settings</p>
         <p style="font-size:0.83rem;color:var(--text-dim);margin:0 0 14px">Bring your own OpenRouter key for AI-generated Brain answers, status reports, slide outlines, and business plans. Free models are listed first.</p>
@@ -524,8 +510,76 @@
         </div>
         <div id="ai-settings-msg" class="form-msg"></div>
       </div>
+
+      <p class="settings-group-title">Billing</p>
+      <div class="card">
+        <p class="card-title">Subscription</p>
+        <div id="billing-sub-loading">
+          <div class="skeleton" style="height:14px;width:100%;margin-bottom:10px"></div>
+          <div class="skeleton" style="height:14px;width:55%"></div>
+        </div>
+        <div id="billing-sub-content" hidden>
+          <div id="billing-sub-active" hidden>
+            <div class="info-row"><span class="info-label">Plan</span><span class="info-value" id="billing-plan"></span></div>
+            <div class="info-row"><span class="info-label">Status</span><span id="billing-status-badge"></span></div>
+            <div class="info-row last"><span class="info-label">Renews</span><span class="info-value" id="billing-renews"></span></div>
+            <div style="margin-top:16px">
+              <button class="btn btn-danger btn-sm" id="cancel-sub-btn">Cancel subscription</button>
+            </div>
+            <div class="inline-confirm" id="cancel-confirm" hidden>
+              <p>Your access continues until the end of the current period. Cancel anyway?</p>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-danger btn-sm" id="cancel-confirm-btn">Yes, cancel</button>
+                <button class="btn btn-secondary btn-sm" id="cancel-abort-btn">Keep subscription</button>
+              </div>
+            </div>
+          </div>
+          <div id="billing-free" hidden>
+            <div class="upgrade-box">
+              <p>You're on the <strong>Free</strong> plan. Upgrade to Pro for encrypted cloud sync.</p>
+              <a href="/#pricing" class="btn btn-primary">Upgrade to Pro</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <p class="card-title" style="margin-bottom:0">Payment Methods</p>
+          <button class="btn btn-secondary btn-sm" id="add-card-btn">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add card
+          </button>
+        </div>
+        <div id="pm-loading">
+          <div class="skeleton" style="height:44px;margin-bottom:7px"></div>
+          <div class="skeleton" style="height:44px"></div>
+        </div>
+        <div id="pm-list" class="pm-table" hidden></div>
+        <p id="pm-none" style="font-size:0.84rem;color:var(--text-dim);margin:0" hidden>No saved payment methods.</p>
+        <div class="add-card-form" id="add-card-form" hidden>
+          <label>Card details</label>
+          <div id="add-card-element"></div>
+          <div id="add-card-errors"></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" id="add-card-save-btn">Add card</button>
+            <button class="btn btn-secondary btn-sm" id="add-card-cancel-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="settings-group-title">CLI Quick Start</p>
+      <div class="card">
+        <p class="card-title">Link your CLI</p>
+        <p style="font-size:0.85rem;color:var(--text-dim);margin:0 0 12px">Authenticate the MemCode CLI to start syncing workspaces:</p>
+        <div class="cli-block"><span>$</span> memory sync auth</div>
+        <p style="font-size:0.8rem;color:var(--text-dim);margin-top:12px;margin-bottom:0">
+          Enter your email and password when prompted.<br/>
+          Set a password with <code style="font-family:var(--mono)">memory sync set-password</code>
+        </p>
+      </div>
+
+      <p class="settings-group-title">Danger Zone</p>
       <div class="card danger-card">
-        <p class="card-title">Danger Zone</p>
         <div class="info-row last">
           <div>
             <div style="font-size:0.88rem;font-weight:600">Delete account</div>
@@ -779,80 +833,6 @@
       </div>
     </section>
 
-    <!-- Billing -->
-    <section id="section-billing" class="section">
-      <h1 class="section-title">Billing</h1>
-      <div class="card">
-        <p class="card-title">Subscription</p>
-        <div id="billing-sub-loading">
-          <div class="skeleton" style="height:14px;width:100%;margin-bottom:10px"></div>
-          <div class="skeleton" style="height:14px;width:55%"></div>
-        </div>
-        <div id="billing-sub-content" hidden>
-          <div id="billing-sub-active" hidden>
-            <div class="info-row"><span class="info-label">Plan</span><span class="info-value" id="billing-plan"></span></div>
-            <div class="info-row"><span class="info-label">Status</span><span id="billing-status-badge"></span></div>
-            <div class="info-row last"><span class="info-label">Renews</span><span class="info-value" id="billing-renews"></span></div>
-            <div style="margin-top:16px">
-              <button class="btn btn-danger btn-sm" id="cancel-sub-btn">Cancel subscription</button>
-            </div>
-            <div class="inline-confirm" id="cancel-confirm" hidden>
-              <p>Your access continues until the end of the current period. Cancel anyway?</p>
-              <div style="display:flex;gap:8px">
-                <button class="btn btn-danger btn-sm" id="cancel-confirm-btn">Yes, cancel</button>
-                <button class="btn btn-secondary btn-sm" id="cancel-abort-btn">Keep subscription</button>
-              </div>
-            </div>
-          </div>
-          <div id="billing-free" hidden>
-            <div class="upgrade-box">
-              <p>You're on the <strong>Free</strong> plan. Upgrade to Pro for encrypted cloud sync.</p>
-              <a href="/#pricing" class="btn btn-primary">Upgrade to Pro</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-          <p class="card-title" style="margin-bottom:0">Payment Methods</p>
-          <button class="btn btn-secondary btn-sm" id="add-card-btn">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add card
-          </button>
-        </div>
-        <div id="pm-loading">
-          <div class="skeleton" style="height:44px;margin-bottom:7px"></div>
-          <div class="skeleton" style="height:44px"></div>
-        </div>
-        <div id="pm-list" class="pm-table" hidden></div>
-        <p id="pm-none" style="font-size:0.84rem;color:var(--text-dim);margin:0" hidden>No saved payment methods.</p>
-        <div class="add-card-form" id="add-card-form" hidden>
-          <label>Card details</label>
-          <div id="add-card-element"></div>
-          <div id="add-card-errors"></div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-primary btn-sm" id="add-card-save-btn">Add card</button>
-            <button class="btn btn-secondary btn-sm" id="add-card-cancel-btn">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- CLI -->
-    <section id="section-cli" class="section">
-      <h1 class="section-title">CLI Setup</h1>
-      <div class="card">
-        <p class="card-title">Link your CLI</p>
-        <p style="font-size:0.85rem;color:var(--text-dim);margin:0 0 12px">Authenticate the MemCode CLI to start syncing workspaces:</p>
-        <div class="cli-block"><span>$</span> memory sync auth</div>
-        <p style="font-size:0.8rem;color:var(--text-dim);margin-top:12px;margin-bottom:0">
-          Enter your email and password when prompted.<br/>
-          Set a password with <code style="font-family:var(--mono)">memory sync set-password</code>
-        </p>
-      </div>
-    </section>
-
     <!-- ── Runs ─────────────────────────────────────────────────────── -->
     <section id="section-runs" class="section">
       <h1 class="section-title">Runs</h1>
@@ -893,27 +873,23 @@
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- ── Assumptions ──────────────────────────────────────────────── -->
-    <section id="section-assumptions" class="section">
-      <h1 class="section-title">Assumptions</h1>
-      <p class="section-subtitle">Active knowledge the agent has learned about your codebase.</p>
-      <div class="card" style="margin-bottom:16px">
+      <!-- Assumptions sub-section -->
+      <div class="card" style="margin-top:24px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <strong>Assumptions</strong>
+          <p class="card-title" style="margin-bottom:0">Assumptions</p>
           <select id="assumptions-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>
         </div>
+        <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 12px">Active knowledge the agent has learned about your codebase.</p>
         <div id="assumptions-list">
           <p style="color:var(--text-dim);font-size:0.85rem">Select a workspace above.</p>
         </div>
       </div>
     </section>
 
-    <!-- ── Repo Index ────────────────────────────────────────────────── -->
+    <!-- ── Repo Index (hidden, no nav entry) ─────────────────────────── -->
     <section id="section-repo-index" class="section">
       <h1 class="section-title">Repo Index</h1>
-      <p class="section-subtitle">Auto-maintained catalog of components, endpoints, tests and conventions.</p>
       <div class="card">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           <select id="index-workspace-filter" class="input" style="width:220px;font-size:0.8rem"></select>

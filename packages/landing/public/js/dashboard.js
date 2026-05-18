@@ -83,8 +83,11 @@ document.querySelectorAll('.nav-item[data-section]').forEach(btn => {
 function navigateTo(sectionId) {
   document.querySelectorAll('.nav-item[data-section]').forEach(b => b.classList.toggle('active', b.dataset.section === sectionId));
   document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === `section-${sectionId}`));
-  if (sectionId === 'billing' && !document.getElementById('pm-list').dataset.loaded) {
-    loadPaymentMethods();
+  if (sectionId === 'settings') {
+    loadProfile();
+    if (!document.getElementById('pm-list').dataset.loaded) {
+      loadPaymentMethods();
+    }
   }
   if (sectionId === 'workspaces' && !document.getElementById('ws-list').dataset.loaded) {
     loadWorkspaces();
@@ -95,13 +98,8 @@ function navigateTo(sectionId) {
   if (sectionId === 'brain') {
     loadBrain();
   }
-  if (sectionId === 'analytics') {
-    loadAnalytics();
-  }
   if (sectionId === 'runs') {
     populateOrchWorkspaceSelect('runs-workspace-filter', loadRuns);
-  }
-  if (sectionId === 'assumptions') {
     populateOrchWorkspaceSelect('assumptions-workspace-filter', loadAssumptions);
   }
   if (sectionId === 'repo-index') {
