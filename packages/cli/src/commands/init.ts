@@ -138,16 +138,16 @@ export const initCommand = new Command('init')
     db.close();
 
     console.log('');
-    console.log(pc.bold(pc.green('MemCode is ready!')));
+    console.log(pc.bold(pc.green('MemCode is ready! Setup complete — nothing else needed.')));
     console.log('');
-    console.log('  Your coding agents now have full project context.');
-    console.log(`  Keep it fresh:  ${pc.cyan('memory watch start')}  — auto-updates on every file change`);
-    console.log(`  MCP server:     ${pc.cyan('memory mcp')}  — connect Claude/Cursor for live state queries`);
-    console.log(`  Cloud sync:     ${pc.cyan('memory sync auth')}  then  ${pc.cyan('memory sync start')}  (Pro)`);
-    console.log(`  Checkpoint:     ${pc.cyan('memory checkpoint --note "description"')}  — snapshot current state`);
+    console.log('  Every new chat in Copilot, Claude, Cursor, and Windsurf will automatically');
+    console.log('  receive your latest project context. Git hooks keep it fresh on every commit.');
     console.log('');
-    console.log(`  Context is written to your agent config files automatically.`);
-    console.log(`  Run ${pc.cyan('memory context refresh')} any time to force-update all agent files.`);
+    console.log(`  Optional extras:`);
+    console.log(`    ${pc.cyan('memory watch start')}              — also refresh on file saves, not just commits`);
+    console.log(`    ${pc.cyan('memory mcp')}                      — live MCP server for Claude/Cursor tool calls`);
+    console.log(`    ${pc.cyan('memory sync auth')}                 — enable cross-machine sync (Pro)`);
+    console.log(`    ${pc.cyan('memory context refresh')}           — force-refresh agent files right now`);
   });
 
 // ── MCP config helpers ────────────────────────────────────────────────────────

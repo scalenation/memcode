@@ -7,35 +7,33 @@
 
 ## What is MemCode?
 
-MemCode gives coding assistants durable, project-aware memory across sessions and machines. Chat sessions are ephemeral — MemCode captures checkpoints automatically, lets you recall decisions and tasks instantly, and generates a context pack for any new session.
+MemCode gives coding assistants durable, project-aware memory across sessions and machines. Run one command once — every AI chat in Copilot, Claude, Cursor, and Windsurf automatically receives your latest project context from that point on. No manual steps between sessions.
 
 **Local-first by default. Cloud sync is optional and behind a feature flag.**
 
 ## Quick Start
 
-### Free/Local Setup
+### Free/Local Setup — set up once, forget it
 
 ```bash
 # Install globally
 npm install -g @memcode/cli
 
-# Initialize memory in your project
+# Initialize memory in your project (do this once per repo)
 cd my-project
 memory init --hooks
+```
 
-# Wire MemCode into Copilot or Claude once per project
-memory copilot setup
+That's it. MemCode:
+- Writes your project context directly into Copilot, Claude, Cursor, and Windsurf config files
+- Installs git hooks that auto-refresh context on every commit
+- Every new chat session automatically has your latest decisions, tasks, and checkpoints
 
-# Create a first checkpoint
-memory checkpoint --note "Switched to PostgreSQL for better full-text search"
+```bash
+# Optional: also auto-refresh on every file save (not just commits)
+memory watch start
 
-# Optional: start the local dashboard/background worker
-memory service start
-
-# Generate a context pack before a new chat session
-memory context-pack
-
-# Recall a past decision
+# Recall a past decision any time
 memory recall --query "database choice" --limit 5
 ```
 
@@ -56,10 +54,11 @@ Use `memory sync` for normal hook and background sync. `memory sync push` and `m
 
 ## Features
 
-- **Automatic checkpoints** — triggered on git commit and branch switch via hooks
+- **Zero-maintenance context injection** — `memory init --hooks` once; every AI chat in Copilot, Claude, Cursor, and Windsurf automatically gets your latest project context. No action needed between sessions.
+- **Automatic checkpoints** — triggered on git commit and branch switch via hooks; context files refreshed in the same step
 - **Session-aware context** — imports recent local AI chats and turns them into compact breadcrumbs for the next session
 - **Recall** — keyword + recency-ranked search over decisions, tasks, checkpoints
-- **Context pack** — one-command, <500 ms project context block for chat hydration
+- **Context pack** — manual fallback for tools that don't read config files (e.g. ChatGPT)
 - **Optional local dashboard** — always-on local worker for assistant refresh, recall, browse endpoints, saved filters, and simple activity views
 - **Timeline** — chronological view of all memory events
 - **Decision log** — record architectural and process decisions with rationale
@@ -81,10 +80,10 @@ Use `memory sync` for normal hook and background sync. `memory sync push` and `m
 
 | Command | Description |
 |---------|-------------|
-| `memory init [--hooks]` | Initialize local store and optionally install git hooks |
-| `memory checkpoint [--note]` | Create a manual checkpoint |
+| `memory init [--hooks]` | Initialize local store, inject context into all agent config files, and install git hooks |
+| `memory checkpoint [--note]` | Create a manual checkpoint and refresh all agent context files |
 | `memory recall --query <text>` | Ranked recall by keyword |
-| `memory context-pack` | Print context block for chat hydration, including recent imported AI sessions |
+| `memory context pack` | Manual context block for tools that don't read config files (e.g. ChatGPT) |
 | `memory service start` | Start the local background worker and local dashboard service |
 | `memory timeline` | List recent events |
 | `memory decision add` | Record an architectural decision |
