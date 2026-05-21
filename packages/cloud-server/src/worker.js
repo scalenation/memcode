@@ -601,6 +601,7 @@ export default {
         const workspaceId = url.searchParams.get('workspaceId');
         const cursor = url.searchParams.get('cursor') ?? '0';
         const beforeCursor = url.searchParams.get('beforeCursor');
+        const afterCursor = url.searchParams.get('afterCursor');
         const blobId = url.searchParams.get('blobId');
 
         if (!workspaceId) {
@@ -635,6 +636,20 @@ export default {
           );
           if (!row) {
             return json({ blob: null, cursor });
+          }
+        } else if (afterCursor !== null) {
+          // Forward iteration (delta sync): get the OLDEST blob strictly after this cursor.
+          // This lets clients walk forward through history like git log --forward.
+          row = await db.first(
+            `SELECT id, workspace_id, cursor, payload_encrypted, payload_storage_key, payload_size
+             FROM sync_blobs
+             WHERE workspace_id = ? AND cursor > ?
+             ORDER BY cursor ASC
+             LIMIT 1`,
+            [workspaceId, afterCursor],
+          );
+          if (!row) {
+            return json({ blob: null, cursor: afterCursor });
           }
         } else {
           row = await db.first(

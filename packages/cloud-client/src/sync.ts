@@ -50,14 +50,14 @@ export async function pushSync(
 
   // ── Dirty check ──────────────────────────────────────────────────────────
   // Skip the push entirely if nothing has changed since the last successful push.
-  // This prevents re-uploading the full snapshot every background sync tick.
+  // Checks both created_at AND updated_at so task/decision edits are caught too.
   const syncState = getSyncState(db, config.workspaceId);
   const lastSyncedAt = syncState?.last_synced_at ?? 0;
   if (lastSyncedAt > 0) {
     const anyNew =
       db.prepare(`SELECT 1 FROM checkpoints WHERE workspace_id = ? AND created_at > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt) ||
-      db.prepare(`SELECT 1 FROM decisions  WHERE workspace_id = ? AND created_at > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt) ||
-      db.prepare(`SELECT 1 FROM tasks      WHERE workspace_id = ? AND created_at > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt) ||
+      db.prepare(`SELECT 1 FROM decisions  WHERE workspace_id = ? AND (created_at > ? OR updated_at > ?) LIMIT 1`).get(config.workspaceId, lastSyncedAt, lastSyncedAt) ||
+      db.prepare(`SELECT 1 FROM tasks      WHERE workspace_id = ? AND (created_at > ? OR updated_at > ?) LIMIT 1`).get(config.workspaceId, lastSyncedAt, lastSyncedAt) ||
       db.prepare(`SELECT 1 FROM sessions   WHERE workspace_id = ? AND started_at  > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt);
     if (!anyNew) {
       return {
@@ -83,36 +83,42 @@ export async function pushSync(
     body: JSON.stringify({ workspaceId: config.workspaceId }),
   });
 
-  // Pull and merge the latest cloud snapshot first. This keeps two machines
-  // from overwriting each other's newest memory when either one pushes.
-  await pullSync(db, config);
-
-  // Collect structured metadata only — message bodies stay local.
-  // Syncing full message content was the primary cause of unbounded storage growth.
-  const checkpoints = db
-    .prepare(
-      'SELECT * FROM checkpoints WHERE workspace_id = ? ORDER BY created_at',
-    )
+  // ── Delta payload — only records created/updated since last sync ──────────
+  // Like git commits: each push contains only what changed, not the full repo.
+  // The brain field (unencrypted dashboard metadata) always reflects the full
+  // current state so the dashboard is never stale.
+  const allCheckpoints = db
+    .prepare('SELECT * FROM checkpoints WHERE workspace_id = ? ORDER BY created_at')
     .all(config.workspaceId) as unknown as Checkpoint[];
 
-  const decisions = db
-    .prepare(
-      'SELECT * FROM decisions WHERE workspace_id = ? ORDER BY created_at',
-    )
+  const allDecisions = db
+    .prepare('SELECT * FROM decisions WHERE workspace_id = ? ORDER BY created_at')
     .all(config.workspaceId) as unknown as Decision[];
 
-  const tasks = db
-    .prepare(
-      'SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at',
-    )
+  const allTasks = db
+    .prepare('SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at')
     .all(config.workspaceId) as unknown as Task[];
 
-  // Session metadata only — no message content in the cloud payload.
-  const sessions = db
-    .prepare(
-      'SELECT id, workspace_id, editor, agent, source, provider, model, task_label, category, started_at, ended_at FROM sessions WHERE workspace_id = ? ORDER BY started_at',
-    )
+  const allSessions = db
+    .prepare('SELECT id, workspace_id, editor, agent, source, provider, model, task_label, category, started_at, ended_at FROM sessions WHERE workspace_id = ? ORDER BY started_at')
     .all(config.workspaceId) as unknown as Session[];
+
+  // Delta: only records that are new or changed since the last push
+  const checkpoints = lastSyncedAt > 0
+    ? allCheckpoints.filter(cp => cp.created_at > lastSyncedAt)
+    : allCheckpoints;
+
+  const decisions = lastSyncedAt > 0
+    ? allDecisions.filter(d => d.created_at > lastSyncedAt || d.updated_at > lastSyncedAt)
+    : allDecisions;
+
+  const tasks = lastSyncedAt > 0
+    ? allTasks.filter(t => t.created_at > lastSyncedAt || t.updated_at > lastSyncedAt)
+    : allTasks;
+
+  const sessions = lastSyncedAt > 0
+    ? allSessions.filter(s => s.started_at > lastSyncedAt)
+    : allSessions;
 
   const now = Date.now();
   const cursor = String(now);
@@ -129,10 +135,10 @@ export async function pushSync(
   };
 
   const encrypted = encryptPayload(payload, config.encryptionKey);
-  const brain = buildProjectBrain(config.workspaceId, checkpoints, decisions, tasks, sessions, [], now);
+  // Brain always built from full state so the dashboard shows the complete picture
+  const brain = buildProjectBrain(config.workspaceId, allCheckpoints, allDecisions, allTasks, allSessions, [], now);
 
-  // Build dashboard metadata. The encrypted blob remains the source of truth;
-  // this metadata powers searchable history in the web dashboard.
+  // Build dashboard metadata from the delta — incremental entries only.
   const meta = [
     ...checkpoints.map(cp => ({
       type: 'checkpoint',
@@ -143,15 +149,17 @@ export async function pushSync(
       summary: cp.summary_short,
       created_at: cp.created_at,
     })),
-    ...brain.milestones.map(milestone => ({
-      type: 'milestone',
-      id: milestone.id,
-      trigger: milestone.trigger ?? null,
-      branch: milestone.branch ?? null,
-      git_sha: milestone.gitSha ?? null,
-      summary: milestone.title,
-      created_at: milestone.createdAt,
-    })),
+    ...brain.milestones
+      .filter(milestone => checkpoints.some(cp => cp.id === milestone.id))
+      .map(milestone => ({
+        type: 'milestone',
+        id: milestone.id,
+        trigger: milestone.trigger ?? null,
+        branch: milestone.branch ?? null,
+        git_sha: milestone.gitSha ?? null,
+        summary: milestone.title,
+        created_at: milestone.createdAt,
+      })),
   ].sort((a, b) => b.created_at - a.created_at);
 
   const { cursor: serverCursor } = await pushEncryptedSnapshot(config, encrypted, meta, brain);
@@ -189,21 +197,13 @@ export async function pullSync(
   assertEnabled(config);
 
   const syncState = getSyncState(db, config.workspaceId);
-  const cursor = syncState?.last_cursor ?? '0';
 
-  let beforeCursor: string | undefined;
-  let skippedBlobs = 0;
-
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const pullUrl = buildPullUrl(config, beforeCursor);
-    const response = await fetch(
-      pullUrl,
-      {
-        headers: {
-          Authorization: `Bearer ${config.apiToken}`,
-        },
-      },
-    );
+  // ── Targeted restore: fetch a specific snapshot by blob ID ───────────────
+  if (config.blobId) {
+    const pullUrl = buildPullUrl(config);
+    const response = await fetch(pullUrl, {
+      headers: { Authorization: `Bearer ${config.apiToken}` },
+    });
 
     if (!response.ok) {
       const body = await response.text();
@@ -215,36 +215,81 @@ export async function pullSync(
       cursor: string;
     };
 
-    // Nothing new from server — still success, just nothing to merge
     if (!blob) {
-      return { cursor: newCursor, skippedBlobs, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
+      return { cursor: syncState?.last_cursor ?? '0', skippedBlobs: 0, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
     }
 
     let data: SyncPayload;
     try {
       data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
-    } catch (err) {
-      if (config.blobId) {
-        throw new Error(`Cloud sync restore failed: checkpoint ${config.blobId} could not be decrypted with this workspace key. Run memory sync auth with the original passphrase for workspace ${config.workspaceId}.`);
-      }
+    } catch {
+      throw new Error(`Cloud sync restore failed: checkpoint ${config.blobId} could not be decrypted with this workspace key. Run memory sync auth with the original passphrase for workspace ${config.workspaceId}.`);
+    }
+
+    const merged = mergePayload(db, data);
+    upsertSyncState(db, config.workspaceId, {
+      enabled: 1,
+      last_cursor: newCursor,
+      last_synced_at: syncState?.last_synced_at ?? undefined,
+      provider: 'memcode',
+    });
+    return { cursor: newCursor, skippedBlobs: 0, merged };
+  }
+
+  // ── Normal sync: walk FORWARD through delta blobs since last cursor ───────
+  // Like git fetch: apply each new commit in order, oldest first.
+  // last_synced_at is intentionally NOT updated here — only pushSync sets it,
+  // so the push dirty-check always compares against the last push timestamp.
+  let currentCursor = syncState?.last_cursor ?? '0';
+  let skippedBlobs = 0;
+  const totalMerged = { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 };
+
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const pullUrl = buildPullUrl(config, undefined, currentCursor);
+    const response = await fetch(pullUrl, {
+      headers: { Authorization: `Bearer ${config.apiToken}` },
+    });
+
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`Cloud sync pull failed: ${response.status} ${body}`);
+    }
+
+    const { blob } = (await response.json()) as {
+      blob: { id?: string; cursor: string; payload: string } | null;
+      cursor: string;
+    };
+
+    if (!blob) break; // no more new blobs
+
+    let data: SyncPayload;
+    try {
+      data = decryptPayload<SyncPayload>(blob.payload, config.encryptionKey);
+    } catch {
       skippedBlobs++;
-      beforeCursor = blob.cursor;
+      currentCursor = blob.cursor; // advance past undecryptable blob
       continue;
     }
 
     const merged = mergePayload(db, data);
-
-    upsertSyncState(db, config.workspaceId, {
-      enabled: 1,
-      last_cursor: newCursor,
-      last_synced_at: Date.now(),
-      provider: 'memcode',
-    });
-
-    return { cursor: newCursor, skippedBlobs, merged };
+    totalMerged.sessions    += merged.sessions;
+    totalMerged.messages    += merged.messages;
+    totalMerged.checkpoints += merged.checkpoints;
+    totalMerged.decisions   += merged.decisions;
+    totalMerged.tasks       += merged.tasks;
+    currentCursor = blob.cursor;
   }
 
-  return { cursor, skippedBlobs, merged: { sessions: 0, messages: 0, checkpoints: 0, decisions: 0, tasks: 0 } };
+  if (currentCursor !== (syncState?.last_cursor ?? '0')) {
+    upsertSyncState(db, config.workspaceId, {
+      enabled: 1,
+      last_cursor: currentCursor,
+      last_synced_at: syncState?.last_synced_at ?? undefined, // preserve push timestamp
+      provider: 'memcode',
+    });
+  }
+
+  return { cursor: currentCursor, skippedBlobs, merged: totalMerged };
 }
 
 // ---------------------------------------------------------------------------
@@ -259,9 +304,10 @@ function assertEnabled(config: CloudConfig): void {
   }
 }
 
-function buildPullUrl(config: CloudConfig, beforeCursor?: string): string {
+function buildPullUrl(config: CloudConfig, beforeCursor?: string, afterCursor?: string): string {
   const params = new URLSearchParams({ workspaceId: config.workspaceId });
   if (config.blobId) params.set('blobId', config.blobId);
+  else if (afterCursor !== undefined) params.set('afterCursor', afterCursor);
   else if (beforeCursor) params.set('beforeCursor', beforeCursor);
   else params.set('cursor', '0');
   return `${config.endpoint}/v1/sync/pull?${params.toString()}`;
