@@ -48,6 +48,31 @@ export async function pushSync(
 ): Promise<PushResult> {
   assertEnabled(config);
 
+  // ── Dirty check ──────────────────────────────────────────────────────────
+  // Skip the push entirely if nothing has changed since the last successful push.
+  // This prevents re-uploading the full snapshot every background sync tick.
+  const syncState = getSyncState(db, config.workspaceId);
+  const lastSyncedAt = syncState?.last_synced_at ?? 0;
+  if (lastSyncedAt > 0) {
+    const anyNew =
+      db.prepare(`SELECT 1 FROM checkpoints WHERE workspace_id = ? AND created_at > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt) ||
+      db.prepare(`SELECT 1 FROM decisions  WHERE workspace_id = ? AND created_at > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt) ||
+      db.prepare(`SELECT 1 FROM tasks      WHERE workspace_id = ? AND created_at > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt) ||
+      db.prepare(`SELECT 1 FROM sessions   WHERE workspace_id = ? AND started_at  > ? LIMIT 1`).get(config.workspaceId, lastSyncedAt);
+    if (!anyNew) {
+      return {
+        cursor: syncState?.last_cursor ?? String(lastSyncedAt),
+        uploadedAt: lastSyncedAt,
+        sessionsCount: 0,
+        messagesCount: 0,
+        checkpointsCount: 0,
+        decisionsCount: 0,
+        tasksCount: 0,
+        brainMilestonesCount: 0,
+      };
+    }
+  }
+
   // Ensure the workspace is registered on the server before pushing
   await fetch(`${config.endpoint}/v1/sync/workspace`, {
     method: 'POST',
@@ -62,8 +87,8 @@ export async function pushSync(
   // from overwriting each other's newest memory when either one pushes.
   await pullSync(db, config);
 
-  // Collect the complete merged workspace snapshot. The latest cloud blob is
-  // intentionally self-contained so any machine can restore from it directly.
+  // Collect structured metadata only — message bodies stay local.
+  // Syncing full message content was the primary cause of unbounded storage growth.
   const checkpoints = db
     .prepare(
       'SELECT * FROM checkpoints WHERE workspace_id = ? ORDER BY created_at',
@@ -82,21 +107,12 @@ export async function pushSync(
     )
     .all(config.workspaceId) as unknown as Task[];
 
+  // Session metadata only — no message content in the cloud payload.
   const sessions = db
     .prepare(
-      'SELECT * FROM sessions WHERE workspace_id = ? ORDER BY started_at',
+      'SELECT id, workspace_id, editor, agent, source, provider, model, task_label, category, started_at, ended_at FROM sessions WHERE workspace_id = ? ORDER BY started_at',
     )
     .all(config.workspaceId) as unknown as Session[];
-
-  const messages = db
-    .prepare(
-      `SELECT m.*
-       FROM messages m
-       INNER JOIN sessions s ON s.id = m.session_id
-       WHERE s.workspace_id = ?
-       ORDER BY m.created_at`,
-    )
-    .all(config.workspaceId) as unknown as Message[];
 
   const now = Date.now();
   const cursor = String(now);
@@ -104,7 +120,7 @@ export async function pushSync(
   const payload: SyncPayload = {
     workspaceId: config.workspaceId,
     sessions,
-    messages,
+    // messages intentionally omitted — message bodies are local-only
     checkpoints,
     decisions,
     tasks,
@@ -113,7 +129,7 @@ export async function pushSync(
   };
 
   const encrypted = encryptPayload(payload, config.encryptionKey);
-  const brain = buildProjectBrain(config.workspaceId, checkpoints, decisions, tasks, sessions, messages, now);
+  const brain = buildProjectBrain(config.workspaceId, checkpoints, decisions, tasks, sessions, [], now);
 
   // Build dashboard metadata. The encrypted blob remains the source of truth;
   // this metadata powers searchable history in the web dashboard.
@@ -152,7 +168,7 @@ export async function pushSync(
     cursor: serverCursor,
     uploadedAt: now,
     sessionsCount: sessions.length,
-    messagesCount: messages.length,
+    messagesCount: 0,
     checkpointsCount: checkpoints.length,
     decisionsCount: decisions.length,
     tasksCount: tasks.length,

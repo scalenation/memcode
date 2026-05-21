@@ -206,12 +206,20 @@ async function runPullPhase(
 
 async function runPushPhase(
   ctx: SyncContext,
-  options: { quiet?: boolean } = {},
+  options: { quiet?: boolean; importChat?: boolean } = {},
 ): Promise<{ result: PushSyncResultSummary; imported: { sessions: number; messages: number } }> {
-  const { quiet = false } = options;
-  const { hydrateProjectContext } = await import('../context-hydration');
+  const { quiet = false, importChat = false } = options;
   const { pushSync } = await import('@memcode/cloud-client');
-  const imported = hydrateProjectContext(ctx.db, ctx.workspace.id, ctx.projectPath);
+
+  // Chat import (reading local AI transcript files) only runs when explicitly
+  // requested — NOT in the background daemon. Running it every sync tick was
+  // the primary cause of unbounded message accumulation in the cloud payload.
+  let imported = { sessions: 0, messages: 0 };
+  if (importChat) {
+    const { hydrateProjectContext } = await import('../context-hydration');
+    imported = hydrateProjectContext(ctx.db, ctx.workspace.id, ctx.projectPath);
+  }
+
   await registerWorkspace(ctx.auth, ctx.workspace.id, ctx.projectPath);
   const result = await pushSync(ctx.db, {
     endpoint: ctx.auth.endpoint,
@@ -221,7 +229,11 @@ async function runPushPhase(
   });
 
   if (!quiet) {
-    console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
+    if (result.checkpointsCount === 0 && result.decisionsCount === 0 && result.tasksCount === 0 && result.brainMilestonesCount === 0) {
+      console.log(pc.green('✓'), 'Cloud push already up to date.');
+    } else {
+      console.log(pc.green('✓'), `Pushed ${pc.cyan(String(result.checkpointsCount))} checkpoints,`, `${pc.cyan(String(result.decisionsCount))} decisions,`, `${pc.cyan(String(result.tasksCount))} tasks,`, `${pc.cyan(String(result.brainMilestonesCount))} brain milestones`);
+    }
     if (imported.sessions > 0 || imported.messages > 0) {
       console.log(pc.dim(`  imported chat: ${imported.sessions} sessions, ${imported.messages} messages`));
     }
@@ -236,7 +248,7 @@ export const syncCommand = new Command('sync').description(
 )
   .option('--path <path>', 'Project path (defaults to current working directory)')
   .action(async (options: { path?: string }) => {
-    await runAutoSync(options.path);
+    await runAutoSync(options.path, { importChat: true });
   });
 
 async function registerWorkspace(
@@ -261,9 +273,9 @@ async function registerWorkspace(
 
 async function runAutoSync(
   path?: string,
-  options: { quiet?: boolean; exitOnError?: boolean } = {},
+  options: { quiet?: boolean; exitOnError?: boolean; importChat?: boolean } = {},
 ): Promise<boolean> {
-  const { quiet = false, exitOnError = true } = options;
+  const { quiet = false, exitOnError = true, importChat = false } = options;
   const ctx = await createSyncContext(path);
   if (!ctx) {
     if (!quiet) console.log(noAuthMsg());
@@ -274,7 +286,7 @@ async function runAutoSync(
   if (!quiet) console.log(pc.bold('Syncing memory with cloud (pull -> push)…'));
   try {
     await runPullPhase(ctx, { quiet });
-    await runPushPhase(ctx, { quiet });
+    await runPushPhase(ctx, { quiet, importChat });
     return true;
   } catch (err) {
     if (!quiet) console.error(pc.red('Sync failed:'), (err as Error).message);
@@ -429,7 +441,7 @@ syncCommand
 
     console.log(pc.bold('Pushing memory to cloud…'));
     try {
-      await runPushPhase(ctx);
+      await runPushPhase(ctx, { importChat: true });
     } catch (err) {
       console.error(pc.red('Push failed:'), (err as Error).message);
       process.exit(1);
