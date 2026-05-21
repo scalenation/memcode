@@ -454,6 +454,11 @@ export default {
 
         await ensureWorkspaceOwned(db, workspaceId, user.sub, true);
 
+        // Replace: delete the previous snapshot for this workspace before storing the new one.
+        // This keeps exactly 1 blob per workspace — no accumulation.
+        await deleteWorkspacePayloads(env, db, workspaceId);
+        await db.run('DELETE FROM sync_blobs WHERE workspace_id = ?', [workspaceId]);
+
         const blobId = crypto.randomUUID();
         const cursor = String(Date.now());
         const storedPayload = await storeSyncPayload(env, { blobId, workspaceId, cursor, payload });
@@ -534,6 +539,10 @@ export default {
         if (!payload) throw new HttpError(400, { error: 'Incomplete payload chunks' });
         const metaJson = assembleChunks(chunkRows.rows, 'meta');
 
+        // Replace: delete previous snapshot before storing the new one.
+        await deleteWorkspacePayloads(env, db, workspaceId);
+        await db.run('DELETE FROM sync_blobs WHERE workspace_id = ?', [workspaceId]);
+
         const blobId = crypto.randomUUID();
         const cursor = String(Date.now());
         const storedPayload = await storeSyncPayload(env, { blobId, workspaceId, cursor, payload });
@@ -593,6 +602,19 @@ export default {
           cursor: latest?.cursor ?? '0',
           totalPushes: toNumber(totalPushes),
         });
+      }
+
+      if (request.method === 'DELETE' && url.pathname === '/v1/sync/blobs') {
+        // Purge all stored blobs for a workspace. Used by `memory sync purge`.
+        const user = await authenticateRequest(request, env, db);
+        await requireActiveSubscription(user.sub, db);
+        const workspaceId = url.searchParams.get('workspaceId');
+        if (!workspaceId) throw new HttpError(400, { error: 'workspaceId query param is required' });
+        const workspace = await getOwnedWorkspace(db, workspaceId, user.sub, true);
+        if (!workspace) throw new HttpError(404, { error: 'Workspace not found' });
+        await deleteWorkspacePayloads(env, db, workspaceId);
+        await db.run('DELETE FROM sync_blobs WHERE workspace_id = ?', [workspaceId]);
+        return json({ ok: true });
       }
 
       if (request.method === 'GET' && url.pathname === '/v1/sync/pull') {

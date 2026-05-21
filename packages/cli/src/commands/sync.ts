@@ -673,6 +673,47 @@ syncCommand
     }
   });
 
+// ─── purge ──────────────────────────────────────────────────────────────────
+
+syncCommand
+  .command('purge')
+  .description('Delete all cloud-stored sync data for this workspace')
+  .option('--path <path>', 'Project path (defaults to current working directory)')
+  .action(async (options: { path?: string }) => {
+    const ctx = await createSyncContext(options.path);
+    if (!ctx) {
+      console.log(noAuthMsg());
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `${ctx.auth.endpoint}/v1/sync/blobs?workspaceId=${encodeURIComponent(ctx.workspace.id)}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${ctx.auth.apiToken}`, 'User-Agent': CLI_UA } },
+      );
+
+      if (res.status === 402) {
+        console.log(pc.yellow('Pro subscription required.'), `Upgrade at ${pc.cyan('https://memcode.pro/pricing')}`);
+        return;
+      }
+      if (res.status === 404) {
+        console.log(pc.yellow('~'), 'No cloud data found for this workspace.');
+        return;
+      }
+      if (!res.ok) {
+        console.error(pc.red('Purge failed:'), res.status);
+        return;
+      }
+
+      console.log(pc.green('✓'), 'All cloud sync data deleted for this workspace.');
+      console.log(pc.dim('  Run memory sync to upload a fresh snapshot.'));
+    } catch (err) {
+      console.error(pc.red('Error:'), (err as Error).message);
+    } finally {
+      ctx.db.close();
+    }
+  });
+
 // ─── set-password ───────────────────────────────────────────────────────────
 
 syncCommand
